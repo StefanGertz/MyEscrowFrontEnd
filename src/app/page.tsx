@@ -642,15 +642,24 @@ const updateTransactionStatus = (id: number, status: Transaction["status"], cont
     const updated = updateTransaction(txId, (tx) => {
       const timestamp = new Date().toISOString();
       let targetTitle = "";
-      const updatedMilestones = tx.milestones.map((milestone) => {
+      const updatedMilestones: TxMilestone[] = tx.milestones.map((milestone): TxMilestone => {
         if (milestone.id !== milestoneId) {
           return milestone;
         }
         targetTitle = milestone.title;
         if (decision === "approve") {
-          return { ...milestone, status: "released", releasedAt: timestamp, rejectedAt: undefined };
+          return {
+            ...milestone,
+            status: "released",
+            releasedAt: timestamp,
+            rejectedAt: undefined,
+          };
         }
-        return { ...milestone, status: "rejected", rejectedAt: timestamp };
+        return {
+          ...milestone,
+          status: "rejected",
+          rejectedAt: timestamp,
+        };
       });
       const allReleased = updatedMilestones.length > 0 && updatedMilestones.every((item) => item.status === "released");
       const anyRejected = updatedMilestones.some((item) => item.status === "rejected");
