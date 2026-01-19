@@ -29,9 +29,14 @@ export function Header({
       </button>
 
       <div className="header-actions">
-        <button className="icon-btn" type="button" onClick={onSupportClick}>
-          <SupportIcon />
-          Support
+        <button
+          className="primary-btn"
+          type="button"
+          disabled={primaryDisabled}
+          onClick={onPrimaryClick}
+        >
+          <SparkIcon />
+          {primaryLabel}
         </button>
         <button
           className="icon-btn"
@@ -42,14 +47,9 @@ export function Header({
           <BellIcon />
           Alerts
         </button>
-        <button
-          className="primary-btn"
-          type="button"
-          disabled={primaryDisabled}
-          onClick={onPrimaryClick}
-        >
-          <SparkIcon />
-          {primaryLabel}
+        <button className="icon-btn" type="button" onClick={onSupportClick}>
+          <SupportIcon />
+          Support
         </button>
       </div>
     </header>

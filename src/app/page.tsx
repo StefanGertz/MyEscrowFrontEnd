@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { use, useEffect, useMemo, useRef, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { Header } from "@/components/Header";
 import { SignaturePad, type SignaturePadHandle } from "@/components/SignaturePad";
@@ -89,6 +89,29 @@ type NotificationEntry = {
   meta: string;
 };
 
+type HomeProps = {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+};
+
+const screenIds: ScreenId[] = [
+  "welcome",
+  "dashboard",
+  "create",
+  "milestones",
+  "agreement",
+  "funding",
+  "wallet",
+  "history",
+  "settings",
+  "transaction",
+];
+
+const pickQueryValue = (value: string | string[] | undefined) =>
+  Array.isArray(value) ? value[0] : value;
+
+const isScreenId = (value: string | undefined): value is ScreenId =>
+  value ? screenIds.includes(value as ScreenId) : false;
+
 const currentUser = {
   name: "Scott",
   email: "scott@example.com",
@@ -126,6 +149,21 @@ const milestoneReleaseSteps = [
   "Buyer reviews the deliverable and approves the milestone.",
   "Funds immediately release to the seller's payout account.",
 ];
+
+const createGuideSteps = [
+  {
+    title: "Invite the counterparty",
+    detail: "We email your buyer or seller to accept the escrow and verify identity.",
+  },
+  {
+    title: "Define payouts",
+    detail: "Break the work into milestones so funds can release as soon as each stage completes.",
+  },
+  {
+    title: "Sign and fund",
+    detail: "Preview the agreement, capture signatures, and send the deposit from your wallet.",
+  },
+] as const;
 
 const initialWalletHistory: WalletHistoryEntry[] = [
   { id: "wallet-h1", type: "deposit", amount: 250, date: new Date(Date.now() - 864e5 * 3).toISOString() },
@@ -215,17 +253,17 @@ const dashboardTimelineEntries = [
   {
     id: "dash-tl-1",
     label: "Funds released to Summit Legal",
-    detail: "Yesterday · Final payout sent",
+    detail: "Yesterday - Final payout sent",
   },
   {
     id: "dash-tl-2",
     label: "Ops review for Cloud Harbor",
-    detail: "Due tomorrow · Pending milestone approval",
+    detail: "Due tomorrow - Pending milestone approval",
   },
   {
     id: "dash-tl-3",
     label: "Buyer funding required",
-    detail: "Northwind agency launch · Waiting for deposit",
+    detail: "Northwind agency launch - Waiting for deposit",
   },
 ];
 
@@ -253,32 +291,22 @@ const formatDateTime = (value: string) =>
 
 const randomId = () => Math.random().toString(36).slice(2, 9);
 
-export default function Home() {
-  const [activeScreen, setActiveScreen] = useState<ScreenId>(() => {
-    if (typeof window === "undefined") {
-      return "welcome";
-    }
-    const params = new URLSearchParams(window.location.search);
-    return (params.get("screen") as ScreenId) || "welcome";
-  });
+export default function Home({ searchParams }: HomeProps) {
+  const resolvedSearchParams = use(searchParams);
+  const initialScreenQuery = pickQueryValue(resolvedSearchParams?.screen);
+  const initialScreen = isScreenId(initialScreenQuery) ? initialScreenQuery : "welcome";
+  const initialTxQuery = pickQueryValue(resolvedSearchParams?.tx);
+  const initialTxId = initialTxQuery ? Number(initialTxQuery) : undefined;
+
+  const [activeScreen, setActiveScreen] = useState<ScreenId>(initialScreen);
   const [walletBalance, setWalletBalance] = useState(300);
   const [transactions, setTransactions] = useState<Transaction[]>(initialTransactions);
   const transactionsRef = useRef(transactions);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(() => {
-    if (typeof window === "undefined") {
-      return null;
+    if (initialScreen === "transaction" && initialTxId) {
+      return initialTransactions.find((item) => item.id === initialTxId) ?? null;
     }
-    const params = new URLSearchParams(window.location.search);
-    const screenParam = (params.get("screen") as ScreenId) || "welcome";
-    if (screenParam !== "transaction") {
-      return null;
-    }
-    const txParam = params.get("tx");
-    if (!txParam) {
-      return null;
-    }
-    const txId = Number(txParam);
-    return initialTransactions.find((item) => item.id === txId) ?? null;
+    return null;
   });
   const [walletHistory, setWalletHistory] = useState<WalletHistoryEntry[]>(initialWalletHistory);
   const [createForm, setCreateForm] = useState({
@@ -300,8 +328,6 @@ export default function Home() {
   const [profile, setProfile] = useState({ name: currentUser.name, email: currentUser.email });
   const [kycMarked, setKycMarked] = useState(false);
   const [modalContent, setModalContent] = useState<ModalContent | null>(null);
-  const [isToolbarHidden, setToolbarHidden] = useState(false);
-  const lastScrollYRef = useRef(0);
   const [notificationsPanelOpen, setNotificationsPanelOpen] = useState(false);
   const createEscrowMutation = useCreateEscrow();
   const approveEscrow = useApproveEscrow();
@@ -409,37 +435,6 @@ useEffect(() => {
   transactionsRef.current = transactions;
 }, [transactions]);
 
-useEffect(() => {
-  if (typeof window === "undefined") {
-    return;
-  }
-  const params = new URLSearchParams(window.location.search);
-  const screenParam = (params.get("screen") as ScreenId) || "welcome";
-  const txParam = params.get("tx");
-  const txId = txParam ? Number(txParam) : undefined;
-  window.history.replaceState({ screen: screenParam, txId }, "", window.location.href);
-}, []);
-
-useEffect(() => {
-  let ticking = false;
-  const handleScroll = () => {
-    if (ticking) return;
-    ticking = true;
-    window.requestAnimationFrame(() => {
-      const currentY = window.scrollY || window.pageYOffset || 0;
-      const last = lastScrollYRef.current;
-      if (currentY > last + 10 && currentY > 120) {
-        setToolbarHidden(true);
-      } else if (currentY < last - 10 || currentY < 40) {
-        setToolbarHidden(false);
-      }
-      lastScrollYRef.current = currentY;
-      ticking = false;
-    });
-  };
-  window.addEventListener("scroll", handleScroll, { passive: true });
-  return () => window.removeEventListener("scroll", handleScroll);
-}, []);
 
 useEffect(() => {
   const handlePopState = (event: PopStateEvent) => {
@@ -621,7 +616,7 @@ const updateTransactionStatus = (id: number, status: Transaction["status"], cont
   const handleReject = async (tx: Transaction) => {
     try {
       await rejectEscrow.mutateAsync({ escrowId: String(tx.id) });
-      updateTransactionStatus(tx.id, "Pending", "Rejected — waiting on changes");
+      updateTransactionStatus(tx.id, "Pending", "Rejected - waiting on changes");
       setMessage(`Escrow ${tx.id} rejected.`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to reject escrow.");
@@ -1014,104 +1009,150 @@ const handleWalletWithdraw = async () => {
     </section>
   );
 
-  const renderCreate = () => (
-    <section className="screen active">
-      <h2 className="page-title">Create transaction</h2>
-      <p className="lead">Set up an escrow between a buyer and seller.</p>
-      <div className="card">
-        <label className="muted">Your role</label>
-        <div className="role-toggle">
-          {["buyer", "seller"].map((role) => (
-            <label
-              key={role}
-              className={`role-option ${createForm.role === role ? "active" : ""}`}
-              onClick={() =>
-                setCreateForm((prev) => ({
-                  ...prev,
-                  role: role as "buyer" | "seller",
-                }))
-              }
-            >
-              <input type="radio" name="role" checked={createForm.role === role} readOnly />
-              <span className="role-copy">
-                {role === "buyer" ? "I'm the buyer" : "I'm the seller"}
-                <span className="flow-info" tabIndex={0} aria-label={roleFlowCopy[role as "buyer" | "seller"].label}>
-                  i
-                  <div className="flow-hint">
-                    <div className="flow-pill">{roleFlowCopy[role as "buyer" | "seller"].pill}</div>
-                    <ol className="flow-steps">
-                      {roleFlowCopy[role as "buyer" | "seller"].steps.map((step) => (
-                        <li key={`${role}-${step}`}>{step}</li>
-                      ))}
-                    </ol>
-                  </div>
-                </span>
-              </span>
-            </label>
-          ))}
-        </div>
+  const renderCreate = () => {
+    const counterpartLabel = createForm.role === "buyer" ? "Seller" : "Buyer";
+    const formattedAmount = createForm.amount ? formatCurrency(Number(createForm.amount) || 0) : "-";
 
-        <div className="form-field">
-          <label className="muted">
-            {createForm.role === "buyer" ? "Seller name" : "Buyer name"}
-          </label>
-          <input
-            type="text"
-            value={createForm.counterpartyName}
-            placeholder="Counterparty name"
-            onChange={(event) =>
-              setCreateForm((prev) => ({ ...prev, counterpartyName: event.target.value }))
-            }
-          />
+    return (
+      <section className="screen active create-flow">
+        <div className="create-flow__hero">
+          <span className="create-flow__eyebrow">Step 1 - Transaction details</span>
+          <h2 className="page-title create-flow__title">Create a new transaction</h2>
+          <p className="lead create-flow__lead">
+            Invite your counterparty, set the working amount, and we'll guide both sides through milestones,
+            signatures, and funding.
+          </p>
         </div>
-        <div className="form-field">
-          <label className="muted">
-            {createForm.role === "buyer" ? "Seller email" : "Buyer email"}
-          </label>
-          <input
-            type="email"
-            value={createForm.counterpartyEmail}
-            placeholder="counterparty@example.com"
-            onChange={(event) =>
-              setCreateForm((prev) => ({ ...prev, counterpartyEmail: event.target.value }))
-            }
-          />
+        <div className="create-flow__grid">
+          <div className="card create-flow__form-card">
+            <div className="create-form-section">
+              <div className="muted create-form-label">Your role</div>
+              <div className="role-toggle create-form-role">
+                {["buyer", "seller"].map((role) => (
+                  <label
+                    key={role}
+                    className={`role-option ${createForm.role === role ? "active" : ""}`}
+                    onClick={() =>
+                      setCreateForm((prev) => ({
+                        ...prev,
+                        role: role as "buyer" | "seller",
+                      }))
+                    }
+                  >
+                    <input type="radio" name="role" checked={createForm.role === role} readOnly />
+                    <span className="role-copy">
+                      {role === "buyer" ? "I'm the buyer" : "I'm the seller"}
+                      <span
+                        className="flow-info"
+                        tabIndex={0}
+                        aria-label={roleFlowCopy[role as "buyer" | "seller"].label}
+                      >
+                        i
+                        <div className="flow-hint">
+                          <div className="flow-pill">{roleFlowCopy[role as "buyer" | "seller"].pill}</div>
+                          <ol className="flow-steps">
+                            {roleFlowCopy[role as "buyer" | "seller"].steps.map((step) => (
+                              <li key={`${role}-${step}`}>{step}</li>
+                            ))}
+                          </ol>
+                        </div>
+                      </span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="create-form-section">
+              <div className="form-field">
+                <label className="muted">{counterpartLabel} name</label>
+                <input
+                  type="text"
+                  value={createForm.counterpartyName}
+                  placeholder={`${counterpartLabel} company or contact`}
+                  onChange={(event) =>
+                    setCreateForm((prev) => ({ ...prev, counterpartyName: event.target.value }))
+                  }
+                />
+              </div>
+              <div className="form-field">
+                <label className="muted">{counterpartLabel} email</label>
+                <input
+                  type="email"
+                  value={createForm.counterpartyEmail}
+                  placeholder="counterparty@example.com"
+                  onChange={(event) =>
+                    setCreateForm((prev) => ({ ...prev, counterpartyEmail: event.target.value }))
+                  }
+                />
+              </div>
+              <div className="form-field">
+                <label className="muted">Amount</label>
+                <input
+                  type="number"
+                  value={createForm.amount}
+                  placeholder="USD"
+                  onChange={(event) =>
+                    setCreateForm((prev) => ({ ...prev, amount: event.target.value }))
+                  }
+                />
+              </div>
+              <div className="form-field">
+                <label className="muted">Category</label>
+                <select
+                  value={createForm.category}
+                  onChange={(event) =>
+                    setCreateForm((prev) => ({ ...prev, category: event.target.value }))
+                  }
+                >
+                  <option>Goods</option>
+                  <option>Services</option>
+                  <option>Other</option>
+                </select>
+              </div>
+            </div>
+            <div className="create-flow__actions">
+              <button className="ghost" onClick={() => navigate("welcome")}>
+                Cancel
+              </button>
+              <button className="btn" onClick={handleCreateNext}>
+                Next - Milestones
+              </button>
+            </div>
+          </div>
+          <aside className="card create-flow__aside">
+            <h3 className="create-aside-title">What happens next</h3>
+            <ol className="create-flow__steps">
+              {createGuideSteps.map((step, index) => (
+                <li key={step.title}>
+                  <span className="create-step-index">{String(index + 1).padStart(2, "0")}</span>
+                  <div>
+                    <div className="create-step-title">{step.title}</div>
+                    <p className="muted create-step-detail">{step.detail}</p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+            <div className="create-summary">
+              <div>
+                <div className="create-summary-label muted">{counterpartLabel}</div>
+                <div className="create-summary-value">
+                  {createForm.counterpartyName || "Not added yet"}
+                </div>
+                <div className="create-summary-meta">
+                  {createForm.counterpartyEmail || "Email pending"}
+                </div>
+              </div>
+              <div>
+                <div className="create-summary-label muted">Escrow amount</div>
+                <div className="create-summary-value">{formattedAmount}</div>
+                <div className="create-summary-meta">Category: {createForm.category}</div>
+              </div>
+            </div>
+          </aside>
         </div>
-        <div className="form-field">
-          <label className="muted">Amount</label>
-          <input
-            type="number"
-            value={createForm.amount}
-            placeholder="Amount"
-            onChange={(event) =>
-              setCreateForm((prev) => ({ ...prev, amount: event.target.value }))
-            }
-          />
-        </div>
-        <div className="form-field">
-          <label className="muted">Category</label>
-          <select
-            value={createForm.category}
-            onChange={(event) =>
-              setCreateForm((prev) => ({ ...prev, category: event.target.value }))
-            }
-          >
-            <option>Goods</option>
-            <option>Services</option>
-            <option>Other</option>
-          </select>
-        </div>
-        <div style={{ marginTop: 12, display: "flex", gap: 8, justifyContent: "flex-end" }}>
-          <button className="ghost" onClick={() => navigate("welcome")}>
-            Cancel
-          </button>
-          <button className="btn" onClick={handleCreateNext}>
-            Next — Milestones
-          </button>
-        </div>
-      </div>
-    </section>
-  );
+      </section>
+    );
+  };
 
   const renderMilestones = () => (
     <section className="screen active">
@@ -1193,7 +1234,7 @@ const handleWalletWithdraw = async () => {
             Back
           </button>
           <button className="btn" onClick={handleMilestonesNext}>
-            Next — Terms
+            Next - Terms
           </button>
         </div>
       </div>
@@ -1477,15 +1518,15 @@ const handleWalletWithdraw = async () => {
                 Status
               </div>
               <span
-                className={`status-badge ${
-                  tx.status === "Released"
-                    ? "status-released"
-                    : tx.status === "Active"
-                      ? "status-active"
-                      : tx.status === "Pending"
-                        ? "status-pending"
-                        : "status-active"
-                }`}
+                  className={`status-badge ${
+                    tx.status === "Released"
+                      ? "status-released"
+                      : tx.status === "Active"
+                        ? "status-active"
+                        : tx.status === "Pending"
+                          ? "status-pending"
+                          : "status-active"
+                  }`}
               >
                 {tx.status}
               </span>
@@ -1590,7 +1631,7 @@ const handleWalletWithdraw = async () => {
   };
 
   return (
-    <AppShell>
+    <AppShell screenId={activeScreen}>
       <Header
         notificationCount={openNotifications}
         primaryLabel="New escrow"
@@ -1607,7 +1648,7 @@ const handleWalletWithdraw = async () => {
         ) : null}
         {renderScreen()}
       </main>
-      <footer className="toolbar" data-hidden={isToolbarHidden}>
+      <footer className="toolbar">
         <div className="toolbar-shell">
           <nav className="bottom-nav">
             {bottomNav.map((item) => (
@@ -1623,9 +1664,15 @@ const handleWalletWithdraw = async () => {
         </div>
       </footer>
       {notificationsPanelOpen ? (
-        <div className="modal-overlay modal-overlay--notifications" onClick={closeNotificationsPanel}>
-          <div className="modal-content notifications-modal" onClick={(event) => event.stopPropagation()}>
-            <div className="modal-head">
+        <>
+          <button
+            type="button"
+            aria-label="Close notifications"
+            className="notifications-backdrop"
+            onClick={closeNotificationsPanel}
+          />
+          <div className="notifications-panel" role="dialog" aria-modal="true">
+            <div className="notifications-panel-head">
               <div>
                 <h3 style={{ margin: 0 }}>Notifications</h3>
                 <p className="muted" style={{ margin: "4px 0 0" }}>
@@ -1641,37 +1688,33 @@ const handleWalletWithdraw = async () => {
                 Loading alerts...
               </div>
             ) : (
-              <>
-                <div className="notif-list">
-                  {notificationsToRender.map((item) => (
-                    <div
-                      key={item.id}
-                      className="notif-item"
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => handleNotificationSelect(item)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault();
-                          handleNotificationSelect(item);
-                        }
-                      }}
-                    >
-                      <div className="notif-title">
-                        <span className="notif-title-text">
-                          {item.label}
-                        </span>
-                        <span className="notif-badge">Alert</span>
-                      </div>
-                      <div className="notif-detail">{item.detail}</div>
-                      <div className="notif-meta">{item.meta}</div>
+              <div className="notif-list">
+                {notificationsToRender.map((item) => (
+                  <div
+                    key={item.id}
+                    className="notif-item"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => handleNotificationSelect(item)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        handleNotificationSelect(item);
+                      }
+                    }}
+                  >
+                    <div className="notif-title">
+                      <span className="notif-title-text">{item.label}</span>
+                      <span className="notif-badge">Alert</span>
                     </div>
-                  ))}
-                </div>
-              </>
+                    <div className="notif-detail">{item.detail}</div>
+                    <div className="notif-meta">{item.meta}</div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
-        </div>
+        </>
       ) : null}
       {modalContent ? (
         <div className="modal-overlay" onClick={closeModal}>
