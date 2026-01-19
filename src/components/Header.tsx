@@ -4,6 +4,8 @@ type HeaderProps = {
   primaryDisabled?: boolean;
   onPrimaryClick?: () => void;
   onBrandClick?: () => void;
+  onSupportClick?: () => void;
+  onAlertsClick?: () => void;
 };
 
 export function Header({
@@ -12,6 +14,8 @@ export function Header({
   primaryDisabled = false,
   onPrimaryClick,
   onBrandClick,
+  onSupportClick,
+  onAlertsClick,
 }: HeaderProps) {
   return (
     <header className="app-header">
@@ -25,7 +29,7 @@ export function Header({
       </button>
 
       <div className="header-actions">
-        <button className="icon-btn" type="button">
+        <button className="icon-btn" type="button" onClick={onSupportClick}>
           <SupportIcon />
           Support
         </button>
@@ -33,6 +37,7 @@ export function Header({
           className="icon-btn"
           type="button"
           data-has-notif={notificationCount > 0}
+          onClick={onAlertsClick}
         >
           <BellIcon />
           Alerts
