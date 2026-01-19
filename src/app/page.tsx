@@ -1608,20 +1608,22 @@ const handleWalletWithdraw = async () => {
         {renderScreen()}
       </main>
       <footer className="toolbar" data-hidden={isToolbarHidden}>
-        <nav className="bottom-nav">
-          {bottomNav.map((item) => (
-            <button
-              key={item.id}
-              className={navActiveId === item.id ? "active" : ""}
-              onClick={() => navigate(item.id)}
-            >
-              {item.label}
-            </button>
-          ))}
-        </nav>
+        <div className="toolbar-shell">
+          <nav className="bottom-nav">
+            {bottomNav.map((item) => (
+              <button
+                key={item.id}
+                className={navActiveId === item.id ? "active" : ""}
+                onClick={() => navigate(item.id)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </nav>
+        </div>
       </footer>
       {notificationsPanelOpen ? (
-        <div className="modal-overlay" onClick={closeNotificationsPanel}>
+        <div className="modal-overlay modal-overlay--notifications" onClick={closeNotificationsPanel}>
           <div className="modal-content notifications-modal" onClick={(event) => event.stopPropagation()}>
             <div className="modal-head">
               <div>

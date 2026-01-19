@@ -696,6 +696,14 @@ select:focus {
   transition: transform 0.3s ease, opacity 0.3s ease;
 }
 
+.toolbar-shell {
+  width: min(960px, 100%);
+  margin: 0 auto;
+  padding: 0 16px;
+  display: flex;
+  justify-content: center;
+}
+
 .toolbar[data-hidden="true"] {
   transform: translateY(120%);
   opacity: 0;
@@ -712,6 +720,9 @@ select:focus {
 }
 
 .bottom-nav button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: transparent;
   border: 0;
   padding: 10px 14px;
@@ -772,6 +783,11 @@ select:focus {
   max-width: 420px;
   width: 100%;
   box-shadow: 0 16px 34px rgba(15, 76, 129, 0.18);
+}
+
+.modal-overlay--notifications {
+  align-items: flex-end;
+  padding-bottom: calc(env(safe-area-inset-bottom) + 96px);
 }
 
 .modal-head {
@@ -957,6 +973,23 @@ select:focus {
     grid-template-columns: 1fr;
   }
 
+  .toolbar-shell {
+    padding: 0 10px;
+  }
+
+  .bottom-nav {
+    width: 100%;
+    border-radius: 28px;
+    gap: 4px;
+    padding: 6px 8px;
+    justify-content: space-between;
+  }
+
+  .bottom-nav button {
+    flex: 1;
+    min-width: 0;
+  }
+
   .milestone-form {
     grid-template-columns: 1fr;
   }
@@ -964,6 +997,10 @@ select:focus {
   .header-actions .icon-btn,
   .header-actions .primary-btn {
     font-size: 14px;
+  }
+
+  .notifications-modal {
+    width: calc(100% - 24px);
   }
 }
 
