@@ -6,6 +6,7 @@ type CreatePayload = {
   counterpart: string;
   amount: number;
   category?: string;
+  description?: string;
 };
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -22,6 +23,7 @@ export async function POST(request: NextRequest) {
     success: true,
     escrowId: Math.floor(10000 + Math.random() * 90000),
     title: body.title,
+    description: body.description,
     counterpart: body.counterpart,
     amount: body.amount,
     category: body.category,

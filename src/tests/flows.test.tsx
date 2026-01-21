@@ -56,6 +56,7 @@ describe("escrow flows", () => {
         counterpart: "Northwind Agency",
         amount: 75000,
         category: "Services",
+        description: "Staging test escrow",
       });
       createdId = response.escrowId;
       expect(response.success).toBeTruthy();

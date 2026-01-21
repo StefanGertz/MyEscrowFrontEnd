@@ -20,7 +20,6 @@ type ScreenId =
   | "create"
   | "milestones"
   | "agreement"
-  | "funding"
   | "wallet"
   | "history"
   | "settings"
@@ -36,6 +35,7 @@ type TxMilestone = {
   id: string;
   title: string;
   amount: number;
+  description?: string;
   status: "pending" | "released" | "rejected";
   releasedAt?: string;
   rejectedAt?: string;
@@ -51,6 +51,7 @@ type TimelineEntry = {
 type Transaction = {
   id: number;
   title: string;
+  description?: string;
   counterpart: string;
   amount: number;
   status: "Pending" | "Active" | "Released" | "Resolved" | "Cancelled";
@@ -68,6 +69,7 @@ type DraftMilestone = {
   id: string;
   title: string;
   amount: number;
+  description: string;
 };
 
 type WalletHistoryEntry = {
@@ -99,7 +101,6 @@ const screenIds: ScreenId[] = [
   "create",
   "milestones",
   "agreement",
-  "funding",
   "wallet",
   "history",
   "settings",
@@ -315,14 +316,16 @@ export default function Home({ searchParams }: HomeProps) {
     counterpartyEmail: "",
     amount: "",
     category: "Goods",
+    description: "",
   });
   const [milestones, setMilestones] = useState<DraftMilestone[]>([]);
-  const [milestoneInputs, setMilestoneInputs] = useState({ title: "", amount: "" });
+  const [milestoneInputs, setMilestoneInputs] = useState({ title: "", amount: "", description: "" });
+  const [editingMilestoneId, setEditingMilestoneId] = useState<string | null>(null);
+  const [milestoneWarning, setMilestoneWarning] = useState<string | null>(null);
   const [agreementAccepted, setAgreementAccepted] = useState(false);
   const [signatureCaptured, setSignatureCaptured] = useState(false);
   const [signatureVersion, setSignatureVersion] = useState(0);
   const signaturePadRef = useRef<SignaturePadHandle | null>(null);
-  const [fundInput, setFundInput] = useState("");
   const [walletAmountInput, setWalletAmountInput] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [profile, setProfile] = useState({ name: currentUser.name, email: currentUser.email });
@@ -378,9 +381,11 @@ const fallbackNotifications: NotificationEntry[] = [
 
 const agreementPreview = useMemo(() => {
   const amountValue = Number(createForm.amount) || 0;
+  const descriptionValue = createForm.description.trim();
+  const descriptionLine = descriptionValue ? `\nDescription: ${descriptionValue}` : "";
   const intro = `Buyer: ${createForm.role === "buyer" ? "You" : createForm.counterpartyName || "Buyer"}\nSeller: ${
     createForm.role === "seller" ? "You" : createForm.counterpartyName || "Seller"
-  }\nAmount: ${formatCurrency(amountValue)}`;
+  }\nAmount: ${formatCurrency(amountValue)}${descriptionLine}`;
   if (!milestones.length) {
     return intro;
   }
@@ -391,7 +396,7 @@ const agreementPreview = useMemo(() => {
 }, [createForm, milestones]);
 
 const navActiveId = useMemo<ScreenId>(() => {
-  if (["milestones", "agreement", "funding"].includes(activeScreen)) {
+  if (["milestones", "agreement"].includes(activeScreen)) {
     return "create";
   }
   if (activeScreen === "transaction" || activeScreen === "history") {
@@ -498,73 +503,106 @@ const updateTransactionStatus = (id: number, status: Transaction["status"], cont
       setMessage("Provide a milestone title and amount.");
       return;
     }
+    const nextId = editingMilestoneId ?? randomId();
     setMilestones((prev) => [
       ...prev,
-      { id: randomId(), title: milestoneInputs.title, amount: Number(milestoneInputs.amount) },
+      {
+        id: nextId,
+        title: milestoneInputs.title,
+        amount: Number(milestoneInputs.amount),
+        description: milestoneInputs.description.trim(),
+      },
     ]);
-    setMilestoneInputs({ title: "", amount: "" });
+    setMilestoneInputs({ title: "", amount: "", description: "" });
+    setEditingMilestoneId(null);
+    setMilestoneWarning(null);
+    setMessage(null);
+  };
+
+  const handleEditMilestone = (id: string) => {
+    setMilestones((prev) => {
+      const target = prev.find((item) => item.id === id);
+      if (target) {
+        setMilestoneInputs({
+          title: target.title,
+          amount: target.amount.toString(),
+          description: target.description ?? "",
+        });
+        setEditingMilestoneId(id);
+      }
+      return prev.filter((item) => item.id !== id);
+    });
+    setMessage(null);
+  };
+
+  const handleRemoveMilestone = (id: string) => {
+    setMilestones((prev) => prev.filter((item) => item.id !== id));
+    if (editingMilestoneId === id) {
+      setMilestoneInputs({ title: "", amount: "", description: "" });
+      setEditingMilestoneId(null);
+    }
+    setMilestoneWarning(null);
     setMessage(null);
   };
 
   const handleMilestonesNext = () => {
     const amountValue = Number(createForm.amount);
     if (milestones.length && amountValue && Math.abs(amountValue - milestoneTotal) > 0.01) {
-      setMessage("Milestone total must match the escrow amount.");
+      setMilestoneWarning("Milestone total must match the escrow amount.");
       return;
     }
+    setMilestoneWarning(null);
     setAgreementAccepted(false);
     resetSignaturePad();
     setMessage(null);
     navigate("agreement");
   };
 
-  const handleAgreementNext = () => {
+  const handleAgreementSubmit = async () => {
     if (!agreementAccepted || !signatureCaptured) {
       setMessage("Accept the agreement and confirm the signature to continue.");
       return;
     }
-    setFundInput(createForm.amount);
-    setMessage(null);
-    navigate("funding");
-  };
-
-  const handleFundingComplete = async () => {
-    const depositAmount = Number(fundInput);
     const escrowAmount = Number(createForm.amount);
-    if (!depositAmount || depositAmount !== escrowAmount) {
-      setMessage("Deposit must match the escrow amount exactly.");
+    if (!escrowAmount) {
+      setMessage("Enter an escrow amount before submitting.");
       return;
     }
-    if (depositAmount > walletBalance) {
-      setMessage("Wallet balance is not sufficient.");
-      return;
-    }
+    const responseTitle = createForm.category ? `${createForm.category} escrow` : "New escrow";
+    const descriptionValue = createForm.description.trim();
+    const buyerInfo =
+      createForm.role === "buyer"
+        ? { name: currentUser.name, email: currentUser.email }
+        : { name: createForm.counterpartyName || "Buyer", email: createForm.counterpartyEmail || "buyer@example.com" };
+    const sellerInfo =
+      createForm.role === "seller"
+        ? { name: currentUser.name, email: currentUser.email }
+        : { name: createForm.counterpartyName || "Seller", email: createForm.counterpartyEmail || "seller@example.com" };
+    const approvalContext =
+      createForm.role === "buyer" ? "Seller approval pending" : "Buyer approval pending";
+    const approvalDetail =
+      createForm.role === "buyer" ? "Seller review pending" : "Buyer review pending";
     try {
       const response = await createEscrowMutation.mutateAsync({
-        title: createForm.category ? `${createForm.category} escrow` : "New escrow",
+        title: responseTitle,
         counterpart: createForm.counterpartyName || "Counterparty",
-        amount: depositAmount,
+        amount: escrowAmount,
         category: createForm.category,
+        description: descriptionValue || undefined,
       });
-      const buyerInfo =
-        createForm.role === "buyer"
-          ? { name: currentUser.name, email: currentUser.email }
-          : { name: createForm.counterpartyName || "Buyer", email: createForm.counterpartyEmail || "buyer@example.com" };
-      const sellerInfo =
-        createForm.role === "seller"
-          ? { name: currentUser.name, email: currentUser.email }
-          : { name: createForm.counterpartyName || "Seller", email: createForm.counterpartyEmail || "seller@example.com" };
+      const timestamp = new Date().toISOString();
       const newTx: Transaction = {
         id: response.escrowId ?? Math.floor(10000 + Math.random() * 90000),
-        title: createForm.category ? `${createForm.category} escrow` : "New escrow",
+        title: responseTitle,
         counterpart: createForm.role === "buyer" ? sellerInfo.name : buyerInfo.name,
-        amount: depositAmount,
-        status: "Active",
-        context: "Milestones active",
+        amount: escrowAmount,
+        status: "Pending",
+        context: approvalContext,
+        description: descriptionValue || undefined,
         steps: [
-          { title: "Agreement approved", detail: "Both sides signed", status: "complete" },
-          { title: "Funded", detail: "Wallet balance secured", status: "complete" },
-          { title: "Milestones active", detail: "Awaiting submission", status: "active" },
+          { title: "Agreement drafted", detail: "Creator signed the agreement", status: "complete" },
+          { title: "Awaiting approval", detail: approvalDetail, status: "active" },
+          { title: "Funding pending", detail: "Buyer funds after approval", status: "upcoming" },
         ],
         buyer: buyerInfo.name,
         buyerEmail: buyerInfo.email,
@@ -574,33 +612,38 @@ const updateTransactionStatus = (id: number, status: Transaction["status"], cont
           id: milestone.id,
           title: milestone.title,
           amount: milestone.amount,
+          description: milestone.description || undefined,
           status: "pending",
         })),
         timeline: [
-          { id: randomId(), label: "Created", detail: "Escrow created", time: new Date().toISOString() },
-          { id: randomId(), label: "Funded", detail: "Wallet balance secured", time: new Date().toISOString() },
+          { id: randomId(), label: "Created", detail: `Created by ${currentUser.name}`, time: timestamp },
+          {
+            id: randomId(),
+            label: "Awaiting approval",
+            detail: `${createForm.counterpartyName || "Counterparty"} notified to review`,
+            time: timestamp,
+          },
         ],
       };
       setTransactions((prev) => [newTx, ...prev]);
-      setWalletBalance((prev) => prev - depositAmount);
-      recordWalletHistory("withdraw", depositAmount);
+      setCreateForm({
+        role: "buyer",
+        counterpartyName: "",
+        counterpartyEmail: "",
+        amount: "",
+        category: "Goods",
+        description: "",
+      });
+      setMilestones([]);
+      setMilestoneInputs({ title: "", amount: "", description: "" });
+      setEditingMilestoneId(null);
+      setAgreementAccepted(false);
+      resetSignaturePad();
+      setMessage("Escrow drafted. Funding will start after both parties sign.");
+      navigate("dashboard");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to create escrow. Try again shortly.");
-      return;
     }
-    setCreateForm({
-      role: "buyer",
-      counterpartyName: "",
-      counterpartyEmail: "",
-      amount: "",
-      category: "Goods",
-    });
-    setMilestones([]);
-    setFundInput("");
-    setAgreementAccepted(false);
-    resetSignaturePad();
-    setMessage("Escrow funded successfully.");
-    navigate("dashboard");
   };
 
   const handleApprove = async (tx: Transaction) => {
@@ -1012,6 +1055,7 @@ const handleWalletWithdraw = async () => {
   const renderCreate = () => {
     const counterpartLabel = createForm.role === "buyer" ? "Seller" : "Buyer";
     const formattedAmount = createForm.amount ? formatCurrency(Number(createForm.amount) || 0) : "-";
+    const descriptionPreview = createForm.description.trim();
 
     return (
       <section className="screen active create-flow">
@@ -1019,8 +1063,8 @@ const handleWalletWithdraw = async () => {
           <span className="create-flow__eyebrow">Step 1 - Transaction details</span>
           <h2 className="page-title create-flow__title">Create a new transaction</h2>
           <p className="lead create-flow__lead">
-            Invite your counterparty, set the working amount, and we'll guide both sides through milestones,
-            signatures, and funding.
+            Invite your counterparty, set the working amount, and we&apos;ll guide both sides through milestones,
+            signatures, and funding once both sides approve.
           </p>
         </div>
         <div className="create-flow__grid">
@@ -1109,6 +1153,20 @@ const handleWalletWithdraw = async () => {
                   <option>Other</option>
                 </select>
               </div>
+              <div className="form-field">
+                <label className="muted" htmlFor="escrow-description">
+                  Escrow description
+                </label>
+                <textarea
+                  id="escrow-description"
+                  rows={3}
+                  value={createForm.description}
+                  placeholder="Brief context to help both parties remember the scope"
+                  onChange={(event) =>
+                    setCreateForm((prev) => ({ ...prev, description: event.target.value }))
+                  }
+                />
+              </div>
             </div>
             <div className="create-flow__actions">
               <button className="ghost" onClick={() => navigate("welcome")}>
@@ -1147,6 +1205,12 @@ const handleWalletWithdraw = async () => {
                 <div className="create-summary-value">{formattedAmount}</div>
                 <div className="create-summary-meta">Category: {createForm.category}</div>
               </div>
+              <div>
+                <div className="create-summary-label muted">Description</div>
+                <div className="create-summary-meta">
+                  {descriptionPreview ? descriptionPreview : "Add a short summary"}
+                </div>
+              </div>
             </div>
           </aside>
         </div>
@@ -1154,97 +1218,160 @@ const handleWalletWithdraw = async () => {
     );
   };
 
-  const renderMilestones = () => (
-    <section className="screen active">
-      <h2 className="page-title">Milestones</h2>
-      <p className="lead">Break the agreement into deliverables before moving on to the terms.</p>
-      <div className="card" style={{ marginBottom: 12 }}>
-        <h3 style={{ marginBottom: 8 }}>How funds are released</h3>
-        <div className="flow-grid">
-          <div className="flow-block">
-            <div className="flow-pill">Milestone release</div>
-            <ol className="flow-steps">
-              {milestoneReleaseSteps.map((step) => (
-                <li key={step}>{step}</li>
-              ))}
-            </ol>
+  const renderMilestones = () => {
+    const formattedEscrowAmount = createForm.amount ? formatCurrency(Number(createForm.amount) || 0) : "-";
+
+    return (
+      <section className="screen active">
+        <h2 className="page-title">Milestones</h2>
+        <p className="lead">Break the agreement into deliverables before moving on to the terms.</p>
+        <div className="card" style={{ marginBottom: 12 }}>
+          <h3 style={{ marginBottom: 8 }}>How funds are released</h3>
+          <div className="flow-grid">
+            <div className="flow-block">
+              <div className="flow-pill">Milestone release</div>
+              <ol className="flow-steps">
+                {milestoneReleaseSteps.map((step) => (
+                  <li key={step}>{step}</li>
+                ))}
+              </ol>
+            </div>
           </div>
         </div>
-      </div>
-      <div className="card">
-        <div className="muted">Milestone builder</div>
-        <p className="muted" style={{ margin: "4px 0 8px", fontSize: 13 }}>
-          Add payout checkpoints that should match your escrow amount.
-        </p>
+        <div className="card">
+          <div className="muted">Milestone builder</div>
+          <p className="muted" style={{ margin: "4px 0 8px", fontSize: 13 }}>
+            Add payout checkpoints that should match your escrow amount.
+          </p>
+        <div className="milestone-target">
+            <div>
+              <div className="milestone-target__label">Escrow amount</div>
+              <div className="milestone-target__sub">Milestones should total this value.</div>
+            </div>
+            <div className="milestone-target__value">{formattedEscrowAmount}</div>
+          </div>
         <div className="milestone-form">
           <div className="form-field">
             <label className="muted" htmlFor="milestone-title">
               Milestone title
             </label>
-            <input
-              id="milestone-title"
-              type="text"
-              value={milestoneInputs.title}
-              onChange={(event) =>
-                setMilestoneInputs((prev) => ({ ...prev, title: event.target.value }))
-              }
-            />
-          </div>
-          <div className="form-field">
-            <label className="muted" htmlFor="milestone-amount">
-              Amount
-            </label>
-            <input
-              id="milestone-amount"
-              type="number"
-              value={milestoneInputs.amount}
-              onChange={(event) =>
-                setMilestoneInputs((prev) => ({ ...prev, amount: event.target.value }))
-              }
-            />
-          </div>
+              <input
+                id="milestone-title"
+                type="text"
+                value={milestoneInputs.title}
+                onChange={(event) =>
+                  setMilestoneInputs((prev) => ({ ...prev, title: event.target.value }))
+                }
+              />
+            </div>
+            <div className="form-field">
+              <label className="muted" htmlFor="milestone-amount">
+                Amount
+              </label>
+              <input
+                id="milestone-amount"
+                type="number"
+                value={milestoneInputs.amount}
+                onChange={(event) =>
+                  setMilestoneInputs((prev) => ({ ...prev, amount: event.target.value }))
+                }
+              />
+            </div>
           <button type="button" className="ghost" onClick={handleAddMilestone}>
-            Add milestone
+            {editingMilestoneId ? "Save milestone" : "Add milestone"}
           </button>
         </div>
-        {milestones.length === 0 ? (
-          <div className="muted" style={{ marginTop: 8 }}>
-            No milestones yet
-          </div>
-        ) : (
-          <>
-            <div className="tx-list" style={{ marginTop: 8 }}>
-              {milestones.map((milestone) => (
-                <div key={milestone.id} className="tx-item">
-                  <div>
-                    <strong>{milestone.title}</strong>
-                    <div className="muted">Milestone</div>
+        <div className="form-field">
+          <label className="muted" htmlFor="milestone-description">
+            Milestone description
+          </label>
+          <textarea
+            id="milestone-description"
+            rows={3}
+            value={milestoneInputs.description}
+            placeholder="Explain what unlocks this payout"
+            onChange={(event) =>
+              setMilestoneInputs((prev) => ({ ...prev, description: event.target.value }))
+            }
+          />
+        </div>
+          {editingMilestoneId ? (
+            <div className="muted" style={{ marginTop: 8, fontSize: 13 }}>
+              Editing milestone - update the fields and choose &quot;Save milestone&quot; to apply changes.
+            </div>
+          ) : null}
+          {milestones.length === 0 ? (
+            <div className="muted" style={{ marginTop: 8 }}>
+              No milestones yet
+            </div>
+          ) : (
+            <>
+              <div className="tx-list" style={{ marginTop: 8 }}>
+                {milestones.map((milestone) => (
+                  <div key={milestone.id} className="tx-item milestone-entry">
+                  <div className="milestone-entry__top">
+                    <div>
+                      <strong>{milestone.title}</strong>
+                      <div className="muted">Milestone</div>
+                      {milestone.description ? (
+                        <p className="muted" style={{ margin: "4px 0 0" }}>
+                          {milestone.description}
+                        </p>
+                      ) : null}
+                    </div>
+                    <div style={{ textAlign: "right", fontWeight: 600 }}>
+                      {formatCurrency(milestone.amount)}
+                    </div>
                   </div>
-                  <div style={{ textAlign: "right" }}>{formatCurrency(milestone.amount)}</div>
-                </div>
-              ))}
+                    <div className="milestone-actions">
+                      <button
+                        type="button"
+                        className="ghost"
+                        onClick={() => handleEditMilestone(milestone.id)}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        className="ghost"
+                        onClick={() => handleRemoveMilestone(milestone.id)}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="muted" style={{ textAlign: "right", marginTop: 8 }}>
+                Total: {formatCurrency(milestoneTotal)}
+              </div>
+            </>
+          )}
+          <div style={{ marginTop: 12, display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <button className="ghost" onClick={() => navigate("create")}>
+              Back
+            </button>
+            <button className="btn" onClick={handleMilestonesNext}>
+              Next - Terms
+            </button>
+          </div>
+          {milestoneWarning ? (
+            <div className="milestone-warning" role="alert">
+              {milestoneWarning}
             </div>
-            <div className="muted" style={{ textAlign: "right", marginTop: 8 }}>
-              Total: {formatCurrency(milestoneTotal)}
-            </div>
-          </>
-        )}
-        <div style={{ marginTop: 12, display: "flex", gap: 8, justifyContent: "flex-end" }}>
-          <button className="ghost" onClick={() => navigate("create")}>
-            Back
-          </button>
-          <button className="btn" onClick={handleMilestonesNext}>
-            Next - Terms
-          </button>
+          ) : null}
         </div>
-      </div>
-    </section>
-  );
+      </section>
+    );
+  };
 
   const renderAgreement = () => (
     <section className="screen active">
       <h2 className="page-title">Agreement & Signature</h2>
       <p className="lead">Review terms and sign to accept.</p>
+      <p className="muted" style={{ marginTop: -8, marginBottom: 16 }}>
+        Funding happens after both parties agree to the terms, so no deposits are needed right now.
+      </p>
       <div className="card" style={{ marginBottom: 12 }}>
         <div className="form-field">
           <label className="muted">Agreement preview</label>
@@ -1264,6 +1391,11 @@ const handleWalletWithdraw = async () => {
                     <div>
                       <strong>{milestone.title}</strong>
                       <div className="muted">Milestone</div>
+                      {milestone.description ? (
+                        <p className="muted" style={{ margin: "4px 0 0" }}>
+                          {milestone.description}
+                        </p>
+                      ) : null}
                     </div>
                     <div style={{ textAlign: "right" }}>{formatCurrency(milestone.amount)}</div>
                   </div>
@@ -1307,43 +1439,12 @@ const handleWalletWithdraw = async () => {
           <button className="ghost" onClick={() => navigate("milestones")}>
             Back
           </button>
-          <button className="btn" onClick={handleAgreementNext}>
-            Next -&gt; Funding
-          </button>
-        </div>
-      </div>
-    </section>
-  );
-
-  const renderFunding = () => (
-    <section className="screen active">
-      <h2 className="page-title">Funding</h2>
-      <p className="lead">Deposit the escrow amount to lock the agreement.</p>
-      <div className="card">
-        <div className="muted">Amount</div>
-        <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 8 }}>
-          {formatCurrency(Number(createForm.amount) || 0)}
-        </div>
-        <p className="muted">Wallet balance: {formatCurrency(walletBalance)}</p>
-        <label className="muted" style={{ marginTop: 8 }}>
-          Add to wallet
-        </label>
-        <input
-          type="number"
-          value={fundInput}
-          placeholder="Amount to deposit"
-          onChange={(event) => setFundInput(event.target.value)}
-        />
-        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-          <button className="ghost" onClick={() => navigate("agreement")}>
-            Back
-          </button>
           <button
             className="btn"
-            onClick={handleFundingComplete}
+            onClick={handleAgreementSubmit}
             disabled={createEscrowMutation.isPending}
           >
-            {createEscrowMutation.isPending ? "Funding..." : "Fund escrow"}
+            {createEscrowMutation.isPending ? "Submitting..." : "Submit escrow"}
           </button>
         </div>
       </div>
@@ -1420,58 +1521,60 @@ const handleWalletWithdraw = async () => {
   );
 
   const renderSettings = () => (
-    <section className="screen active">
+    <section className="screen active settings-screen">
       <h2 className="page-title">Settings</h2>
       <p className="lead">Manage profile, security, and payout settings.</p>
-      <div className="card setting-card">
-        <div className="settings-form">
-          <label className="muted" htmlFor="profile-name">
-            Full name
-          </label>
-          <input
-            id="profile-name"
-            type="text"
-            value={profile.name}
-            placeholder="Your name"
-            onChange={(event) => setProfile((prev) => ({ ...prev, name: event.target.value }))}
-          />
-          <label className="muted" htmlFor="profile-email">
-            Email
-          </label>
-          <input
-            id="profile-email"
-            type="email"
-            value={profile.email}
-            placeholder="you@example.com"
-            onChange={(event) => setProfile((prev) => ({ ...prev, email: event.target.value }))}
-          />
+      <div className="settings-stack">
+        <div className="card setting-card">
+          <div className="settings-form">
+            <label className="muted" htmlFor="profile-name">
+              Full name
+            </label>
+            <input
+              id="profile-name"
+              type="text"
+              value={profile.name}
+              placeholder="Your name"
+              onChange={(event) => setProfile((prev) => ({ ...prev, name: event.target.value }))}
+            />
+            <label className="muted" htmlFor="profile-email">
+              Email
+            </label>
+            <input
+              id="profile-email"
+              type="email"
+              value={profile.email}
+              placeholder="you@example.com"
+              onChange={(event) => setProfile((prev) => ({ ...prev, email: event.target.value }))}
+            />
+          </div>
+          <div className="settings-actions">
+            <button className="ghost" onClick={handleMarkKyc} disabled={kycMarked}>
+              {kycMarked ? "KYC marked" : "Mark KYC"}
+            </button>
+            <button className="btn" onClick={handleSaveProfile}>
+              Save
+            </button>
+          </div>
         </div>
-        <div className="settings-actions">
-          <button className="ghost" onClick={handleMarkKyc} disabled={kycMarked}>
-            {kycMarked ? "KYC marked" : "Mark KYC"}
-          </button>
-          <button className="btn" onClick={handleSaveProfile}>
-            Save
+        <div className="card">
+          <h3 style={{ marginTop: 0, marginBottom: 6 }}>Security</h3>
+          <p className="muted" style={{ marginTop: 0, marginBottom: 12 }}>
+            Update your password to keep your account protected.
+          </p>
+          <button className="btn" onClick={openSecurityModal}>
+            Change password
           </button>
         </div>
-      </div>
-      <div className="card">
-        <h3 style={{ marginTop: 0, marginBottom: 6 }}>Security</h3>
-        <p className="muted" style={{ marginTop: 0, marginBottom: 12 }}>
-          Update your password to keep your account protected.
-        </p>
-        <button className="btn" onClick={openSecurityModal}>
-          Change password
-        </button>
-      </div>
-      <div className="card">
-        <h3 style={{ marginTop: 0, marginBottom: 6 }}>Bank accounts</h3>
-        <p className="muted" style={{ marginTop: 0, marginBottom: 12 }}>
-          Add a payout account to receive escrow releases.
-        </p>
-        <button className="ghost" onClick={openBankModal}>
-          Add bank account
-        </button>
+        <div className="card">
+          <h3 style={{ marginTop: 0, marginBottom: 6 }}>Bank accounts</h3>
+          <p className="muted" style={{ marginTop: 0, marginBottom: 12 }}>
+            Add a payout account to receive escrow releases.
+          </p>
+          <button className="ghost" onClick={openBankModal}>
+            Add bank account
+          </button>
+        </div>
       </div>
     </section>
   );
@@ -1496,6 +1599,14 @@ const handleWalletWithdraw = async () => {
             <div className="muted">Title</div>
             <div style={{ fontSize: 18, fontWeight: 800 }}>{tx.title}</div>
           </div>
+          {tx.description ? (
+            <div style={{ marginBottom: 12 }}>
+              <div className="muted">Description</div>
+              <p className="muted" style={{ marginTop: 4, whiteSpace: "pre-line" }}>
+                {tx.description}
+              </p>
+            </div>
+          ) : null}
           <div style={{ display: "flex", gap: 12, alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
             <div>
               <div className="muted">Buyer</div>
@@ -1554,6 +1665,11 @@ const handleWalletWithdraw = async () => {
                             ? `Rejected ${milestone.rejectedAt ? formatHistoryDate(milestone.rejectedAt) : ""}`
                             : "Pending release"}
                       </div>
+                      {milestone.description ? (
+                        <p className="muted" style={{ margin: "4px 0 0" }}>
+                          {milestone.description}
+                        </p>
+                      ) : null}
                     </div>
                     <div style={{ textAlign: "right", fontWeight: 700 }}>{formatCurrency(milestone.amount)}</div>
                   </div>
@@ -1615,8 +1731,6 @@ const handleWalletWithdraw = async () => {
         return renderMilestones();
       case "agreement":
         return renderAgreement();
-      case "funding":
-        return renderFunding();
       case "wallet":
         return renderWallet();
       case "history":

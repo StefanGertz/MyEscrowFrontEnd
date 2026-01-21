@@ -162,6 +162,7 @@ type CreateEscrowPayload = {
   counterpart: string;
   amount: number;
   category?: string;
+  description?: string;
 };
 
 export function useCreateEscrow() {

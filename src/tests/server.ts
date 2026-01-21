@@ -5,10 +5,16 @@ const baseUrl = "https://staging-api.myescrow.example/v1";
 
 export const handlers = [
   http.post(`${baseUrl}/api/dashboard/escrows/create`, async ({ request }) => {
-    const body = (await request.json()) as { title: string; counterpart: string; amount: number };
+    const body = (await request.json()) as {
+      title: string;
+      counterpart: string;
+      amount: number;
+      description?: string;
+    };
     return HttpResponse.json({
       escrowId: 55555,
       title: body.title,
+      description: body.description,
       counterpart: body.counterpart,
       amount: body.amount,
       success: true,
