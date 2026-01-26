@@ -306,7 +306,7 @@ export default function Home({ searchParams }: HomeProps) {
   const initialTxQuery = pickQueryValue(resolvedSearchParams?.tx);
   const initialTxId = initialTxQuery ? Number(initialTxQuery) : undefined;
   const router = useRouter();
-  const { user: authUser, isAuthenticated, isHydrating } = useAuth();
+  const { isAuthenticated, isHydrating } = useAuth();
   const [activeScreen, setActiveScreen] = useState<ScreenId>(initialScreen);
   const [walletBalance, setWalletBalance] = useState(300);
   const [transactions, setTransactions] = useState<Transaction[]>(initialTransactions);
