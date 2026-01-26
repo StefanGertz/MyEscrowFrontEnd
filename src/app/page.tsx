@@ -737,6 +737,12 @@ const updateTransaction = (id: number, mapper: (tx: Transaction) => Transaction)
       setMessage("Wait for the counterparty to approve the project before reviewing milestones.");
       return;
     }
+    if (decision === "approve") {
+      const confirmed = window.confirm("Approve this milestone? This action cannot be undone.");
+      if (!confirmed) {
+        return;
+      }
+    }
     const updated = updateTransaction(txId, (tx) => {
       const timestamp = new Date().toISOString();
       let targetTitle = "";
