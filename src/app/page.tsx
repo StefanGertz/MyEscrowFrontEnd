@@ -720,6 +720,10 @@ const updateTransaction = (id: number, mapper: (tx: Transaction) => Transaction)
       setMessage("Transaction not found.");
       return;
     }
+    if (currentUser.name === target.seller) {
+      setMessage("Only the buyer can approve milestone releases.");
+      return;
+    }
     if (!target.counterpartyApproved) {
       setMessage("Wait for the counterparty to approve the project before reviewing milestones.");
       return;
@@ -1745,13 +1749,15 @@ const handleWalletWithdraw = async () => {
                   <div className="milestone-actions">
                     {milestone.status === "pending" ? (
                       <>
-                        <button
-                          className="btn"
-                          onClick={() => handleMilestoneDecision(tx.id, milestone.id, "approve")}
-                          disabled={!canReviewMilestones}
-                        >
-                          Approve
-                        </button>
+                        {isCurrentUserBuyer ? (
+                          <button
+                            className="btn"
+                            onClick={() => handleMilestoneDecision(tx.id, milestone.id, "approve")}
+                            disabled={!canReviewMilestones}
+                          >
+                            Approve
+                          </button>
+                        ) : null}
                         <button
                           className="ghost"
                           onClick={() => handleMilestoneDecision(tx.id, milestone.id, "reject")}
