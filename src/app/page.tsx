@@ -262,16 +262,19 @@ const dashboardTimelineEntries = [
     id: "dash-tl-1",
     label: "Funds released to Summit Legal",
     detail: "Yesterday - Final payout sent",
+    txId: 10103,
   },
   {
     id: "dash-tl-2",
     label: "Ops review for Cloud Harbor",
     detail: "Due tomorrow - Pending milestone approval",
+    txId: 10102,
   },
   {
     id: "dash-tl-3",
     label: "Buyer funding required",
     detail: "Northwind agency launch - Waiting for deposit",
+    txId: 10105,
   },
 ];
 
@@ -1043,6 +1046,7 @@ const handleWalletWithdraw = async () => {
               className="tx-item timeline-entry-card tx-item--interactive"
               onClick={() => {
                 const targetTx =
+                  (event.txId ? transactions.find((tx) => tx.id === event.txId) : undefined) ??
                   transactions.find((tx) => tx.title === event.label || tx.counterpart === event.label) ??
                   transactions[0];
                 if (targetTx) {
