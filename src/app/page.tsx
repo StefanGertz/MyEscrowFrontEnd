@@ -308,7 +308,7 @@ export default function Home({ searchParams }: HomeProps) {
   const initialTxQuery = pickQueryValue(resolvedSearchParams?.tx);
   const initialTxId = initialTxQuery ? Number(initialTxQuery) : undefined;
   const router = useRouter();
-  const { isAuthenticated, isHydrating } = useAuth();
+  const { isAuthenticated, isHydrating, logout } = useAuth();
   const [activeScreen, setActiveScreen] = useState<ScreenId>(initialScreen);
   const [walletBalance, setWalletBalance] = useState(300);
   const [transactions, setTransactions] = useState<Transaction[]>(initialTransactions);
@@ -871,6 +871,12 @@ const handleWalletWithdraw = async () => {
     setMessage("Profile saved.");
   };
 
+  const handleLogout = () => {
+    logout();
+    pushToast({ variant: "info", title: "You have been signed out." });
+    router.replace("/login");
+  };
+
   const openSupportModal = () =>
     setModalContent({
       title: "Support",
@@ -918,13 +924,6 @@ const handleWalletWithdraw = async () => {
           <div className="muted">Ongoing escrows</div>
           <button className="ghost" onClick={() => navigate("dashboard")}>
             View
-          </button>
-        </div>
-        <div className="tile">
-          <div className="t-title">Support</div>
-          <div className="muted">Help & docs</div>
-          <button className="ghost" onClick={openSupportModal}>
-            Contact
           </button>
         </div>
         <div className="tile">
@@ -1583,6 +1582,9 @@ const handleWalletWithdraw = async () => {
             <button className="btn" onClick={handleSaveProfile}>
               Save
             </button>
+            <button className="ghost" onClick={handleLogout}>
+              Log out
+            </button>
           </div>
         </div>
         <div className="card">
@@ -1814,6 +1816,7 @@ const handleWalletWithdraw = async () => {
         onPrimaryClick={() => navigate("create")}
         onBrandClick={() => navigate("welcome")}
         onSupportClick={openSupportModal}
+        onLogoutClick={handleLogout}
         onAlertsClick={handleAlertsClick}
       />
       <main className="app-main">
