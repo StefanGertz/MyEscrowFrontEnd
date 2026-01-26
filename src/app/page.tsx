@@ -1040,12 +1040,23 @@ const handleWalletWithdraw = async () => {
         </div>
         <div className="tx-list" style={{ marginTop: 12 }}>
           {dashboardTimelineEntries.map((event) => (
-            <div key={event.id} className="tx-item timeline-entry-card">
+            <button
+              key={event.id}
+              className="tx-item timeline-entry-card tx-item--interactive"
+              onClick={() => {
+                const targetTx =
+                  transactions.find((tx) => tx.title === event.label || tx.counterpart === event.label) ??
+                  transactions[0];
+                if (targetTx) {
+                  viewTransaction(targetTx);
+                }
+              }}
+            >
               <div>
                 <div style={{ fontWeight: 700 }}>{event.label}</div>
                 <div className="muted">{event.detail}</div>
               </div>
-            </div>
+            </button>
           ))}
         </div>
       </div>
