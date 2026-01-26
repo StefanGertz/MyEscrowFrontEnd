@@ -16,12 +16,14 @@ export async function GET() {
         label: "Buyer funding pending",
         detail: "Northwind Agency launch requires a deposit.",
         meta: "Just now",
+        txId: 10105,
       },
       {
         id: "notif-02",
         label: "Milestone approval",
         detail: "Cloud Harbor milestone awaiting your review.",
         meta: "10m ago",
+        txId: 10102,
       },
     ],
   });
