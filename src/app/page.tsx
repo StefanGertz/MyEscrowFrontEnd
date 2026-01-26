@@ -7,7 +7,6 @@ import { Header } from "@/components/Header";
 import { SignaturePad, type SignaturePadHandle } from "@/components/SignaturePad";
 import {
   useApproveEscrow,
-  useCancelEscrow,
   useCreateEscrow,
   useNotifications,
   useRejectEscrow,
@@ -16,6 +15,7 @@ import {
 } from "@/hooks/useDashboardData";
 import { useToast } from "@/components/ToastProvider";
 import { useAuth } from "@/components/AuthProvider";
+import { useConfirmDialog } from "@/components/ConfirmDialogProvider";
 
 type ScreenId =
   | "welcome"
@@ -322,6 +322,7 @@ export default function Home({ searchParams }: HomeProps) {
     role: "buyer" as "buyer" | "seller",
     counterpartyName: "",
     counterpartyEmail: "",
+    title: "",
     amount: "",
     category: "Goods",
     description: "",
@@ -344,9 +345,9 @@ export default function Home({ searchParams }: HomeProps) {
   const createEscrowMutation = useCreateEscrow();
   const approveEscrow = useApproveEscrow();
   const rejectEscrow = useRejectEscrow();
-  const cancelEscrow = useCancelEscrow();
   const notificationsQuery = useNotifications();
   const { pushToast } = useToast();
+  const { confirm } = useConfirmDialog();
   const walletTopup = useWalletTopup();
   const walletWithdraw = useWalletWithdraw();
 
@@ -603,7 +604,7 @@ const updateTransaction = (id: number, mapper: (tx: Transaction) => Transaction)
       setMessage("Enter an escrow amount before submitting.");
       return;
     }
-    const responseTitle = createForm.category ? `${createForm.category} escrow` : "New escrow";
+    const responseTitle = createForm.title.trim() || (createForm.category ? `${createForm.category} escrow` : "New escrow");
     const descriptionValue = createForm.description.trim();
     const buyerInfo =
       createForm.role === "buyer"
@@ -666,6 +667,7 @@ const updateTransaction = (id: number, mapper: (tx: Transaction) => Transaction)
         role: "buyer",
         counterpartyName: "",
         counterpartyEmail: "",
+        title: "",
         amount: "",
         category: "Goods",
         description: "",
@@ -712,21 +714,6 @@ const updateTransaction = (id: number, mapper: (tx: Transaction) => Transaction)
     }
   };
 
-  const handleCancel = async (tx: Transaction) => {
-    try {
-      await cancelEscrow.mutateAsync({ escrowId: String(tx.id) });
-      updateTransaction(tx.id, (current) => ({
-        ...current,
-        status: "Pending",
-        context: "Cancelled",
-        counterpartyApproved: false,
-      }));
-      setMessage(`Escrow ${tx.id} cancelled.`);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to cancel escrow.");
-    }
-  };
-
   const handleMilestoneDecision = (txId: number, milestoneId: string, decision: "approve" | "reject") => {
     const target = transactionsRef.current.find((item) => item.id === txId);
     if (!target) {
@@ -737,14 +724,13 @@ const updateTransaction = (id: number, mapper: (tx: Transaction) => Transaction)
       setMessage("Wait for the counterparty to approve the project before reviewing milestones.");
       return;
     }
-    if (decision === "approve") {
-      const confirmed = window.confirm("Approve this milestone? This action cannot be undone.");
-      if (!confirmed) {
-        return;
-      }
+    if (target.status !== "Active") {
+      setMessage("Milestones can only be approved once the escrow is active and funded.");
+      return;
     }
-    const updated = updateTransaction(txId, (tx) => {
-      const timestamp = new Date().toISOString();
+    const executeDecision = () => {
+      const updated = updateTransaction(txId, (tx) => {
+        const timestamp = new Date().toISOString();
       let targetTitle = "";
       const updatedMilestones: TxMilestone[] = tx.milestones.map((milestone): TxMilestone => {
         if (milestone.id !== milestoneId) {
@@ -765,48 +751,59 @@ const updateTransaction = (id: number, mapper: (tx: Transaction) => Transaction)
           rejectedAt: timestamp,
         };
       });
-      const allReleased = updatedMilestones.length > 0 && updatedMilestones.every((item) => item.status === "released");
-      const anyRejected = updatedMilestones.some((item) => item.status === "rejected");
-      let status = tx.status;
-      let context = tx.context;
-      if (allReleased) {
-        status = "Released";
-        context = "All milestones paid";
-      } else if (anyRejected) {
-        context = "Milestone requires attention";
-      } else if (decision === "approve") {
-        context = "Milestones active";
+        const allReleased = updatedMilestones.length > 0 && updatedMilestones.every((item) => item.status === "released");
+        const anyRejected = updatedMilestones.some((item) => item.status === "rejected");
+        let status = tx.status;
+        let context = tx.context;
+        if (allReleased) {
+          status = "Released";
+          context = "All milestones paid";
+        } else if (anyRejected) {
+          context = "Milestone requires attention";
+        } else if (decision === "approve") {
+          context = "Milestones active";
+        }
+        const nextTimeline =
+          targetTitle.trim().length === 0
+            ? tx.timeline
+            : [
+                {
+                  id: randomId(),
+                  label: decision === "approve" ? "Milestone approved" : "Milestone rejected",
+                  detail:
+                    decision === "approve"
+                      ? `"${targetTitle}" released to the seller`
+                      : `"${targetTitle}" sent back for revision`,
+                  time: timestamp,
+                },
+                ...tx.timeline,
+              ];
+        return {
+          ...tx,
+          milestones: updatedMilestones,
+          status,
+          context,
+          timeline: nextTimeline,
+        };
+      });
+      if (updated) {
+        setMessage(
+          decision === "approve"
+            ? "Milestone approved and funds released."
+            : "Milestone rejected and sent back for updates.",
+        );
       }
-      const nextTimeline =
-        targetTitle.trim().length === 0
-          ? tx.timeline
-          : [
-              {
-                id: randomId(),
-                label: decision === "approve" ? "Milestone approved" : "Milestone rejected",
-                detail:
-                  decision === "approve"
-                    ? `"${targetTitle}" released to the seller`
-                    : `"${targetTitle}" sent back for revision`,
-                time: timestamp,
-              },
-              ...tx.timeline,
-            ];
-      return {
-        ...tx,
-        milestones: updatedMilestones,
-        status,
-        context,
-        timeline: nextTimeline,
-      };
-    });
-    if (updated) {
-      setMessage(
-        decision === "approve"
-          ? "Milestone approved and funds released."
-          : "Milestone rejected and sent back for updates.",
-      );
+    };
+    if (decision === "approve") {
+      confirm({
+        title: "Approve milestone?",
+        body: "Are you sure you want to approve this milestone? This action cannot be undone.",
+        confirmLabel: "Approve milestone",
+        onConfirm: executeDecision,
+      });
+      return;
     }
+    executeDecision();
   };
 
   const handleWalletTopup = async () => {
@@ -1081,18 +1078,6 @@ const handleWalletWithdraw = async () => {
                       </button>
                     </>
                   ) : null}
-                  {tx.status === "Active" ? (
-                    <button
-                      className="ghost"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        handleCancel(tx);
-                      }}
-                      disabled={cancelEscrow.isPending}
-                    >
-                      {cancelEscrow.isPending ? "Cancelling..." : "Cancel"}
-                    </button>
-                  ) : null}
                 </div>
               </div>
             </div>
@@ -1173,6 +1158,17 @@ const handleWalletWithdraw = async () => {
               </div>
             </div>
             <div className="create-form-section">
+              <div className="form-field">
+                <label className="muted">Escrow name</label>
+                <input
+                  type="text"
+                  value={createForm.title}
+                  placeholder="e.g., Northwind onboarding kit"
+                  onChange={(event) =>
+                    setCreateForm((prev) => ({ ...prev, title: event.target.value }))
+                  }
+                />
+              </div>
               <div className="form-field">
                 <label className="muted">{counterpartLabel} name</label>
                 <input
@@ -1657,19 +1653,9 @@ const handleWalletWithdraw = async () => {
       );
     }
     const tx = selectedTransaction;
-    const canReviewMilestones = tx.counterpartyApproved;
-    const counterpartRole =
-      currentUser.name === tx.buyer
-        ? "seller"
-        : currentUser.name === tx.seller
-          ? "buyer"
-          : "counterparty";
-    const counterpartCopy =
-      counterpartRole === "buyer"
-        ? "the buyer"
-        : counterpartRole === "seller"
-          ? "the seller"
-          : "the counterparty";
+    const canReviewMilestones = tx.counterpartyApproved && tx.status === "Active";
+    const isCurrentUserBuyer = currentUser.name === tx.buyer;
+    const counterpartCopy = isCurrentUserBuyer ? "the seller" : "the buyer";
     return (
       <section className="screen active">
         <h2 className="page-title">Transaction</h2>
@@ -1733,7 +1719,7 @@ const handleWalletWithdraw = async () => {
             </div>
             {!canReviewMilestones ? (
               <div className="muted" style={{ marginTop: 8 }}>
-                Waiting on {counterpartCopy} to approve the escrow funding before milestone decisions can be made.
+                Waiting on {isCurrentUserBuyer ? "the seller to approve" : "the buyer to approve and fund"} the escrow before milestone decisions can be made.
               </div>
             ) : null}
             <div className="tx-list" style={{ marginTop: 12 }}>

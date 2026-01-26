@@ -2,26 +2,35 @@
 
 import { useEscrows, useReleaseEscrow } from "@/hooks/useDashboardData";
 import { useToast } from "@/components/ToastProvider";
+import { useConfirmDialog } from "@/components/ConfirmDialogProvider";
 
 export function EscrowsSection() {
   const { data, isLoading, isError } = useEscrows();
   const releaseEscrow = useReleaseEscrow();
   const { pushToast } = useToast();
+  const { confirm } = useConfirmDialog();
 
-  const handleRelease = async (escrowId: string, counterpartyApproved: boolean) => {
+  const handleRelease = (escrowId: string, counterpartyApproved: boolean) => {
     if (!counterpartyApproved || releaseEscrow.isPending) return;
-    try {
-      await releaseEscrow.mutateAsync({ escrowId });
-      pushToast({
-        variant: "success",
-        title: `Release queued for ${escrowId}.`,
-      });
-    } catch (error) {
-      pushToast({
-        variant: "error",
-        title: error instanceof Error ? error.message : "Unable to release escrow.",
-      });
-    }
+    confirm({
+      title: "Approve milestone release?",
+      body: "Are you sure you want to approve this release? This action cannot be undone.",
+      confirmLabel: "Approve release",
+      onConfirm: async () => {
+        try {
+          await releaseEscrow.mutateAsync({ escrowId });
+          pushToast({
+            variant: "success",
+            title: `Release queued for ${escrowId}.`,
+          });
+        } catch (error) {
+          pushToast({
+            variant: "error",
+            title: error instanceof Error ? error.message : "Unable to release escrow.",
+          });
+        }
+      },
+    });
   };
 
   if (isLoading) {
