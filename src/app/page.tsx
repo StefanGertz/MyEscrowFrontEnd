@@ -1655,7 +1655,6 @@ const handleWalletWithdraw = async () => {
     const tx = selectedTransaction;
     const canReviewMilestones = tx.counterpartyApproved && tx.status === "Active";
     const isCurrentUserBuyer = currentUser.name === tx.buyer;
-    const counterpartCopy = isCurrentUserBuyer ? "the seller" : "the buyer";
     return (
       <section className="screen active">
         <h2 className="page-title">Transaction</h2>
