@@ -44,6 +44,7 @@ export function useEscrowSummary() {
   return useQuery({
     queryKey: ["dashboard", "overview"],
     queryFn: () => fetchJSON<OverviewResponse>("/api/dashboard/overview"),
+    retry: 2,
   });
 }
 
@@ -65,6 +66,8 @@ export function useNotifications() {
   return useQuery({
     queryKey: ["dashboard", "notifications"],
     queryFn: () => fetchJSON<NotificationsResponse>("/api/dashboard/notifications"),
+    retry: 2,
+    staleTime: 15 * 1000,
   });
 }
 

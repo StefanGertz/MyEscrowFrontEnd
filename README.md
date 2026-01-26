@@ -36,3 +36,16 @@ npm test        # Vitest + MSW integration coverage
 - Use the `@/*` path alias (configured in `tsconfig.json`) for imports within `src/`.
 - Mock dashboard responses live under `src/app/api/dashboard/*` and draw from `src/lib/mockDashboard.ts`. Swap those handlers to call the real backend (or disable them) when wiring to production services.
 - The React Query hooks call `apiFetch` (see `src/lib/apiClient.ts`). Set `NEXT_PUBLIC_API_BASE_URL` to point at a staging/production API and flip `NEXT_PUBLIC_USE_MOCKS=false` to route traffic directly to it; when mocks are disabled, the built-in API handlers short-circuit with 404s so you can verify that the real backend is being used.
+
+### Switching between mocks and staging
+
+1. Create or edit `.env.local` and set `NEXT_PUBLIC_API_BASE_URL` to your staging API.
+2. Toggle `NEXT_PUBLIC_USE_MOCKS` to `false` to bypass the local API handlers.
+3. Optionally set `NEXT_PUBLIC_API_TOKEN=<bearer token>`; `apiFetch` injects it as an `Authorization` header on every staging request so you can hit authenticated routes without modifying each hook.
+4. Leave `NEXT_PUBLIC_USE_MOCKS=true` when working offline—the React Query hooks will fall back to the mock handlers automatically.
+
+### Authentication
+
+- Navigate to `/signup` to create a demo account or `/login` to use an existing one; successful auth redirects to the dashboard.
+- `AuthProvider` (wrapping the app) stores the current user + token in memory/localStorage and updates the `Authorization` header via `apiFetch`.
+- The dashboard requires authentication and redirects unauthenticated visitors back to `/login`.

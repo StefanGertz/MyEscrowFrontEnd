@@ -1,9 +1,21 @@
 "use client";
 
+import { useEffect } from "react";
 import { useEscrowSummary } from "@/hooks/useDashboardData";
+import { useToast } from "@/components/ToastProvider";
 
 export function OverviewSection() {
   const { data, isLoading, isError } = useEscrowSummary();
+  const { pushToast } = useToast();
+
+  useEffect(() => {
+    if (isError) {
+      pushToast({
+        variant: "error",
+        title: "Unable to load dashboard overview from the API.",
+      });
+    }
+  }, [isError, pushToast]);
 
   if (isLoading) {
     return (

@@ -4,6 +4,28 @@ import { setupServer } from "msw/node";
 const baseUrl = "https://staging-api.myescrow.example/v1";
 
 export const handlers = [
+  http.post(`${baseUrl}/api/auth/login`, async ({ request }) => {
+    const body = (await request.json()) as { email: string; password: string };
+    return HttpResponse.json({
+      token: "test-token",
+      user: {
+        id: "user-login",
+        name: body.email.split("@")[0] || "Tester",
+        email: body.email,
+      },
+    });
+  }),
+  http.post(`${baseUrl}/api/auth/signup`, async ({ request }) => {
+    const body = (await request.json()) as { name: string; email: string; password: string };
+    return HttpResponse.json({
+      token: "test-token",
+      user: {
+        id: "user-signup",
+        name: body.name,
+        email: body.email,
+      },
+    });
+  }),
   http.post(`${baseUrl}/api/dashboard/escrows/create`, async ({ request }) => {
     const body = (await request.json()) as {
       title: string;

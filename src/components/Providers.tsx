@@ -7,6 +7,8 @@ import {
   type DefaultOptions,
 } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
+import { ToastProvider } from "@/components/ToastProvider";
+import { AuthProvider } from "@/components/AuthProvider";
 
 const queryDefaults: DefaultOptions = {
   queries: {
@@ -27,7 +29,9 @@ export function Providers({ children }: ProvidersProps) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {children}
+      <AuthProvider>
+        <ToastProvider>{children}</ToastProvider>
+      </AuthProvider>
       <ReactQueryDevtools buttonPosition="bottom-left" initialIsOpen={false} />
     </QueryClientProvider>
   );

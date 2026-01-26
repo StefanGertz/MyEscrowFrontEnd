@@ -14,6 +14,7 @@ export type EscrowRecord = {
   stage: string;
   due: string;
   status: EscrowStatus;
+  counterpartyApproved: boolean;
 };
 
 export type TimelineEvent = {
@@ -68,6 +69,7 @@ export const activeEscrows: EscrowRecord[] = [
     stage: "Mobile app v1",
     due: "Due in 3 days",
     status: "success",
+    counterpartyApproved: false,
   },
   {
     id: "PO-0988",
@@ -76,6 +78,7 @@ export const activeEscrows: EscrowRecord[] = [
     stage: "Milestone 3 / 5",
     due: "Releasing today",
     status: "warning",
+    counterpartyApproved: true,
   },
   {
     id: "PO-0772",
@@ -84,6 +87,7 @@ export const activeEscrows: EscrowRecord[] = [
     stage: "KYC & compliance scope",
     due: "Review in 1 day",
     status: "success",
+    counterpartyApproved: true,
   },
 ];
 
@@ -96,6 +100,7 @@ export const reviewEscrows: EscrowRecord[] = [
     stage: "Delivery confirmation",
     due: "Upload POD",
     status: "warning",
+    counterpartyApproved: false,
   },
 ];
 

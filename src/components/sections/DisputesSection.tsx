@@ -5,11 +5,43 @@ import {
   useLaunchDisputeWorkspace,
   useResolveDispute,
 } from "@/hooks/useDashboardData";
+import { useToast } from "@/components/ToastProvider";
 
 export function DisputesSection() {
   const { data, isLoading, isError } = useDisputes();
   const launchWorkspace = useLaunchDisputeWorkspace();
   const resolveDispute = useResolveDispute();
+  const { pushToast } = useToast();
+
+  const handleLaunch = async (disputeId: string) => {
+    try {
+      await launchWorkspace.mutateAsync({ disputeId });
+      pushToast({
+        variant: "success",
+        title: `Workspace launched for ${disputeId}.`,
+      });
+    } catch (error) {
+      pushToast({
+        variant: "error",
+        title: error instanceof Error ? error.message : "Unable to launch workspace.",
+      });
+    }
+  };
+
+  const handleResolve = async (disputeId: string) => {
+    try {
+      await resolveDispute.mutateAsync({ disputeId });
+      pushToast({
+        variant: "success",
+        title: `Dispute ${disputeId} resolved.`,
+      });
+    } catch (error) {
+      pushToast({
+        variant: "error",
+        title: error instanceof Error ? error.message : "Unable to resolve dispute.",
+      });
+    }
+  };
 
   if (isLoading) {
     return <DisputeShell className="animate-pulse" />;
@@ -39,6 +71,7 @@ export function DisputesSection() {
           </h3>
           <span className="pill pill--warning">{disputeTickets.length} active</span>
         </div>
+
         <div className="mt-4 space-y-3">
           {disputeTickets.map((ticket) => {
             const isPending =
@@ -80,7 +113,7 @@ export function DisputesSection() {
                     type="button"
                     disabled={isPending}
                     onClick={() =>
-                      launchWorkspace.mutate({ disputeId: ticket.id })
+                      handleLaunch(ticket.id)
                     }
                   >
                     {isPending ? "Launching..." : "Launch dispute workspace"}
@@ -90,7 +123,7 @@ export function DisputesSection() {
                     type="button"
                     disabled={isResolving}
                     onClick={() =>
-                      resolveDispute.mutate({ disputeId: ticket.id })
+                      handleResolve(ticket.id)
                     }
                   >
                     {isResolving ? "Resolving..." : "Resolve dispute"}
@@ -130,7 +163,7 @@ export function DisputesSection() {
           type="button"
           onClick={() => {
             if (disputeTickets[0]) {
-              launchWorkspace.mutate({ disputeId: disputeTickets[0].id });
+              void handleLaunch(disputeTickets[0].id);
             }
           }}
           disabled={launchWorkspace.isPending}
@@ -143,7 +176,7 @@ export function DisputesSection() {
           disabled={resolveDispute.isPending}
           onClick={() => {
             if (disputeTickets[0]) {
-              resolveDispute.mutate({ disputeId: disputeTickets[0].id });
+              void handleResolve(disputeTickets[0].id);
             }
           }}
         >

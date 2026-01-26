@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { Header } from "@/components/Header";
 import { SignaturePad, type SignaturePadHandle } from "@/components/SignaturePad";
@@ -13,6 +14,8 @@ import {
   useWalletTopup,
   useWalletWithdraw,
 } from "@/hooks/useDashboardData";
+import { useToast } from "@/components/ToastProvider";
+import { useAuth } from "@/components/AuthProvider";
 
 type ScreenId =
   | "welcome"
@@ -63,6 +66,7 @@ type Transaction = {
   sellerEmail: string;
   milestones: TxMilestone[];
   timeline: TimelineEntry[];
+  counterpartyApproved: boolean;
 };
 
 type DraftMilestone = {
@@ -113,7 +117,7 @@ const pickQueryValue = (value: string | string[] | undefined) =>
 const isScreenId = (value: string | undefined): value is ScreenId =>
   value ? screenIds.includes(value as ScreenId) : false;
 
-const currentUser = {
+const defaultUser = {
   name: "Scott",
   email: "scott@example.com",
 };
@@ -185,15 +189,16 @@ const initialTransactions: Transaction[] = [
       { title: "Funding pending", detail: "Buyer funds after approval", status: "upcoming" },
       { title: "Milestones active", detail: "Releases after delivery", status: "upcoming" },
     ],
-    buyer: currentUser.name,
-    buyerEmail: currentUser.email,
+    buyer: defaultUser.name,
+    buyerEmail: defaultUser.email,
     seller: "Nora Studio",
     sellerEmail: "nora@example.com",
     milestones: [{ id: "m10105a", title: "Prototype delivery (Northwind)", amount: 650, status: "pending" }],
     timeline: [
-      { id: "tl-10105-a", label: "Created", detail: "Created by Scott (buyer)", time: new Date(Date.now() - 3600 * 1000 * 6).toISOString() },
-      { id: "tl-10105-b", label: "Seller notified", detail: "Nora invited to approve", time: new Date(Date.now() - 3600 * 1000 * 5.5).toISOString() },
+      { id: "tl-10105-a", label: "Created", detail: "Created by you (buyer)", time: new Date(Date.now() - 3600 * 1000 * 6).toISOString() },
+      { id: "tl-10105-b", label: "Seller notified", detail: "Nora Studio invited to approve", time: new Date(Date.now() - 3600 * 1000 * 5.5).toISOString() },
     ],
+    counterpartyApproved: false,
   },
   {
     id: 10102,
@@ -209,18 +214,19 @@ const initialTransactions: Transaction[] = [
     ],
     buyer: "John",
     buyerEmail: "john@example.com",
-    seller: currentUser.name,
-    sellerEmail: currentUser.email,
+    seller: defaultUser.name,
+    sellerEmail: defaultUser.email,
     milestones: [
       { id: "m10102a", title: "Design draft", amount: 400, status: "released", releasedAt: new Date(Date.now() - 864e5 * 1).toISOString() },
       { id: "m10102b", title: "Development sprint", amount: 400, status: "pending" },
       { id: "m10102c", title: "Final handoff", amount: 400, status: "pending" },
     ],
     timeline: [
-      { id: "tl-10102-a", label: "Created", detail: "Created by Scott (seller)", time: new Date(Date.now() - 864e5 * 4).toISOString() },
+      { id: "tl-10102-a", label: "Created", detail: "Created by you (seller)", time: new Date(Date.now() - 864e5 * 4).toISOString() },
       { id: "tl-10102-b", label: "Funded", detail: "Buyer funded escrow", time: new Date(Date.now() - 864e5 * 1.5).toISOString() },
       { id: "tl-10102-c", label: "Milestone released", detail: '"Design draft" released', time: new Date(Date.now() - 864e5 * 1).toISOString() },
     ],
+    counterpartyApproved: true,
   },
   {
     id: 10103,
@@ -234,8 +240,8 @@ const initialTransactions: Transaction[] = [
       { title: "Funded", detail: "Wallet balance secured", status: "complete" },
       { title: "Released", detail: "Final payout sent", status: "complete" },
     ],
-    buyer: currentUser.name,
-    buyerEmail: currentUser.email,
+    buyer: defaultUser.name,
+    buyerEmail: defaultUser.email,
     seller: "Summit Legal",
     sellerEmail: "legal@summit.com",
     milestones: [
@@ -243,10 +249,11 @@ const initialTransactions: Transaction[] = [
       { id: "m10103b", title: "Client approval", amount: 150, status: "released", releasedAt: new Date(Date.now() - 864e5 * 4).toISOString() },
     ],
     timeline: [
-      { id: "tl-10103-a", label: "Created", detail: "Created by Scott (buyer)", time: new Date(Date.now() - 864e5 * 7).toISOString() },
+      { id: "tl-10103-a", label: "Created", detail: "Created by you (buyer)", time: new Date(Date.now() - 864e5 * 7).toISOString() },
       { id: "tl-10103-b", label: "Delivered", detail: "Milestones delivered", time: new Date(Date.now() - 864e5 * 5).toISOString() },
       { id: "tl-10103-c", label: "Closed", detail: "Escrow closed", time: new Date(Date.now() - 864e5 * 3.5).toISOString() },
     ],
+    counterpartyApproved: true,
   },
 ];
 
@@ -298,7 +305,8 @@ export default function Home({ searchParams }: HomeProps) {
   const initialScreen = isScreenId(initialScreenQuery) ? initialScreenQuery : "welcome";
   const initialTxQuery = pickQueryValue(resolvedSearchParams?.tx);
   const initialTxId = initialTxQuery ? Number(initialTxQuery) : undefined;
-
+  const router = useRouter();
+  const { user: authUser, isAuthenticated, isHydrating } = useAuth();
   const [activeScreen, setActiveScreen] = useState<ScreenId>(initialScreen);
   const [walletBalance, setWalletBalance] = useState(300);
   const [transactions, setTransactions] = useState<Transaction[]>(initialTransactions);
@@ -328,7 +336,8 @@ export default function Home({ searchParams }: HomeProps) {
   const signaturePadRef = useRef<SignaturePadHandle | null>(null);
   const [walletAmountInput, setWalletAmountInput] = useState("");
   const [message, setMessage] = useState<string | null>(null);
-  const [profile, setProfile] = useState({ name: currentUser.name, email: currentUser.email });
+  const [profile, setProfile] = useState({ name: defaultUser.name, email: defaultUser.email });
+  const currentUser = profile;
   const [kycMarked, setKycMarked] = useState(false);
   const [modalContent, setModalContent] = useState<ModalContent | null>(null);
   const [notificationsPanelOpen, setNotificationsPanelOpen] = useState(false);
@@ -337,6 +346,7 @@ export default function Home({ searchParams }: HomeProps) {
   const rejectEscrow = useRejectEscrow();
   const cancelEscrow = useCancelEscrow();
   const notificationsQuery = useNotifications();
+  const { pushToast } = useToast();
   const walletTopup = useWalletTopup();
   const walletWithdraw = useWalletWithdraw();
 
@@ -350,29 +360,62 @@ export default function Home({ searchParams }: HomeProps) {
     [transactions],
   );
   const notificationList = notificationsQuery.data?.notifications ?? [];
-const fallbackNotifications: NotificationEntry[] = [
-  {
-    id: "demo-notif-01",
-    label: "Northwind onboarding kit",
-    detail: "Review and approve the Northwind onboarding kit escrow to move forward.",
-    meta: "Just now",
-  },
-  {
-    id: "demo-notif-02",
-    label: "Cloud Harbor retainer",
-    detail: "Milestone \"Development sprint\" is ready for your approval.",
-    meta: "15 min ago",
-  },
-  {
-    id: "demo-notif-03",
-    label: "Summit Legal payout",
-    detail: "Final milestone released and payout sent to Summit Legal.",
-    meta: "1 hr ago",
-  },
-];
+  const fallbackNotifications = useMemo<NotificationEntry[]>(() => {
+    const entries: NotificationEntry[] = [];
+    transactions.forEach((tx) => {
+      if (tx.status === "Pending" && !tx.counterpartyApproved) {
+        const waitingOnName =
+          tx.buyer === currentUser.name ? tx.seller : tx.buyer;
+        entries.push({
+          id: `approval-${tx.id}`,
+          label: tx.title,
+          detail: `Waiting for ${waitingOnName} to approve the escrow before funding begins.`,
+          meta: tx.context,
+        });
+      } else if (tx.status === "Active") {
+        const pendingMilestone = tx.milestones.find(
+          (milestone) => milestone.status === "pending",
+        );
+        if (pendingMilestone) {
+          const needsApprovalFrom =
+            tx.seller === currentUser.name ? tx.buyer : tx.seller;
+          entries.push({
+            id: `milestone-${tx.id}-${pendingMilestone.id}`,
+            label: tx.title,
+            detail: `${needsApprovalFrom} is reviewing "${pendingMilestone.title}" before funds release.`,
+            meta: `Milestone pending • ${pendingMilestone.amount ? formatCurrency(pendingMilestone.amount) : "Review required"}`,
+          });
+        }
+      }
+    });
+    if (entries.length === 0) {
+      entries.push({
+        id: "fallback-none",
+        label: "All escrows are current",
+        detail: "You’ll see alerts here as soon as a buyer or seller needs action.",
+        meta: "Status check",
+      });
+    }
+    return entries.slice(0, 4);
+  }, [transactions]);
   const shouldUseFallbackNotifications = notificationsQuery.isError || notificationList.length === 0;
   const notificationsToRender = shouldUseFallbackNotifications ? fallbackNotifications : notificationList;
   const openNotifications = notificationList.length || activeNotifications;
+
+useEffect(() => {
+  if (notificationsQuery.isError) {
+    pushToast({
+      variant: "error",
+      title: "Notifications failed to load. Showing demo alerts.",
+    });
+  }
+}, [notificationsQuery.isError, pushToast]);
+
+useEffect(() => {
+  if (!isHydrating && !isAuthenticated) {
+    router.replace("/login");
+  }
+}, [isHydrating, isAuthenticated, router]);
 
   const milestoneTotal = useMemo(
     () => milestones.reduce((sum, item) => sum + item.amount, 0),
@@ -479,14 +522,6 @@ const updateTransaction = (id: number, mapper: (tx: Transaction) => Transaction)
     return current;
   });
   return updatedTx;
-};
-
-const updateTransactionStatus = (id: number, status: Transaction["status"], context: string) => {
-  updateTransaction(id, (tx) => ({
-    ...tx,
-    status,
-    context,
-  }));
 };
 
   const handleCreateNext = () => {
@@ -598,6 +633,7 @@ const updateTransactionStatus = (id: number, status: Transaction["status"], cont
         amount: escrowAmount,
         status: "Pending",
         context: approvalContext,
+        counterpartyApproved: false,
         description: descriptionValue || undefined,
         steps: [
           { title: "Agreement drafted", detail: "Creator signed the agreement", status: "complete" },
@@ -649,7 +685,12 @@ const updateTransactionStatus = (id: number, status: Transaction["status"], cont
   const handleApprove = async (tx: Transaction) => {
     try {
       await approveEscrow.mutateAsync({ escrowId: String(tx.id) });
-      updateTransactionStatus(tx.id, "Active", "Milestones active");
+      updateTransaction(tx.id, (current) => ({
+        ...current,
+        status: "Active",
+        context: "Milestones active",
+        counterpartyApproved: true,
+      }));
       setMessage(`Escrow ${tx.id} approved.`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to approve escrow.");
@@ -659,7 +700,12 @@ const updateTransactionStatus = (id: number, status: Transaction["status"], cont
   const handleReject = async (tx: Transaction) => {
     try {
       await rejectEscrow.mutateAsync({ escrowId: String(tx.id) });
-      updateTransactionStatus(tx.id, "Pending", "Rejected - waiting on changes");
+      updateTransaction(tx.id, (current) => ({
+        ...current,
+        status: "Pending",
+        context: "Rejected - waiting on changes",
+        counterpartyApproved: false,
+      }));
       setMessage(`Escrow ${tx.id} rejected.`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to reject escrow.");
@@ -669,7 +715,12 @@ const updateTransactionStatus = (id: number, status: Transaction["status"], cont
   const handleCancel = async (tx: Transaction) => {
     try {
       await cancelEscrow.mutateAsync({ escrowId: String(tx.id) });
-      updateTransactionStatus(tx.id, "Pending", "Cancelled");
+      updateTransaction(tx.id, (current) => ({
+        ...current,
+        status: "Pending",
+        context: "Cancelled",
+        counterpartyApproved: false,
+      }));
       setMessage(`Escrow ${tx.id} cancelled.`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to cancel escrow.");
@@ -677,6 +728,15 @@ const updateTransactionStatus = (id: number, status: Transaction["status"], cont
   };
 
   const handleMilestoneDecision = (txId: number, milestoneId: string, decision: "approve" | "reject") => {
+    const target = transactionsRef.current.find((item) => item.id === txId);
+    if (!target) {
+      setMessage("Transaction not found.");
+      return;
+    }
+    if (!target.counterpartyApproved) {
+      setMessage("Wait for the counterparty to approve the project before reviewing milestones.");
+      return;
+    }
     const updated = updateTransaction(txId, (tx) => {
       const timestamp = new Date().toISOString();
       let targetTitle = "";
@@ -853,7 +913,7 @@ const handleWalletWithdraw = async () => {
     <section className="screen active">
       <h2 className="page-title">
         Welcome back,
-        <span style={{ fontWeight: 700, marginLeft: 6 }}>Scott</span>
+        <span style={{ fontWeight: 700, marginLeft: 6 }}>{currentUser.name}</span>
       </h2>
       <div className="tiles">
         <div className="tile">
@@ -1591,6 +1651,19 @@ const handleWalletWithdraw = async () => {
       );
     }
     const tx = selectedTransaction;
+    const canReviewMilestones = tx.counterpartyApproved;
+    const counterpartRole =
+      currentUser.name === tx.buyer
+        ? "seller"
+        : currentUser.name === tx.seller
+          ? "buyer"
+          : "counterparty";
+    const counterpartCopy =
+      counterpartRole === "buyer"
+        ? "the buyer"
+        : counterpartRole === "seller"
+          ? "the seller"
+          : "the counterparty";
     return (
       <section className="screen active">
         <h2 className="page-title">Transaction</h2>
@@ -1652,6 +1725,11 @@ const handleWalletWithdraw = async () => {
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <strong>Milestones</strong>
             </div>
+            {!canReviewMilestones ? (
+              <div className="muted" style={{ marginTop: 8 }}>
+                Waiting on {counterpartCopy} to approve the escrow funding before milestone decisions can be made.
+              </div>
+            ) : null}
             <div className="tx-list" style={{ marginTop: 12 }}>
               {tx.milestones.map((milestone) => (
                 <div key={milestone.id} className="tx-item milestone-entry">
@@ -1676,10 +1754,18 @@ const handleWalletWithdraw = async () => {
                   <div className="milestone-actions">
                     {milestone.status === "pending" ? (
                       <>
-                        <button className="btn" onClick={() => handleMilestoneDecision(tx.id, milestone.id, "approve")}>
+                        <button
+                          className="btn"
+                          onClick={() => handleMilestoneDecision(tx.id, milestone.id, "approve")}
+                          disabled={!canReviewMilestones}
+                        >
                           Approve
                         </button>
-                        <button className="ghost" onClick={() => handleMilestoneDecision(tx.id, milestone.id, "reject")}>
+                        <button
+                          className="ghost"
+                          onClick={() => handleMilestoneDecision(tx.id, milestone.id, "reject")}
+                          disabled={!canReviewMilestones}
+                        >
                           Reject
                         </button>
                       </>
@@ -1700,7 +1786,12 @@ const handleWalletWithdraw = async () => {
               <strong>Timeline</strong>
             </div>
             <div className="tx-list" style={{ marginTop: 12 }}>
-              {tx.timeline.map((event) => (
+              {[...tx.timeline]
+                .sort(
+                  (a, b) =>
+                    new Date(b.time).getTime() - new Date(a.time).getTime(),
+                )
+                .map((event) => (
                 <div key={event.id} className="tx-item timeline-entry-card">
                   <div>
                     <div style={{ fontWeight: 700 }}>{event.label}</div>
@@ -1743,6 +1834,16 @@ const handleWalletWithdraw = async () => {
         return renderWelcome();
     }
   };
+
+  if (isHydrating || !isAuthenticated) {
+    return (
+      <main className="auth-page">
+        <div className="auth-card">
+          <p className="auth-eyebrow">Loading account…</p>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <AppShell screenId={activeScreen}>
