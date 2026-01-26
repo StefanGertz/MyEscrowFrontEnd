@@ -684,36 +684,6 @@ const updateTransaction = (id: number, mapper: (tx: Transaction) => Transaction)
     }
   };
 
-  const handleApprove = async (tx: Transaction) => {
-    try {
-      await approveEscrow.mutateAsync({ escrowId: String(tx.id) });
-      updateTransaction(tx.id, (current) => ({
-        ...current,
-        status: "Active",
-        context: "Milestones active",
-        counterpartyApproved: true,
-      }));
-      setMessage(`Escrow ${tx.id} approved.`);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to approve escrow.");
-    }
-  };
-
-  const handleReject = async (tx: Transaction) => {
-    try {
-      await rejectEscrow.mutateAsync({ escrowId: String(tx.id) });
-      updateTransaction(tx.id, (current) => ({
-        ...current,
-        status: "Pending",
-        context: "Rejected - waiting on changes",
-        counterpartyApproved: false,
-      }));
-      setMessage(`Escrow ${tx.id} rejected.`);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to reject escrow.");
-    }
-  };
-
   const handleMilestoneDecision = (txId: number, milestoneId: string, decision: "approve" | "reject") => {
     const target = transactionsRef.current.find((item) => item.id === txId);
     if (!target) {
@@ -1057,32 +1027,7 @@ const handleWalletWithdraw = async () => {
               <div style={{ textAlign: "right" }}>
                 <div>{formatCurrency(tx.amount)}</div>
                 <div className="muted">{tx.context}</div>
-                <div className="flex flex-wrap gap-2 justify-end mt-2">
-                  {tx.status === "Pending" ? (
-                    <>
-                      <button
-                        className="btn"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          handleApprove(tx);
-                        }}
-                        disabled={approveEscrow.isPending}
-                      >
-                        {approveEscrow.isPending ? "Approving..." : "Approve"}
-                      </button>
-                      <button
-                        className="ghost"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          handleReject(tx);
-                        }}
-                        disabled={rejectEscrow.isPending}
-                      >
-                        {rejectEscrow.isPending ? "Rejecting..." : "Reject"}
-                      </button>
-                    </>
-                  ) : null}
-                </div>
+                  <div className="flex flex-wrap gap-2 justify-end mt-2" />
               </div>
             </div>
           ))}
