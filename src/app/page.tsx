@@ -8,7 +8,6 @@ import { SignaturePad, type SignaturePadHandle } from "@/components/SignaturePad
 import {
   useCreateEscrow,
   useNotifications,
-  useRejectEscrow,
   useWalletTopup,
   useWalletWithdraw,
 } from "@/hooks/useDashboardData";

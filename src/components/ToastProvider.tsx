@@ -32,9 +32,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const timeouts = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   useEffect(() => {
+    const timeoutMap = timeouts.current;
     return () => {
-      timeouts.current.forEach((timeoutId) => clearTimeout(timeoutId));
-      timeouts.current.clear();
+      timeoutMap.forEach((timeoutId) => clearTimeout(timeoutId));
+      timeoutMap.clear();
     };
   }, []);
 

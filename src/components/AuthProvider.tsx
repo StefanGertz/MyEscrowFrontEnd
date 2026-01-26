@@ -2,6 +2,7 @@
 
 import {
   createContext,
+  startTransition,
   useCallback,
   useContext,
   useEffect,
@@ -75,11 +76,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   useEffect(() => {
     const restored = readStorage();
-    setState(restored);
-    if (restored.token) {
-      setClientAuthToken(restored.token);
-    }
-    setIsHydrating(false);
+    startTransition(() => {
+      setState(restored);
+      if (restored.token) {
+        setClientAuthToken(restored.token);
+      }
+      setIsHydrating(false);
+    });
   }, []);
 
   const login = useCallback(
