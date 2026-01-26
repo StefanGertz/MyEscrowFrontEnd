@@ -343,8 +343,6 @@ export default function Home({ searchParams }: HomeProps) {
   const [modalContent, setModalContent] = useState<ModalContent | null>(null);
   const [notificationsPanelOpen, setNotificationsPanelOpen] = useState(false);
   const createEscrowMutation = useCreateEscrow();
-  const approveEscrow = useApproveEscrow();
-  const rejectEscrow = useRejectEscrow();
   const notificationsQuery = useNotifications();
   const { pushToast } = useToast();
   const { confirm } = useConfirmDialog();
