@@ -6,7 +6,6 @@ import { AppShell } from "@/components/AppShell";
 import { Header } from "@/components/Header";
 import { SignaturePad, type SignaturePadHandle } from "@/components/SignaturePad";
 import {
-  useApproveEscrow,
   useCreateEscrow,
   useNotifications,
   useRejectEscrow,
