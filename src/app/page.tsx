@@ -93,6 +93,7 @@ type NotificationEntry = {
   label: string;
   detail: string;
   meta: string;
+  txId?: number;
 };
 
 type HomeProps = {
@@ -370,6 +371,7 @@ export default function Home({ searchParams }: HomeProps) {
           tx.buyer === currentUser.name ? tx.seller : tx.buyer;
         entries.push({
           id: `approval-${tx.id}`,
+          txId: tx.id,
           label: tx.title,
           detail: `Waiting for ${waitingOnName} to approve the escrow before funding begins.`,
           meta: tx.context,
@@ -383,6 +385,7 @@ export default function Home({ searchParams }: HomeProps) {
             tx.seller === currentUser.name ? tx.buyer : tx.seller;
           entries.push({
             id: `milestone-${tx.id}-${pendingMilestone.id}`,
+            txId: tx.id,
             label: tx.title,
             detail: `${needsApprovalFrom} is reviewing "${pendingMilestone.title}" before funds release.`,
             meta: `Milestone pending • ${pendingMilestone.amount ? formatCurrency(pendingMilestone.amount) : "Review required"}`,
@@ -394,12 +397,12 @@ export default function Home({ searchParams }: HomeProps) {
       entries.push({
         id: "fallback-none",
         label: "All escrows are current",
-        detail: "You’ll see alerts here as soon as a buyer or seller needs action.",
+        detail: "You'll see alerts here as soon as a buyer or seller needs action.",
         meta: "Status check",
       });
     }
     return entries.slice(0, 4);
-  }, [transactions]);
+  }, [transactions, currentUser.name]);
   const shouldUseFallbackNotifications = notificationsQuery.isError || notificationList.length === 0;
   const notificationsToRender = shouldUseFallbackNotifications ? fallbackNotifications : notificationList;
   const openNotifications = notificationList.length || activeNotifications;
@@ -834,6 +837,9 @@ const handleWalletWithdraw = async () => {
   };
 
   const findTransactionForNotification = (notification: NotificationEntry) => {
+    if (notification.txId) {
+      return transactions.find((tx) => tx.id === notification.txId);
+    }
     const text = `${notification.label} ${notification.detail}`.toLowerCase();
     return transactions.find(
       (tx) =>
