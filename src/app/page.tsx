@@ -1712,21 +1712,23 @@ const handleWalletWithdraw = async () => {
                     {milestone.status === "pending" ? (
                       <>
                         {isCurrentUserBuyer ? (
-                          <button
-                            className="btn"
-                            onClick={() => handleMilestoneDecision(tx.id, milestone.id, "approve")}
-                            disabled={!canReviewMilestones}
-                          >
-                            Approve
-                          </button>
+                          <>
+                            <button
+                              className="btn"
+                              onClick={() => handleMilestoneDecision(tx.id, milestone.id, "approve")}
+                              disabled={!canReviewMilestones}
+                            >
+                              Approve
+                            </button>
+                            <button
+                              className="ghost"
+                              onClick={() => handleMilestoneDecision(tx.id, milestone.id, "reject")}
+                              disabled={!canReviewMilestones}
+                            >
+                              Reject
+                            </button>
+                          </>
                         ) : null}
-                        <button
-                          className="ghost"
-                          onClick={() => handleMilestoneDecision(tx.id, milestone.id, "reject")}
-                          disabled={!canReviewMilestones}
-                        >
-                          Reject
-                        </button>
                       </>
                     ) : (
                       <span className={`milestone-chip milestone-chip--${milestone.status}`}>
