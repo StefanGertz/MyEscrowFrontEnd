@@ -14,6 +14,7 @@ import {
 import { useToast } from "@/components/ToastProvider";
 import { useAuth } from "@/components/AuthProvider";
 import { useConfirmDialog } from "@/components/ConfirmDialogProvider";
+import { jsPDF } from "jspdf";
 
 type ScreenId =
   | "welcome"
@@ -357,6 +358,60 @@ const formatDateTime = (value: string) =>
   });
 
 const randomId = () => Math.random().toString(36).slice(2, 9);
+
+const slugify = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60) || "agreement";
+
+const buildAgreementLines = (tx: Transaction) => {
+  const lines = [
+    `Agreement title: ${tx.title}`,
+    `Buyer: ${tx.buyer} (${tx.buyerEmail})`,
+    `Seller: ${tx.seller} (${tx.sellerEmail})`,
+    `Escrow amount: ${formatCurrency(tx.amount)}`,
+    `Status: ${tx.status} - ${tx.context}`,
+    "",
+    "Milestones:",
+  ];
+  tx.milestones.forEach((milestone, index) => {
+    lines.push(
+      `${index + 1}. ${milestone.title} - ${formatCurrency(milestone.amount)} (${milestone.status})${
+        milestone.description ? ` - ${milestone.description}` : ""
+      }`,
+    );
+  });
+  if (tx.timeline.length) {
+    lines.push("", "Recent timeline:");
+    tx.timeline.slice(0, 5).forEach((event) => {
+      lines.push(`${formatDateTime(event.time)} • ${event.label} - ${event.detail}`);
+    });
+  }
+  return lines;
+};
+
+const downloadAgreementPdf = (tx: Transaction) => {
+  const doc = new jsPDF();
+  doc.setFontSize(16);
+  doc.text(tx.title, 14, 20);
+  doc.setFontSize(11);
+  let cursorY = 30;
+  const addLine = (line: string) => {
+    const wrapped = doc.splitTextToSize(line, 180);
+    wrapped.forEach((segment) => {
+      if (cursorY > 280) {
+        doc.addPage();
+        cursorY = 20;
+      }
+      doc.text(segment, 14, cursorY);
+      cursorY += 6;
+    });
+  };
+  buildAgreementLines(tx).forEach(addLine);
+  doc.save(`${slugify(tx.title)}-agreement.pdf`);
+};
 
 export default function Home({ searchParams }: HomeProps) {
   const resolvedSearchParams = use(searchParams);
@@ -1828,6 +1883,11 @@ const handleWalletWithdraw = async () => {
                 {tx.context}
               </div>
             </div>
+          </div>
+          <div style={{ marginTop: 12, textAlign: "right" }}>
+            <button className="ghost" onClick={() => downloadAgreementPdf(tx)}>
+              Download agreement (PDF)
+            </button>
           </div>
         </div>
         {tx.milestones.length ? (
