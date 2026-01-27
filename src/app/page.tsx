@@ -23,6 +23,7 @@ type ScreenId =
   | "agreement"
   | "wallet"
   | "history"
+  | "escrows"
   | "settings"
   | "transaction";
 
@@ -92,6 +93,7 @@ type NotificationEntry = {
   detail: string;
   meta: string;
   txId?: number;
+  requiresAction?: boolean;
 };
 
 type HomeProps = {
@@ -106,6 +108,7 @@ const screenIds: ScreenId[] = [
   "agreement",
   "wallet",
   "history",
+  "escrows",
   "settings",
   "transaction",
 ];
@@ -176,6 +179,61 @@ const initialWalletHistory: WalletHistoryEntry[] = [
 ];
 
 const initialTransactions: Transaction[] = [
+  {
+    id: 10106,
+    title: "Wedding DJ",
+    counterpart: "Acme DJ Corp",
+    amount: 1600,
+    status: "Pending",
+    context: "Seller approval pending",
+    steps: [
+      { title: "Agreement drafted", detail: "Waiting for Acme DJ Corp", status: "active" },
+      { title: "Deposit pending", detail: "Buyer funds after approval", status: "upcoming" },
+      { title: "Performance day", detail: "Final payment after event", status: "upcoming" },
+    ],
+    buyer: defaultUser.name,
+    buyerEmail: defaultUser.email,
+    seller: "Acme DJ Corp",
+    sellerEmail: "bookings@acmedj.com",
+    milestones: [
+      { id: "m10106a", title: "Wedding deposit", amount: 800, status: "pending", description: "Non-refundable date hold" },
+      { id: "m10106b", title: "Wedding day performance", amount: 800, status: "pending", description: "Final set payment" },
+    ],
+    timeline: [
+      { id: "tl-10106-a", label: "Created", detail: "Created by you (buyer)", time: new Date(Date.now() - 3600 * 1000 * 2).toISOString() },
+      { id: "tl-10106-b", label: "Seller invited", detail: "Acme DJ Corp notified to review", time: new Date(Date.now() - 3600 * 1000 * 1.5).toISOString() },
+    ],
+    counterpartyApproved: false,
+  },
+  {
+    id: 10107,
+    title: "Restaurant tile install",
+    counterpart: "Tiles R' Us",
+    amount: 250000,
+    status: "Active",
+    context: "Milestones active",
+    steps: [
+      { title: "Agreement approved", detail: "Both sides signed", status: "complete" },
+      { title: "Funded", detail: "Deposit secured", status: "complete" },
+      { title: "Milestones active", detail: "Material + delivery pending", status: "active" },
+    ],
+    buyer: defaultUser.name,
+    buyerEmail: defaultUser.email,
+    seller: "Tiles R' Us",
+    sellerEmail: "projects@tilesrus.com",
+    milestones: [
+      { id: "m10107a", title: "Deposit", amount: 50000, status: "released", releasedAt: new Date(Date.now() - 864e5 * 3).toISOString(), description: "Initial mobilisation payment" },
+      { id: "m10107b", title: "Material acquisition", amount: 100000, status: "pending", description: "Order porcelain tile sets" },
+      { id: "m10107c", title: "Delivery", amount: 100000, status: "pending", description: "Deliver tile to restaurant site" },
+    ],
+    timeline: [
+      { id: "tl-10107-a", label: "Created", detail: "Created by you (buyer)", time: new Date(Date.now() - 864e5 * 7).toISOString() },
+      { id: "tl-10107-b", label: "Seller approved", detail: "Tiles R' Us accepted terms", time: new Date(Date.now() - 864e5 * 6.5).toISOString() },
+      { id: "tl-10107-c", label: "Funded", detail: "Deposit secured in escrow", time: new Date(Date.now() - 864e5 * 5).toISOString() },
+      { id: "tl-10107-d", label: "Milestone released", detail: '"Deposit" milestone completed', time: new Date(Date.now() - 864e5 * 3).toISOString() },
+    ],
+    counterpartyApproved: true,
+  },
   {
     id: 10105,
     title: "Northwind onboarding kit",
@@ -272,7 +330,7 @@ const dashboardTimelineEntries = [
   {
     id: "dash-tl-3",
     label: "Buyer funding required",
-    detail: "Northwind agency launch - Waiting for deposit",
+    detail: "Northwind onboarding kit - Waiting for deposit",
     txId: 10105,
   },
 ];
@@ -282,7 +340,6 @@ const bottomNav: Array<{ id: ScreenId; label: string }> = [
   { id: "dashboard", label: "Dashboard" },
   { id: "create", label: "Create" },
   { id: "wallet", label: "Wallet" },
-  { id: "settings", label: "Settings" },
 ];
 
 const formatCurrency = (value: number) =>
@@ -364,30 +421,51 @@ export default function Home({ searchParams }: HomeProps) {
   const fallbackNotifications = useMemo<NotificationEntry[]>(() => {
     const entries: NotificationEntry[] = [];
     transactions.forEach((tx) => {
-      if (tx.status === "Pending" && !tx.counterpartyApproved) {
-        const waitingOnName =
-          tx.buyer === currentUser.name ? tx.seller : tx.buyer;
-        entries.push({
-          id: `approval-${tx.id}`,
-          txId: tx.id,
-          label: tx.title,
-          detail: `Waiting for ${waitingOnName} to approve the escrow before funding begins.`,
-          meta: tx.context,
-        });
-      } else if (tx.status === "Active") {
-        const pendingMilestone = tx.milestones.find(
-          (milestone) => milestone.status === "pending",
-        );
-        if (pendingMilestone) {
-          const needsApprovalFrom =
-            tx.seller === currentUser.name ? tx.buyer : tx.seller;
+      if (tx.status === "Pending") {
+        if (!tx.counterpartyApproved) {
+          const waitingOnName =
+            tx.buyer === currentUser.name ? tx.seller : tx.buyer;
           entries.push({
-            id: `milestone-${tx.id}-${pendingMilestone.id}`,
+            id: `approval-${tx.id}`,
             txId: tx.id,
             label: tx.title,
-            detail: `${needsApprovalFrom} is reviewing "${pendingMilestone.title}" before funds release.`,
-            meta: `Milestone pending • ${pendingMilestone.amount ? formatCurrency(pendingMilestone.amount) : "Review required"}`,
+            detail: `Waiting for ${waitingOnName} to approve the escrow.`,
+            meta: tx.context,
+            requiresAction: false,
           });
+        } else {
+          entries.push({
+            id: `funding-${tx.id}`,
+            txId: tx.id,
+            label: tx.title,
+            detail: "Counterparty approved. Deposit funds to activate this escrow.",
+            meta: "Funding required",
+            requiresAction: tx.buyer === currentUser.name,
+          });
+        }
+      } else if (tx.status === "Active") {
+        const pendingMilestone = tx.milestones.find((milestone) => milestone.status === "pending");
+        if (pendingMilestone) {
+          const amountMeta = pendingMilestone.amount ? formatCurrency(pendingMilestone.amount) : null;
+          if (tx.buyer === currentUser.name) {
+            entries.push({
+              id: `milestone-review-${tx.id}-${pendingMilestone.id}`,
+              txId: tx.id,
+              label: tx.title,
+              detail: `Review "${pendingMilestone.title}" from ${tx.seller} so funds can release.`,
+              meta: amountMeta ? `Milestone pending • ${amountMeta}` : "Milestone pending",
+              requiresAction: true,
+            });
+          } else if (tx.seller === currentUser.name) {
+            entries.push({
+              id: `milestone-wait-${tx.id}-${pendingMilestone.id}`,
+              txId: tx.id,
+              label: tx.title,
+              detail: `Waiting for ${tx.buyer} to approve "${pendingMilestone.title}".`,
+              meta: amountMeta ? `Buyer approval • ${amountMeta}` : "Buyer approval pending",
+              requiresAction: false,
+            });
+          }
         }
       }
     });
@@ -397,12 +475,41 @@ export default function Home({ searchParams }: HomeProps) {
         label: "All escrows are current",
         detail: "You'll see alerts here as soon as a buyer or seller needs action.",
         meta: "Status check",
+        requiresAction: false,
       });
     }
     return entries.slice(0, 4);
   }, [transactions, currentUser.name]);
   const shouldUseFallbackNotifications = notificationsQuery.isError || notificationList.length === 0;
   const notificationsToRender = shouldUseFallbackNotifications ? fallbackNotifications : notificationList;
+  const requiresCurrentUserAction = (notification: NotificationEntry): boolean => {
+    if (typeof notification.requiresAction === "boolean") {
+      return notification.requiresAction;
+    }
+    if (!notification.txId) {
+      return false;
+    }
+    const tx = transactions.find((item) => item.id === notification.txId);
+    if (!tx) {
+      return false;
+    }
+    if (tx.status === "Pending") {
+      if (!tx.counterpartyApproved) {
+        return false;
+      }
+      return tx.buyer === currentUser.name;
+    }
+    if (tx.status === "Active") {
+      if (tx.buyer !== currentUser.name) {
+        return false;
+      }
+      return Boolean(tx.milestones.find((milestone) => milestone.status === "pending"));
+    }
+    return false;
+  };
+  const orderedNotifications = [...notificationsToRender].sort(
+    (a, b) => Number(requiresCurrentUserAction(b)) - Number(requiresCurrentUserAction(a)),
+  );
   const openNotifications = notificationList.length || activeNotifications;
 
 useEffect(() => {
@@ -915,9 +1022,18 @@ const handleWalletWithdraw = async () => {
         <div className="tile">
           <div className="t-title">Recent</div>
           <div className="muted">Last activity</div>
-          <div className="muted">
-            {transactions.length ? `${transactions[0].title} - ${formatCurrency(transactions[0].amount)}` : "No activity"}
-          </div>
+          {transactions.length ? (
+            <button
+              className="ghost"
+              style={{ width: "100%", justifyContent: "space-between" }}
+              onClick={() => viewTransaction(transactions[0])}
+            >
+              <span>{transactions[0].title}</span>
+              <span>{formatCurrency(transactions[0].amount)}</span>
+            </button>
+          ) : (
+            <div className="muted">No activity</div>
+          )}
         </div>
         <div className="tile">
           <div className="t-title">Active</div>
@@ -1547,6 +1663,38 @@ const handleWalletWithdraw = async () => {
     </section>
   );
 
+  const renderEscrows = () => {
+    const activeTransactions = transactions.filter((tx) => tx.status === "Active");
+    return (
+      <section className="screen active">
+        <h2 className="page-title">Active escrows</h2>
+        <p className="lead">Track milestones that can release funds.</p>
+        <div className="card">
+          {activeTransactions.length === 0 ? (
+            <p className="muted" style={{ margin: 0 }}>
+              You have no active escrows right now.
+            </p>
+          ) : (
+            <div className="tx-list">
+              {activeTransactions.map((tx) => (
+                <button key={tx.id} className="tx-item tx-item-button" type="button" onClick={() => viewTransaction(tx)}>
+                  <div>
+                    <div style={{ fontWeight: 700 }}>{tx.title}</div>
+                    <div className="muted">{tx.counterpart}</div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div>{formatCurrency(tx.amount)}</div>
+                    <div className="muted">{tx.context}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+    );
+  };
+
   const renderSettings = () => (
     <section className="screen active settings-screen">
       <h2 className="page-title">Settings</h2>
@@ -1581,6 +1729,9 @@ const handleWalletWithdraw = async () => {
             </button>
             <button className="btn" onClick={handleSaveProfile}>
               Save
+            </button>
+            <button className="ghost" onClick={openSupportModal}>
+              Contact support
             </button>
             <button className="ghost" onClick={handleLogout}>
               Log out
@@ -1789,6 +1940,8 @@ const handleWalletWithdraw = async () => {
         return renderWallet();
       case "history":
         return renderHistory();
+      case "escrows":
+        return renderEscrows();
       case "settings":
         return renderSettings();
       case "transaction":
@@ -1815,7 +1968,7 @@ const handleWalletWithdraw = async () => {
         primaryLabel="New escrow"
         onPrimaryClick={() => navigate("create")}
         onBrandClick={() => navigate("welcome")}
-        onSupportClick={openSupportModal}
+        onSettingsClick={() => navigate("settings")}
         onLogoutClick={handleLogout}
         onAlertsClick={handleAlertsClick}
       />
@@ -1868,7 +2021,7 @@ const handleWalletWithdraw = async () => {
               </div>
             ) : (
               <div className="notif-list">
-                {notificationsToRender.map((item) => (
+                {orderedNotifications.map((item) => (
                   <div
                     key={item.id}
                     className="notif-item"

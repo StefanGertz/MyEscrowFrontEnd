@@ -13,17 +13,31 @@ export async function GET() {
     notifications: [
       {
         id: "notif-01",
-        label: "Buyer funding pending",
-        detail: "Northwind Agency launch requires a deposit.",
+        label: "Seller approval pending",
+        detail: "Northwind onboarding kit is waiting for Nora Studio to approve.",
         meta: "Just now",
         txId: 10105,
       },
       {
         id: "notif-02",
-        label: "Milestone approval",
-        detail: "Cloud Harbor milestone awaiting your review.",
-        meta: "10m ago",
-        txId: 10102,
+        label: "Summit Legal payout",
+        detail: "Escrow closed and final payment sent to Summit Legal.",
+        meta: "1h ago",
+        txId: 10103,
+      },
+      {
+        id: "notif-03",
+        label: "Wedding DJ approval",
+        detail: "Waiting for Acme DJ Corp to approve the Wedding DJ escrow.",
+        meta: "2h ago",
+        txId: 10106,
+      },
+      {
+        id: "notif-04",
+        label: "Restaurant tile milestone",
+        detail: 'Review "Material acquisition" for Tiles R\' Us so funds can release.',
+        meta: "$100k pending",
+        txId: 10107,
       },
     ],
   });

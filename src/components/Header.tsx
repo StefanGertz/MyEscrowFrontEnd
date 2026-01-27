@@ -4,9 +4,9 @@ type HeaderProps = {
   primaryDisabled?: boolean;
   onPrimaryClick?: () => void;
   onBrandClick?: () => void;
-  onSupportClick?: () => void;
   onLogoutClick?: () => void;
   onAlertsClick?: () => void;
+  onSettingsClick?: () => void;
 };
 
 export function Header({
@@ -15,9 +15,9 @@ export function Header({
   primaryDisabled = false,
   onPrimaryClick,
   onBrandClick,
-  onSupportClick,
   onLogoutClick,
   onAlertsClick,
+  onSettingsClick,
 }: HeaderProps) {
   return (
     <header className="app-header">
@@ -49,9 +49,9 @@ export function Header({
           <BellIcon />
           Alerts
         </button>
-        <button className="icon-btn" type="button" onClick={onSupportClick}>
-          <SupportIcon />
-          Support
+        <button className="icon-btn" type="button" onClick={onSettingsClick}>
+          <SettingsIcon />
+          Settings
         </button>
         <button className="icon-btn" type="button" onClick={onLogoutClick}>
           <LogoutIcon />
@@ -78,25 +78,6 @@ function LogoutIcon() {
       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
       <polyline points="16 17 21 12 16 7" />
       <line x1="21" y1="12" x2="9" y2="12" />
-    </svg>
-  );
-}
-
-function SupportIcon() {
-  return (
-    <svg
-      aria-hidden
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M18 19a4 4 0 0 0 4-4v-2a8 8 0 1 0-16 0v2a4 4 0 0 0 4 4" />
-      <path d="M8 21h8" />
     </svg>
   );
 }
@@ -141,6 +122,25 @@ function SparkIcon() {
       <path d="m8.47 15.53-2.83 2.83" />
       <path d="m5.64 5.64 2.83 2.83" />
       <path d="m15.53 15.53 2.83 2.83" />
+    </svg>
+  );
+}
+
+function SettingsIcon() {
+  return (
+    <svg
+      aria-hidden
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.09a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.09a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.09a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" />
     </svg>
   );
 }
