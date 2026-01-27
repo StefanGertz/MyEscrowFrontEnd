@@ -400,7 +400,7 @@ const downloadAgreementPdf = (tx: Transaction) => {
   let cursorY = 30;
   const addLine = (line: string) => {
     const wrapped = doc.splitTextToSize(line, 180);
-    wrapped.forEach((segment) => {
+    wrapped.forEach((segment: string) => {
       if (cursorY > 280) {
         doc.addPage();
         cursorY = 20;
