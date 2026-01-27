@@ -318,20 +318,20 @@ const initialTransactions: Transaction[] = [
 const dashboardTimelineEntries = [
   {
     id: "dash-tl-1",
-    label: "Funds released to Summit Legal",
-    detail: "Yesterday - Final payout sent",
-    txId: 10103,
+    label: "Restaurant tile install",
+    detail: 'Review "Material acquisition" milestone - $100k pending',
+    txId: 10107,
   },
   {
     id: "dash-tl-2",
-    label: "Ops review for Cloud Harbor",
-    detail: "Due tomorrow - Pending milestone approval",
-    txId: 10102,
+    label: "Wedding DJ approval",
+    detail: "Waiting for Acme DJ Corp to approve the escrow",
+    txId: 10106,
   },
   {
     id: "dash-tl-3",
-    label: "Buyer funding required",
-    detail: "Northwind onboarding kit - Waiting for deposit",
+    label: "Northwind onboarding kit",
+    detail: "Waiting for Nora Studio to approve before funding",
     txId: 10105,
   },
 ];
@@ -456,6 +456,7 @@ export default function Home({ searchParams }: HomeProps) {
   const [kycMarked, setKycMarked] = useState(false);
   const [modalContent, setModalContent] = useState<ModalContent | null>(null);
   const [notificationsPanelOpen, setNotificationsPanelOpen] = useState(false);
+  const [dismissedNotifications, setDismissedNotifications] = useState<string[]>([]);
   const createEscrowMutation = useCreateEscrow();
   const notificationsQuery = useNotifications();
   const { pushToast } = useToast();
@@ -562,9 +563,13 @@ export default function Home({ searchParams }: HomeProps) {
     }
     return false;
   };
-  const orderedNotifications = [...notificationsToRender].sort(
-    (a, b) => Number(requiresCurrentUserAction(b)) - Number(requiresCurrentUserAction(a)),
-  );
+  const orderedNotifications = [...notificationsToRender]
+    .sort((a, b) => Number(requiresCurrentUserAction(b)) - Number(requiresCurrentUserAction(a)))
+    .filter((item) => !dismissedNotifications.includes(item.id));
+
+  const handleDismissNotification = (notificationId: string) => {
+    setDismissedNotifications((prev) => (prev.includes(notificationId) ? prev : [...prev, notificationId]));
+  };
   const openNotifications = notificationList.length || activeNotifications;
 
 useEffect(() => {
@@ -992,6 +997,13 @@ const handleWalletWithdraw = async () => {
     });
   };
 
+  const showAlertsPanel = () => {
+    if (!notificationsPanelOpen) {
+      void notificationsQuery.refetch();
+    }
+    setNotificationsPanelOpen(true);
+  };
+
   const closeNotificationsPanel = () => {
     setNotificationsPanelOpen(false);
   };
@@ -1167,16 +1179,32 @@ const handleWalletWithdraw = async () => {
       <h2 className="page-title">Dashboard</h2>
       <p className="lead">Overview of your transactions and quick actions.</p>
       <div className="tiles">
-        <div className="tile">
-          <div className="t-title">Notifications</div>
+        <button
+          className="tile tile-button"
+          type="button"
+          onClick={showAlertsPanel}
+          style={{ textAlign: "left" }}
+        >
+          <div className="t-title">Alerts</div>
           <div className="muted">Open items</div>
           <div style={{ fontSize: 26, fontWeight: 800 }}>{openNotifications}</div>
-        </div>
-        <div className="tile">
+          <div className="muted" style={{ marginTop: 8 }}>
+            Tap to view details
+          </div>
+        </button>
+        <button
+          className="tile tile-button"
+          type="button"
+          onClick={() => navigate("wallet")}
+          style={{ textAlign: "left" }}
+        >
           <div className="t-title">Wallet</div>
           <div className="muted">Available balance</div>
           <div style={{ fontSize: 26, fontWeight: 800 }}>{formatCurrency(walletBalance)}</div>
-        </div>
+          <div className="muted" style={{ marginTop: 8 }}>
+            Manage funds
+          </div>
+        </button>
       </div>
       <div className="card" style={{ marginBottom: 12 }}>
         <strong>Transactions</strong>
@@ -2098,6 +2126,26 @@ const handleWalletWithdraw = async () => {
                     <div className="notif-title">
                       <span className="notif-title-text">{item.label}</span>
                       <span className="notif-badge">Alert</span>
+                      <button
+                        type="button"
+                        className="notif-dismiss"
+                        style={{
+                          marginLeft: "auto",
+                          border: "none",
+                          background: "transparent",
+                          color: "inherit",
+                          fontSize: 18,
+                          lineHeight: 1,
+                          cursor: "pointer",
+                        }}
+                        aria-label="Dismiss alert"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleDismissNotification(item.id);
+                        }}
+                      >
+                        ×
+                      </button>
                     </div>
                     <div className="notif-detail">{item.detail}</div>
                     <div className="notif-meta">{item.meta}</div>
