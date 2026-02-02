@@ -8,6 +8,8 @@ const defaultUser = {
   email: "scott@example.com",
 };
 
+const MOCK_PASSWORD = "Escrow123!";
+
 export async function POST(request: Request) {
   if (!isMockApiEnabled) {
     return proxyApiRequest(request, "/api/auth/login");
@@ -20,16 +22,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Email and password are required." }, { status: 400 });
   }
   const normalizedEmail = email.trim().toLowerCase();
-  const user =
-    normalizedEmail === defaultUser.email
-      ? defaultUser
-      : {
-          id: `user-${normalizedEmail.replace(/[^a-z0-9]/gi, "").slice(0, 8) || "demo"}`,
-          name: normalizedEmail.split("@")[0]?.replace(/\./g, " ").replace(/^\w/, (char) => char.toUpperCase()) || "Demo User",
-          email: normalizedEmail,
-        };
+  const isScott = normalizedEmail === defaultUser.email;
+  if (!isScott || password !== MOCK_PASSWORD) {
+    return NextResponse.json({ error: "Invalid email or password." }, { status: 401 });
+  }
   return NextResponse.json({
     token: "mock-token",
-    user,
+    user: defaultUser,
   });
 }
