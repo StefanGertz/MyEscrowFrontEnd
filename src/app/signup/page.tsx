@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { useToast } from "@/components/ToastProvider";
 
@@ -10,9 +10,21 @@ export default function SignupPage() {
   const router = useRouter();
   const { signup, isAuthenticated, isHydrating } = useAuth();
   const { pushToast } = useToast();
-  const [form, setForm] = useState({ name: "", email: "", password: "" });
+  const [form, setForm] = useState({ name: "", email: "", password: "", confirmPassword: "" });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const passwordChecks = useMemo(() => {
+    const value = form.password;
+    return [
+      { label: "12+ characters", valid: value.length >= 12 },
+      { label: "At least one uppercase letter", valid: /[A-Z]/.test(value) },
+      { label: "At least one lowercase letter", valid: /[a-z]/.test(value) },
+      { label: "At least one number", valid: /[0-9]/.test(value) },
+      { label: "At least one symbol", valid: /[^A-Za-z0-9]/.test(value) },
+    ];
+  }, [form.password]);
+  const isPasswordStrong = passwordChecks.every((check) => check.valid);
 
   useEffect(() => {
     if (!isHydrating && isAuthenticated) {
@@ -25,6 +37,14 @@ export default function SignupPage() {
     setError(null);
     if (!form.name || !form.email || !form.password) {
       setError("Fill in your name, email, and password.");
+      return;
+    }
+    if (!isPasswordStrong) {
+      setError("Use a stronger password that meets all requirements.");
+      return;
+    }
+    if (form.password !== form.confirmPassword) {
+      setError("Passwords do not match.");
       return;
     }
     setSubmitting(true);
@@ -104,6 +124,26 @@ export default function SignupPage() {
             }
             autoComplete="new-password"
           />
+          <label className="muted" htmlFor="signup-confirm">
+            Confirm password
+          </label>
+          <input
+            id="signup-confirm"
+            type="password"
+            value={form.confirmPassword}
+            placeholder="Repeat your password"
+            onChange={(event) =>
+              setForm((prev) => ({ ...prev, confirmPassword: event.target.value }))
+            }
+            autoComplete="new-password"
+          />
+          <ul className="password-requirements">
+            {passwordChecks.map((check) => (
+              <li key={check.label} className={check.valid ? "valid" : "invalid"}>
+                {check.valid ? "[OK]" : "[  ]"} {check.label}
+              </li>
+            ))}
+          </ul>
           {error ? (
             <div className="auth-error" role="alert">
               {error}

@@ -47,5 +47,6 @@ npm test        # Vitest + MSW integration coverage
 ### Authentication
 
 - Navigate to `/signup` to create a demo account or `/login` to use an existing one; successful auth redirects to the dashboard.
+- Signup enforces fintech-style passwords: at least 12 characters with upper, lower, number, and symbol (common passwords such as `password123` are blocked).
 - `AuthProvider` (wrapping the app) stores the current user + token in memory/localStorage and updates the `Authorization` header via `apiFetch`.
 - The dashboard requires authentication and redirects unauthenticated visitors back to `/login`.
