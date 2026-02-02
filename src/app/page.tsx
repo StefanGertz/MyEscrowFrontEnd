@@ -15,6 +15,7 @@ import { useToast } from "@/components/ToastProvider";
 import { useAuth } from "@/components/AuthProvider";
 import { useConfirmDialog } from "@/components/ConfirmDialogProvider";
 import { jsPDF } from "jspdf";
+import { LiveDashboard } from "@/components/LiveDashboard";
 
 type ScreenId =
   | "welcome"
@@ -100,6 +101,8 @@ type NotificationEntry = {
 type HomeProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
+
+const mockExperienceEnabled = (process.env.NEXT_PUBLIC_USE_MOCKS ?? "true") !== "false";
 
 const screenIds: ScreenId[] = [
   "welcome",
@@ -413,7 +416,7 @@ const downloadAgreementPdf = (tx: Transaction) => {
   doc.save(`${slugify(tx.title)}-agreement.pdf`);
 };
 
-export default function Home({ searchParams }: HomeProps) {
+function MockExperienceHome({ searchParams }: HomeProps) {
   const resolvedSearchParams = use(searchParams);
   const initialScreenQuery = pickQueryValue(resolvedSearchParams?.screen);
   const initialScreen = isScreenId(initialScreenQuery) ? initialScreenQuery : "welcome";
@@ -2171,4 +2174,11 @@ const handleWalletWithdraw = async () => {
       ) : null}
     </AppShell>
   );
+}
+
+export default function Home(props: HomeProps) {
+  if (mockExperienceEnabled) {
+    return <MockExperienceHome searchParams={props.searchParams} />;
+  }
+  return <LiveDashboard />;
 }
