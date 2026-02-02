@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { isMockApiEnabled, mockDisabledResponse } from "@/lib/mockToggle";
+import { isMockApiEnabled } from "@/lib/mockToggle";
+import { proxyApiRequest } from "@/lib/serverProxy";
 
 const randomId = () => {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -10,7 +11,7 @@ const randomId = () => {
 
 export async function POST(request: Request) {
   if (!isMockApiEnabled) {
-    return mockDisabledResponse();
+    return proxyApiRequest(request, "/api/auth/signup");
   }
   const { name, email, password } = (await request.json()) as {
     name?: string;

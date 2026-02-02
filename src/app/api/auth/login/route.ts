@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { isMockApiEnabled, mockDisabledResponse } from "@/lib/mockToggle";
+import { isMockApiEnabled } from "@/lib/mockToggle";
+import { proxyApiRequest } from "@/lib/serverProxy";
 
 const defaultUser = {
   id: "user-001",
@@ -9,7 +10,7 @@ const defaultUser = {
 
 export async function POST(request: Request) {
   if (!isMockApiEnabled) {
-    return mockDisabledResponse();
+    return proxyApiRequest(request, "/api/auth/login");
   }
   const { email, password } = (await request.json()) as {
     email?: string;
