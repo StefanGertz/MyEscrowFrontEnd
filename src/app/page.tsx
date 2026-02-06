@@ -1098,7 +1098,7 @@ const handleWalletWithdraw = async () => {
               style={{ width: "100%", justifyContent: "space-between" }}
               onClick={() => viewTransaction(transactions[0])}
             >
-              <span>{transactions[0].title}</span>
+              <span>{transactions[0].title}</span>{" "}
               <span>{formatCurrency(transactions[0].amount)}</span>
             </button>
           ) : (
