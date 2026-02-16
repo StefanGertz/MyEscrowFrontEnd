@@ -50,5 +50,7 @@ npm test        # Vitest + MSW integration coverage
 
 - Navigate to `/signup` to create a demo account or `/login` to use an existing one; successful auth redirects to the dashboard.
 - Signup enforces fintech-style passwords: at least 12 characters with upper, lower, number, and symbol (common passwords such as `password123` are blocked).
+- After submitting the signup form we redirect to `/verify-email`, which accepts the 6-digit code sent by the API (`useVerifyEmailMutation`). You can request a new code from the same screen via `useResendVerificationMutation`. When the backend sets `AUTH_DEBUG_CODES=true`, the verification page will prefill the code for local testing.
+- Mock mode (`NEXT_PUBLIC_USE_MOCKS=true`) skips verification entirely because tokens never leave the browser.
 - `AuthProvider` (wrapping the app) stores the current user + token in memory/localStorage and updates the `Authorization` header via `apiFetch`.
 - The dashboard requires authentication and redirects unauthenticated visitors back to `/login`.

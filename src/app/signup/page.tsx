@@ -49,16 +49,32 @@ export default function SignupPage() {
     }
     setSubmitting(true);
     try {
-      await signup({
+      const result = await signup({
         name: form.name,
         email: form.email,
         password: form.password,
       });
+      if (result.status === "session") {
+        pushToast({
+          variant: "success",
+          title: "Account created. Let's build your first escrow.",
+        });
+        router.replace("/");
+        return;
+      }
       pushToast({
-        variant: "success",
-        title: "Account created. Let’s build your first escrow.",
+        variant: "info",
+        title: "Verify your email",
+        body: "We emailed you a six-digit code to finish signup.",
       });
-      router.replace("/");
+      const params = new URLSearchParams({ email: result.email });
+      if (result.debugCode) {
+        params.set("debugCode", result.debugCode);
+      }
+      if (result.expiresAt) {
+        params.set("expiresAt", result.expiresAt);
+      }
+      router.push(`/verify-email?${params.toString()}`);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unable to sign up.";
       setError(message);

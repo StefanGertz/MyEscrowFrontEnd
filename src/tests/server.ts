@@ -3,27 +3,43 @@ import { setupServer } from "msw/node";
 
 const baseUrl = "https://staging-api.myescrow.example/v1";
 
+const sessionResponse = (email: string) => ({
+  token: "test-token",
+  user: {
+    id: "user-session",
+    name: email.split("@")[0] || "Tester",
+    email,
+  },
+});
+
 export const handlers = [
   http.post(`${baseUrl}/api/auth/login`, async ({ request }) => {
     const body = (await request.json()) as { email: string; password: string };
-    return HttpResponse.json({
-      token: "test-token",
-      user: {
-        id: "user-login",
-        name: body.email.split("@")[0] || "Tester",
-        email: body.email,
-      },
-    });
+    return HttpResponse.json(sessionResponse(body.email));
   }),
   http.post(`${baseUrl}/api/auth/signup`, async ({ request }) => {
     const body = (await request.json()) as { name: string; email: string; password: string };
     return HttpResponse.json({
-      token: "test-token",
-      user: {
-        id: "user-signup",
-        name: body.name,
-        email: body.email,
-      },
+      verificationRequired: true,
+      email: body.email,
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+      debugCode: "123456",
+    });
+  }),
+  http.post(`${baseUrl}/api/auth/verify-email`, async ({ request }) => {
+    const body = (await request.json()) as { email: string; code: string };
+    if (body.code !== "123456") {
+      return HttpResponse.json({ error: "Invalid code" }, { status: 400 });
+    }
+    return HttpResponse.json(sessionResponse(body.email));
+  }),
+  http.post(`${baseUrl}/api/auth/resend-verification`, async ({ request }) => {
+    const body = (await request.json()) as { email: string };
+    return HttpResponse.json({
+      verificationRequired: true,
+      email: body.email,
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+      debugCode: "123456",
     });
   }),
   http.post(`${baseUrl}/api/dashboard/escrows/create`, async ({ request }) => {

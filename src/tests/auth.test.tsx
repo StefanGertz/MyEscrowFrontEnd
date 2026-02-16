@@ -3,7 +3,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, act } from "@testing-library/react";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { useLoginMutation, useSignupMutation } from "@/hooks/useAuthApi";
+import {
+  useLoginMutation,
+  useSignupMutation,
+  useVerifyEmailMutation,
+} from "@/hooks/useAuthApi";
 import { server } from "./server";
 
 const createWrapper = () => {
@@ -52,7 +56,7 @@ describe("auth flows", () => {
     });
   });
 
-  it("signs up via staging API", async () => {
+  it("requires email verification on signup", async () => {
     const wrapper = createWrapper();
     const signupHook = renderHook(() => useSignupMutation(), { wrapper });
 
@@ -62,7 +66,24 @@ describe("auth flows", () => {
         email: "demo@example.com",
         password: "password123",
       });
-      expect(response.user.name).toBe("Demo Ops");
+      expect("verificationRequired" in response && response.verificationRequired).toBe(true);
+      if ("verificationRequired" in response) {
+        expect(response.email).toBe("demo@example.com");
+        expect(response.debugCode).toBe("123456");
+      }
+    });
+  });
+
+  it("verifies email with the provided code", async () => {
+    const wrapper = createWrapper();
+    const verifyHook = renderHook(() => useVerifyEmailMutation(), { wrapper });
+
+    await act(async () => {
+      const response = await verifyHook.result.current.mutateAsync({
+        email: "demo@example.com",
+        code: "123456",
+      });
+      expect(response.user.email).toBe("demo@example.com");
       expect(response.token).toBe("test-token");
     });
   });

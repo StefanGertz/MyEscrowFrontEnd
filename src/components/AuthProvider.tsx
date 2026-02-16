@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import {
+  type AuthResponse,
   type AuthUser,
   useLoginMutation,
   useSignupMutation,
@@ -23,8 +24,11 @@ type AuthContextValue = {
   isHydrating: boolean;
   isAuthenticated: boolean;
   login: (payload: { email: string; password: string }) => Promise<void>;
-  signup: (payload: { name: string; email: string; password: string }) => Promise<void>;
+  signup: (
+    payload: { name: string; email: string; password: string },
+  ) => Promise<SignupResult>;
   logout: () => void;
+  completeAuth: (response: AuthResponse) => void;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -65,6 +69,10 @@ type AuthProviderProps = {
   children: ReactNode;
 };
 
+type SignupResult =
+  | { status: "session"; user: AuthUser }
+  | { status: "verification"; email: string; expiresAt?: string; debugCode?: string };
+
 export function AuthProvider({ children }: AuthProviderProps) {
   const loginMutation = useLoginMutation();
   const signupMutation = useSignupMutation();
@@ -85,24 +93,35 @@ export function AuthProvider({ children }: AuthProviderProps) {
     });
   }, []);
 
-  const login = useCallback(
-    async (payload: { email: string; password: string }) => {
-      const response = await loginMutation.mutateAsync(payload);
+  const adoptSession = useCallback((response: AuthResponse) => {
       setState({ user: response.user, token: response.token });
       setClientAuthToken(response.token);
       writeStorage({ user: response.user, token: response.token });
+  }, []);
+
+  const login = useCallback(
+    async (payload: { email: string; password: string }) => {
+      const response = await loginMutation.mutateAsync(payload);
+      adoptSession(response);
     },
-    [loginMutation],
+    [loginMutation, adoptSession],
   );
 
   const signup = useCallback(
     async (payload: { name: string; email: string; password: string }) => {
       const response = await signupMutation.mutateAsync(payload);
-      setState({ user: response.user, token: response.token });
-      setClientAuthToken(response.token);
-      writeStorage({ user: response.user, token: response.token });
+      if ("token" in response) {
+        adoptSession(response);
+        return { status: "session", user: response.user } satisfies SignupResult;
+      }
+      return {
+        status: "verification",
+        email: response.email,
+        expiresAt: response.expiresAt,
+        debugCode: response.debugCode,
+      } satisfies SignupResult;
     },
-    [signupMutation],
+    [signupMutation, adoptSession],
   );
 
   const logout = useCallback(() => {
@@ -120,8 +139,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
       login,
       signup,
       logout,
+      completeAuth: adoptSession,
     };
-  }, [state, isHydrating, login, signup, logout]);
+  }, [state, isHydrating, login, signup, logout, adoptSession]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
