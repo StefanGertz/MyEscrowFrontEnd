@@ -7,6 +7,8 @@ import { Header } from "@/components/Header";
 import { SignaturePad, type SignaturePadHandle } from "@/components/SignaturePad";
 import {
   useCreateEscrow,
+  useEscrowSummary,
+  useEscrows,
   useNotifications,
   useWalletTopup,
   useWalletWithdraw,
@@ -16,6 +18,7 @@ import { useAuth } from "@/components/AuthProvider";
 import { useConfirmDialog } from "@/components/ConfirmDialogProvider";
 import { jsPDF } from "jspdf";
 import { LiveDashboard } from "@/components/LiveDashboard";
+import type { EscrowRecord } from "@/lib/mockDashboard";
 
 type ScreenId =
   | "welcome"
@@ -103,6 +106,7 @@ type HomeProps = {
 };
 
 const liveDashboardEnabled = (process.env.NEXT_PUBLIC_LIVE_DASHBOARD ?? "false") === "true";
+const liveDataEnabled = (process.env.NEXT_PUBLIC_USE_MOCKS ?? "true") === "false";
 
 const screenIds: ScreenId[] = [
   "welcome",
@@ -369,6 +373,11 @@ const slugify = (value: string) =>
     .replace(/^-+|-+$/g, "")
     .slice(0, 60) || "agreement";
 
+const parseCurrencyValue = (value: string) => {
+  const numeric = Number(value.replace(/[^0-9.]/g, ""));
+  return Number.isFinite(numeric) ? numeric : 0;
+};
+
 const buildAgreementLines = (tx: Transaction) => {
   const lines = [
     `Agreement title: ${tx.title}`,
@@ -416,6 +425,56 @@ const downloadAgreementPdf = (tx: Transaction) => {
   doc.save(`${slugify(tx.title)}-agreement.pdf`);
 };
 
+const mapEscrowsToTransactions = (
+  escrows: EscrowRecord[] | undefined,
+  currentUserName: string,
+  currentUserEmail: string,
+): Transaction[] => {
+  if (!escrows?.length) {
+    return [];
+  }
+  return escrows.map((record, index) => {
+    const numericId = Number(record.id.replace(/[^0-9]/g, "")) || 5000 + index;
+    const amountValue = parseCurrencyValue(record.amount);
+    const counterpart = record.counterpart || "Counterparty";
+    const approved = record.counterpartyApproved;
+    const pendingDetail = approved ? "Awaiting next milestone" : `Waiting for ${counterpart}`;
+    const steps: ProcessStep[] = [
+      {
+        title: "Agreement drafted",
+        detail: pendingDetail,
+        status: approved ? "complete" : "active",
+      },
+      {
+        title: approved ? "Funding" : "Fund after approval",
+        detail: approved ? "Buyer funding pending" : "Buyer deposits after approval",
+        status: approved ? "active" : "upcoming",
+      },
+      {
+        title: "Milestones",
+        detail: record.due,
+        status: "upcoming",
+      },
+    ];
+    return {
+      id: numericId,
+      title: record.stage || counterpart,
+      counterpart,
+      amount: amountValue,
+      status: approved ? "Active" : "Pending",
+      context: record.stage || (approved ? "Milestones active" : "Approval pending"),
+      steps,
+      buyer: currentUserName,
+      buyerEmail: currentUserEmail,
+      seller: counterpart,
+      sellerEmail: "counterparty@example.com",
+      milestones: [],
+      timeline: [],
+      counterpartyApproved: approved,
+    };
+  });
+};
+
 function MockExperienceHome({ searchParams }: HomeProps) {
   const resolvedSearchParams = use(searchParams);
   const initialScreenQuery = pickQueryValue(resolvedSearchParams?.screen);
@@ -423,11 +482,12 @@ function MockExperienceHome({ searchParams }: HomeProps) {
   const initialTxQuery = pickQueryValue(resolvedSearchParams?.tx);
   const initialTxId = initialTxQuery ? Number(initialTxQuery) : undefined;
   const router = useRouter();
-  const { isAuthenticated, isHydrating, logout } = useAuth();
+  const { user, isAuthenticated, isHydrating, logout } = useAuth();
   const [activeScreen, setActiveScreen] = useState<ScreenId>(initialScreen);
   const [walletBalance, setWalletBalance] = useState(300);
   const [transactions, setTransactions] = useState<Transaction[]>(initialTransactions);
   const transactionsRef = useRef(transactions);
+  const visibleTransactionsRef = useRef<Transaction[]>(transactions);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(() => {
     if (initialScreen === "transaction" && initialTxId) {
       return initialTransactions.find((item) => item.id === initialTxId) ?? null;
@@ -455,31 +515,51 @@ function MockExperienceHome({ searchParams }: HomeProps) {
   const [walletAmountInput, setWalletAmountInput] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [profile, setProfile] = useState({ name: defaultUser.name, email: defaultUser.email });
-  const currentUser = profile;
+  const currentUser = liveDataEnabled && user
+    ? {
+        name: user.name?.trim() || user.email || profile.name,
+        email: user.email || profile.email,
+      }
+    : profile;
   const [kycMarked, setKycMarked] = useState(false);
   const [modalContent, setModalContent] = useState<ModalContent | null>(null);
   const [notificationsPanelOpen, setNotificationsPanelOpen] = useState(false);
   const [dismissedNotifications, setDismissedNotifications] = useState<string[]>([]);
   const createEscrowMutation = useCreateEscrow();
   const notificationsQuery = useNotifications();
+  const overviewQuery = useEscrowSummary();
+  const escrowsQuery = useEscrows();
+  const liveSummaryMetrics = overviewQuery.data?.summaryMetrics ?? [];
+  const liveTimelineEvents = overviewQuery.data?.timelineEvents ?? [];
+  const liveTransactions = useMemo(
+    () =>
+      liveDataEnabled
+        ? mapEscrowsToTransactions(escrowsQuery.data?.escrows, currentUser.name, currentUser.email)
+        : [],
+    [currentUser.email, currentUser.name, escrowsQuery.data?.escrows],
+  );
+  const walletMetricValue = liveSummaryMetrics.find((metric) => metric.id === "held")?.value;
+  const walletBalanceDisplay =
+    liveDataEnabled && walletMetricValue ? parseCurrencyValue(walletMetricValue) : walletBalance;
+  const displayTransactions = liveDataEnabled ? liveTransactions : transactions;
   const { pushToast } = useToast();
   const { confirm } = useConfirmDialog();
   const walletTopup = useWalletTopup();
   const walletWithdraw = useWalletWithdraw();
 
   const pendingCard = useMemo(
-    () => transactions.find((tx) => tx.status === "Pending"),
-    [transactions],
+    () => displayTransactions.find((tx) => tx.status === "Pending"),
+    [displayTransactions],
   );
 
   const activeNotifications = useMemo(
-    () => transactions.filter((tx) => tx.status !== "Released").length,
-    [transactions],
+    () => displayTransactions.filter((tx) => tx.status !== "Released").length,
+    [displayTransactions],
   );
   const notificationList = notificationsQuery.data?.notifications ?? [];
   const fallbackNotifications = useMemo<NotificationEntry[]>(() => {
     const entries: NotificationEntry[] = [];
-    transactions.forEach((tx) => {
+    displayTransactions.forEach((tx) => {
       if (tx.status === "Pending") {
         if (!tx.counterpartyApproved) {
           const waitingOnName =
@@ -538,9 +618,17 @@ function MockExperienceHome({ searchParams }: HomeProps) {
       });
     }
     return entries.slice(0, 4);
-  }, [transactions, currentUser.name]);
+  }, [displayTransactions, currentUser.name]);
   const shouldUseFallbackNotifications = notificationsQuery.isError || notificationList.length === 0;
   const notificationsToRender = shouldUseFallbackNotifications ? fallbackNotifications : notificationList;
+  const timelineEntries = liveDataEnabled && liveTimelineEvents.length
+    ? liveTimelineEvents.map((event) => ({
+        id: event.id,
+        label: event.title,
+        detail: event.meta,
+        txId: undefined,
+      }))
+    : dashboardTimelineEntries;
   const requiresCurrentUserAction = (notification: NotificationEntry): boolean => {
     if (typeof notification.requiresAction === "boolean") {
       return notification.requiresAction;
@@ -548,7 +636,7 @@ function MockExperienceHome({ searchParams }: HomeProps) {
     if (!notification.txId) {
       return false;
     }
-    const tx = transactions.find((item) => item.id === notification.txId);
+    const tx = displayTransactions.find((item) => item.id === notification.txId);
     if (!tx) {
       return false;
     }
@@ -656,6 +744,9 @@ useEffect(() => {
   transactionsRef.current = transactions;
 }, [transactions]);
 
+useEffect(() => {
+  visibleTransactionsRef.current = displayTransactions;
+}, [displayTransactions]);
 
 useEffect(() => {
   const handlePopState = (event: PopStateEvent) => {
@@ -667,7 +758,7 @@ useEffect(() => {
     const txFromState = state.txId ?? (fallbackTx ? Number(fallbackTx) : undefined);
     setActiveScreen(screenFromState);
     if (screenFromState === "transaction" && txFromState) {
-      setSelectedTransaction(transactionsRef.current.find((item) => item.id === txFromState) ?? null);
+      setSelectedTransaction(visibleTransactionsRef.current.find((item) => item.id === txFromState) ?? null);
     } else if (screenFromState !== "transaction") {
       setSelectedTransaction(null);
     }
@@ -1012,11 +1103,12 @@ const handleWalletWithdraw = async () => {
   };
 
   const findTransactionForNotification = (notification: NotificationEntry) => {
+    const pool = visibleTransactionsRef.current;
     if (notification.txId) {
-      return transactions.find((tx) => tx.id === notification.txId);
+      return pool.find((tx) => tx.id === notification.txId);
     }
     const text = `${notification.label} ${notification.detail}`.toLowerCase();
-    return transactions.find(
+    return pool.find(
       (tx) =>
         text.includes(tx.title.toLowerCase()) ||
         text.includes(tx.counterpart.toLowerCase()) ||
@@ -1084,7 +1176,7 @@ const handleWalletWithdraw = async () => {
         <div className="tile">
           <div className="t-title">Wallet</div>
           <div className="muted">Balance</div>
-          <div style={{ fontWeight: 800, fontSize: 18 }}>{formatCurrency(walletBalance)}</div>
+          <div style={{ fontWeight: 800, fontSize: 18 }}>{formatCurrency(walletBalanceDisplay)}</div>
           <button className="ghost" onClick={() => navigate("wallet")}>
             Manage
           </button>
@@ -1092,14 +1184,14 @@ const handleWalletWithdraw = async () => {
         <div className="tile">
           <div className="t-title">Recent</div>
           <div className="muted">Last activity</div>
-          {transactions.length ? (
+          {displayTransactions.length ? (
             <button
               className="ghost"
               style={{ width: "100%", justifyContent: "space-between" }}
-              onClick={() => viewTransaction(transactions[0])}
+              onClick={() => viewTransaction(displayTransactions[0])}
             >
-              <span>{transactions[0].title}</span>{" "}
-              <span>{formatCurrency(transactions[0].amount)}</span>
+              <span>{displayTransactions[0].title}</span>{" "}
+              <span>{formatCurrency(displayTransactions[0].amount)}</span>
             </button>
           ) : (
             <div className="muted">No activity</div>
@@ -1149,7 +1241,7 @@ const handleWalletWithdraw = async () => {
         <div className="card">
           <h3 style={{ marginBottom: 8 }}>Recent transactions</h3>
           <div className="tx-list">
-            {transactions.map((tx) => (
+            {displayTransactions.map((tx) => (
               <button key={tx.id} className="tx-item tx-item-button" type="button" onClick={() => viewTransaction(tx)}>
                 <div>
                   <div style={{ fontWeight: 700 }}>{tx.title}</div>
@@ -1203,7 +1295,7 @@ const handleWalletWithdraw = async () => {
         >
           <div className="t-title">Wallet</div>
           <div className="muted">Available balance</div>
-          <div style={{ fontSize: 26, fontWeight: 800 }}>{formatCurrency(walletBalance)}</div>
+        <div style={{ fontSize: 26, fontWeight: 800 }}>{formatCurrency(walletBalanceDisplay)}</div>
           <div className="muted" style={{ marginTop: 8 }}>
             Manage funds
           </div>
@@ -1212,7 +1304,7 @@ const handleWalletWithdraw = async () => {
       <div className="card" style={{ marginBottom: 12 }}>
         <strong>Transactions</strong>
         <div className="tx-list" style={{ marginTop: 12 }}>
-          {transactions.map((tx) => (
+          {displayTransactions.map((tx) => (
             <div
               key={tx.id}
               className="tx-item tx-item--interactive"
@@ -1245,15 +1337,15 @@ const handleWalletWithdraw = async () => {
           <span className="muted" style={{ fontSize: 13 }}>Recent alerts</span>
         </div>
         <div className="tx-list" style={{ marginTop: 12 }}>
-          {dashboardTimelineEntries.map((event) => (
+          {timelineEntries.map((event) => (
             <button
               key={event.id}
               className="tx-item timeline-entry-card tx-item--interactive"
               onClick={() => {
                 const targetTx =
-                  (event.txId ? transactions.find((tx) => tx.id === event.txId) : undefined) ??
-                  transactions.find((tx) => tx.title === event.label || tx.counterpart === event.label) ??
-                  transactions[0];
+                  (event.txId ? displayTransactions.find((tx) => tx.id === event.txId) : undefined) ??
+                  displayTransactions.find((tx) => tx.title === event.label || tx.counterpart === event.label) ??
+                  displayTransactions[0];
                 if (targetTx) {
                   viewTransaction(targetTx);
                 }
@@ -1686,7 +1778,7 @@ const handleWalletWithdraw = async () => {
       <p className="lead">Track deposits and withdrawals.</p>
       <div className="card">
         <div className="muted">Available balance</div>
-        <div style={{ fontWeight: 800, fontSize: 18 }}>{formatCurrency(walletBalance)}</div>
+        <div style={{ fontWeight: 800, fontSize: 18 }}>{formatCurrency(walletBalanceDisplay)}</div>
         <label className="muted" style={{ marginTop: 8 }}>
           Top-up (mock)
         </label>
@@ -1734,7 +1826,7 @@ const handleWalletWithdraw = async () => {
       <h2 className="page-title">History</h2>
       <p className="lead">Past escrows and payouts.</p>
       <div className="card">
-        {transactions
+        {displayTransactions
           .filter((tx) => tx.status === "Released")
           .map((tx) => (
             <div key={tx.id} className="tx-item" style={{ marginBottom: 8 }}>
@@ -1750,7 +1842,7 @@ const handleWalletWithdraw = async () => {
   );
 
   const renderEscrows = () => {
-    const activeTransactions = transactions.filter((tx) => tx.status === "Active");
+    const activeTransactions = displayTransactions.filter((tx) => tx.status === "Active");
     return (
       <section className="screen active">
         <h2 className="page-title">Active escrows</h2>
