@@ -17,6 +17,7 @@ type ToastEntry = {
   id: string;
   title: string;
   variant: ToastVariant;
+  body?: string;
 };
 
 type ToastContextValue = {
@@ -49,9 +50,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const pushToast = useCallback(
-    ({ title, variant }: Omit<ToastEntry, "id">) => {
+    ({ title, variant, body }: Omit<ToastEntry, "id">) => {
       const id = randomId();
-      setToasts((prev) => [...prev, { id, title, variant }]);
+      setToasts((prev) => [...prev, { id, title, variant, body }]);
       const timeoutId = setTimeout(() => dismissToast(id), 5000);
       timeouts.current.set(id, timeoutId);
     },
@@ -72,7 +73,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             tabIndex={0}
             role="alert"
           >
-            {toast.title}
+            <div className="toast-title">{toast.title}</div>
+            {toast.body ? <div className="toast-body">{toast.body}</div> : null}
           </div>
         ))}
       </div>
