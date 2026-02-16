@@ -36,13 +36,15 @@ npm test        # Vitest + MSW integration coverage
 - Use the `@/*` path alias (configured in `tsconfig.json`) for imports within `src/`.
 - Mock dashboard responses live under `src/app/api/dashboard/*` and draw from `src/lib/mockDashboard.ts`. Swap those handlers to call the real backend (or keep them enabled with `NEXT_PUBLIC_USE_MOCKS=true`) depending on your environment.
 - The React Query hooks call `apiFetch` (see `src/lib/apiClient.ts`). Set `NEXT_PUBLIC_API_BASE_URL` to point at a staging/production API and flip `NEXT_PUBLIC_USE_MOCKS=false` to route traffic directly to it; when mocks are disabled, the built-in API handlers proxy requests to the backend so `/api/*` still works without extra CORS setup.
+- `NEXT_PUBLIC_LIVE_DASHBOARD=true` enables the slim production dashboard. Leave it unset/false to keep the immersive demo UI while still hitting a real backend.
 
 ### Switching between mocks and staging
 
 1. Create or edit `.env.local` and set `NEXT_PUBLIC_API_BASE_URL` to your staging API.
 2. Toggle `NEXT_PUBLIC_USE_MOCKS` to `false` to bypass the mock handlers; the `/api/*` routes will now proxy the payloads to the backend using the base URL above.
-3. Optionally set `NEXT_PUBLIC_API_TOKEN=<bearer token>`; `apiFetch` injects it as an `Authorization` header on every staging request so you can hit authenticated routes without modifying each hook.
-4. Leave `NEXT_PUBLIC_USE_MOCKS=true` when working offline—the React Query hooks will fall back to the mock handlers automatically.
+3. Set `NEXT_PUBLIC_LIVE_DASHBOARD=true` **only** when you want the production dashboard layout; keep it `false` (default) to retain the immersive mock UI while still pointing at staging APIs.
+4. Optionally set `NEXT_PUBLIC_API_TOKEN=<bearer token>`; `apiFetch` injects it as an `Authorization` header on every staging request so you can hit authenticated routes without modifying each hook.
+5. Leave `NEXT_PUBLIC_USE_MOCKS=true` when working offline—the React Query hooks will fall back to the mock handlers automatically.
 
 ### Authentication
 

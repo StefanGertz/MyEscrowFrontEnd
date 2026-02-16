@@ -102,7 +102,7 @@ type HomeProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
-const mockExperienceEnabled = (process.env.NEXT_PUBLIC_USE_MOCKS ?? "true") !== "false";
+const liveDashboardEnabled = (process.env.NEXT_PUBLIC_LIVE_DASHBOARD ?? "false") === "true";
 
 const screenIds: ScreenId[] = [
   "welcome",
@@ -2177,8 +2177,8 @@ const handleWalletWithdraw = async () => {
 }
 
 export default function Home(props: HomeProps) {
-  if (mockExperienceEnabled) {
-    return <MockExperienceHome searchParams={props.searchParams} />;
+  if (liveDashboardEnabled) {
+    return <LiveDashboard />;
   }
-  return <LiveDashboard />;
+  return <MockExperienceHome searchParams={props.searchParams} />;
 }
