@@ -9,12 +9,37 @@ export type EscrowStatus = "success" | "warning";
 
 export type EscrowRecord = {
   id: string;
+  title?: string;
+  description?: string;
   counterpart: string;
   amount: string;
   stage: string;
   due: string;
   status: EscrowStatus;
   counterpartyApproved: boolean;
+  lifecycleStatus?: string;
+  fundingStatus?: string;
+  role?: "buyer" | "seller";
+  isOwner?: boolean;
+  buyer?: {
+    id: string;
+    name: string;
+    email: string;
+  };
+  seller?: {
+    id: string;
+    name: string;
+    email: string;
+  };
+  milestones?: Array<{
+    id: number;
+    title: string;
+    amount: string;
+    status: "pending" | "released" | "rejected";
+    description?: string;
+    releasedAt?: string;
+    rejectedAt?: string;
+  }>;
 };
 
 export type TimelineEvent = {

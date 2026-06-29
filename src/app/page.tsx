@@ -6,7 +6,11 @@ import { AppShell } from "@/components/AppShell";
 import { Header } from "@/components/Header";
 import { SignaturePad, type SignaturePadHandle } from "@/components/SignaturePad";
 import {
+  useApproveEscrow,
+  useCancelEscrow,
   useCreateEscrow,
+  useFundEscrow,
+  useRejectEscrow,
   useEscrowSummary,
   useEscrows,
   useNotifications,
@@ -57,12 +61,17 @@ type TimelineEntry = {
 
 type Transaction = {
   id: number;
+  reference?: string;
   title: string;
   description?: string;
   counterpart: string;
   amount: number;
   status: "Pending" | "Active" | "Released" | "Resolved" | "Cancelled";
   context: string;
+  lifecycleStatus?: string;
+  fundingStatus?: string;
+  userRole?: "buyer" | "seller";
+  isOwner?: boolean;
   steps: ProcessStep[];
   buyer: string;
   buyerEmail: string;
@@ -378,6 +387,9 @@ const parseCurrencyValue = (value: string) => {
   return Number.isFinite(numeric) ? numeric : 0;
 };
 
+const sameEmail = (left?: string, right?: string) =>
+  left?.trim().toLowerCase() === right?.trim().toLowerCase();
+
 const buildAgreementLines = (tx: Transaction) => {
   const lines = [
     `Agreement title: ${tx.title}`,
@@ -438,37 +450,81 @@ const mapEscrowsToTransactions = (
     const amountValue = parseCurrencyValue(record.amount);
     const counterpart = record.counterpart || "Counterparty";
     const approved = record.counterpartyApproved;
-    const pendingDetail = approved ? "Awaiting next milestone" : `Waiting for ${counterpart}`;
+    const lifecycleStatus = record.lifecycleStatus ?? (approved ? "funded" : "pending_approval");
+    const fundingStatus = record.fundingStatus ?? (approved ? "funded" : "not_funded");
+    const buyer = record.buyer ?? { id: "buyer", name: currentUserName, email: currentUserEmail };
+    const seller = record.seller ?? { id: "seller", name: counterpart, email: "counterparty@example.com" };
+    const isBuyer = sameEmail(currentUserEmail, buyer.email);
+    let status: Transaction["status"] = "Pending";
+    if (lifecycleStatus === "funded") {
+      status = "Active";
+    } else if (lifecycleStatus === "completed") {
+      status = "Released";
+    } else if (lifecycleStatus === "cancelled") {
+      status = "Cancelled";
+    }
+    const pendingDetail =
+      lifecycleStatus === "pending_approval"
+        ? `Waiting for ${counterpart}`
+        : lifecycleStatus === "funding_pending"
+          ? "Buyer funding required"
+          : lifecycleStatus === "funded"
+            ? "Awaiting next milestone"
+            : record.due;
     const steps: ProcessStep[] = [
       {
         title: "Agreement drafted",
         detail: pendingDetail,
-        status: approved ? "complete" : "active",
+        status: lifecycleStatus === "pending_approval" ? "active" : "complete",
       },
       {
-        title: approved ? "Funding" : "Fund after approval",
-        detail: approved ? "Buyer funding pending" : "Buyer deposits after approval",
-        status: approved ? "active" : "upcoming",
+        title: "Funding",
+        detail:
+          lifecycleStatus === "pending_approval"
+            ? "Buyer deposits after approval"
+            : lifecycleStatus === "funding_pending"
+              ? "Buyer funding pending"
+              : "Funds secured in escrow",
+        status:
+          lifecycleStatus === "pending_approval"
+            ? "upcoming"
+            : lifecycleStatus === "funding_pending"
+              ? "active"
+              : "complete",
       },
       {
         title: "Milestones",
         detail: record.due,
-        status: "upcoming",
+        status: lifecycleStatus === "funded" || lifecycleStatus === "completed" ? "active" : "upcoming",
       },
     ];
     return {
       id: numericId,
-      title: record.stage || counterpart,
+      reference: record.id,
+      title: record.title || record.stage || counterpart,
+      description: record.description,
       counterpart,
       amount: amountValue,
-      status: approved ? "Active" : "Pending",
+      status,
       context: record.stage || (approved ? "Milestones active" : "Approval pending"),
+      lifecycleStatus,
+      fundingStatus,
+      userRole: record.role ?? (isBuyer ? "buyer" : "seller"),
+      isOwner: record.isOwner,
       steps,
-      buyer: currentUserName,
-      buyerEmail: currentUserEmail,
-      seller: counterpart,
-      sellerEmail: "counterparty@example.com",
-      milestones: [],
+      buyer: buyer.name,
+      buyerEmail: buyer.email,
+      seller: seller.name,
+      sellerEmail: seller.email,
+      milestones: (record.milestones ?? []).map((milestone) => ({
+        id: milestone.id.toString(),
+        title: milestone.title,
+        amount: parseCurrencyValue(milestone.amount),
+        description: milestone.description,
+        status: milestone.status,
+        releasedAt: milestone.releasedAt,
+        rejectedAt: milestone.rejectedAt,
+      })),
       timeline: [],
       counterpartyApproved: approved,
     };
@@ -526,10 +582,13 @@ function MockExperienceHome({ searchParams }: HomeProps) {
   const [notificationsPanelOpen, setNotificationsPanelOpen] = useState(false);
   const [dismissedNotifications, setDismissedNotifications] = useState<string[]>([]);
   const createEscrowMutation = useCreateEscrow();
+  const approveEscrowMutation = useApproveEscrow();
+  const rejectEscrowMutation = useRejectEscrow();
+  const cancelEscrowMutation = useCancelEscrow();
+  const fundEscrowMutation = useFundEscrow();
   const notificationsQuery = useNotifications();
   const overviewQuery = useEscrowSummary();
   const escrowsQuery = useEscrows();
-  const liveSummaryMetrics = overviewQuery.data?.summaryMetrics ?? [];
   const liveTimelineEvents = overviewQuery.data?.timelineEvents ?? [];
   const liveTransactions = useMemo(
     () =>
@@ -538,9 +597,9 @@ function MockExperienceHome({ searchParams }: HomeProps) {
         : [],
     [currentUser.email, currentUser.name, escrowsQuery.data?.escrows],
   );
-  const walletMetricValue = liveSummaryMetrics.find((metric) => metric.id === "held")?.value;
+  const liveWalletBalance = overviewQuery.data?.walletBalance;
   const walletBalanceDisplay =
-    liveDataEnabled && walletMetricValue ? parseCurrencyValue(walletMetricValue) : walletBalance;
+    liveDataEnabled && liveWalletBalance ? parseCurrencyValue(liveWalletBalance) : walletBalance;
   const displayTransactions = liveDataEnabled ? liveTransactions : transactions;
   const { pushToast } = useToast();
   const { confirm } = useConfirmDialog();
@@ -561,32 +620,34 @@ function MockExperienceHome({ searchParams }: HomeProps) {
     const entries: NotificationEntry[] = [];
     displayTransactions.forEach((tx) => {
       if (tx.status === "Pending") {
-        if (!tx.counterpartyApproved) {
+        if (tx.lifecycleStatus === "pending_approval") {
           const waitingOnName =
-            tx.buyer === currentUser.name ? tx.seller : tx.buyer;
+            tx.isOwner ? (tx.userRole === "buyer" ? tx.seller : tx.buyer) : "You";
           entries.push({
             id: `approval-${tx.id}`,
             txId: tx.id,
             label: tx.title,
-            detail: `Waiting for ${waitingOnName} to approve the escrow.`,
+            detail: tx.isOwner
+              ? `Waiting for ${waitingOnName} to approve the escrow.`
+              : "You have been invited to review and approve this escrow.",
             meta: tx.context,
-            requiresAction: false,
+            requiresAction: !tx.isOwner,
           });
-        } else {
+        } else if (tx.lifecycleStatus === "funding_pending") {
           entries.push({
             id: `funding-${tx.id}`,
             txId: tx.id,
             label: tx.title,
-            detail: "Counterparty approved. Deposit funds to activate this escrow.",
+            detail: "Counterparty approved. Fund this escrow with dummy wallet money to activate it.",
             meta: "Funding required",
-            requiresAction: tx.buyer === currentUser.name,
+            requiresAction: sameEmail(tx.buyerEmail, currentUser.email),
           });
         }
       } else if (tx.status === "Active") {
         const pendingMilestone = tx.milestones.find((milestone) => milestone.status === "pending");
         if (pendingMilestone) {
           const amountMeta = pendingMilestone.amount ? formatCurrency(pendingMilestone.amount) : null;
-          if (tx.buyer === currentUser.name) {
+          if (sameEmail(tx.buyerEmail, currentUser.email)) {
             entries.push({
               id: `milestone-review-${tx.id}-${pendingMilestone.id}`,
               txId: tx.id,
@@ -595,7 +656,7 @@ function MockExperienceHome({ searchParams }: HomeProps) {
               meta: amountMeta ? `Milestone pending • ${amountMeta}` : "Milestone pending",
               requiresAction: true,
             });
-          } else if (tx.seller === currentUser.name) {
+          } else if (sameEmail(tx.sellerEmail, currentUser.email)) {
             entries.push({
               id: `milestone-wait-${tx.id}-${pendingMilestone.id}`,
               txId: tx.id,
@@ -618,7 +679,7 @@ function MockExperienceHome({ searchParams }: HomeProps) {
       });
     }
     return entries.slice(0, 4);
-  }, [displayTransactions, currentUser.name]);
+  }, [displayTransactions, currentUser.email]);
   const shouldUseFallbackNotifications = notificationsQuery.isError || notificationList.length === 0;
   const notificationsToRender = shouldUseFallbackNotifications ? fallbackNotifications : notificationList;
   const timelineEntries = liveDataEnabled
@@ -641,10 +702,13 @@ function MockExperienceHome({ searchParams }: HomeProps) {
       return false;
     }
     if (tx.status === "Pending") {
-      if (!tx.counterpartyApproved) {
-        return false;
+      if (tx.lifecycleStatus === "pending_approval") {
+        return !tx.isOwner;
       }
-      return tx.buyer === currentUser.name;
+      if (tx.lifecycleStatus === "funding_pending") {
+        return sameEmail(tx.buyerEmail, currentUser.email);
+      }
+      return false;
     }
     if (tx.status === "Active") {
       if (tx.buyer !== currentUser.name) {
@@ -885,9 +949,16 @@ const updateTransaction = (id: number, mapper: (tx: Transaction) => Transaction)
       const response = await createEscrowMutation.mutateAsync({
         title: responseTitle,
         counterpart: createForm.counterpartyName || "Counterparty",
+        counterpartyEmail: createForm.counterpartyEmail || "counterparty@example.com",
         amount: escrowAmount,
+        creatorRole: createForm.role,
         category: createForm.category,
         description: descriptionValue || undefined,
+        milestones: milestones.map((milestone) => ({
+          title: milestone.title,
+          amount: milestone.amount,
+          description: milestone.description || undefined,
+        })),
       });
       const timestamp = new Date().toISOString();
       const newTx: Transaction = {
@@ -953,7 +1024,7 @@ const updateTransaction = (id: number, mapper: (tx: Transaction) => Transaction)
       setMessage("Transaction not found.");
       return;
     }
-    if (currentUser.name === target.seller) {
+    if (sameEmail(currentUser.email, target.sellerEmail)) {
       setMessage("Only the buyer can approve milestone releases.");
       return;
     }
@@ -1043,6 +1114,53 @@ const updateTransaction = (id: number, mapper: (tx: Transaction) => Transaction)
     executeDecision();
   };
 
+  const handleApproveEscrow = async (tx: Transaction) => {
+    const escrowId = tx.reference ?? `PO-${tx.id}`;
+    try {
+      await approveEscrowMutation.mutateAsync({ escrowId });
+      setMessage("Escrow approved. The buyer can now fund it with dummy wallet funds.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to approve escrow.");
+    }
+  };
+
+  const handleRejectEscrow = async (tx: Transaction) => {
+    const escrowId = tx.reference ?? `PO-${tx.id}`;
+    try {
+      await rejectEscrowMutation.mutateAsync({ escrowId });
+      setMessage("Escrow rejected.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to reject escrow.");
+    }
+  };
+
+  const handleCancelEscrow = async (tx: Transaction) => {
+    const escrowId = tx.reference ?? `PO-${tx.id}`;
+    try {
+      await cancelEscrowMutation.mutateAsync({ escrowId });
+      setMessage("Escrow cancelled.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to cancel escrow.");
+    }
+  };
+
+  const handleFundEscrow = (tx: Transaction) => {
+    const escrowId = tx.reference ?? `PO-${tx.id}`;
+    confirm({
+      title: "Fund escrow with dummy wallet funds?",
+      body: `This will move ${formatCurrency(tx.amount)} from your MyEscrow test wallet into escrow. No bank account will be charged.`,
+      confirmLabel: "Fund escrow",
+      onConfirm: async () => {
+        try {
+          await fundEscrowMutation.mutateAsync({ escrowId });
+          setMessage("Escrow funded with dummy wallet funds.");
+        } catch (error) {
+          setMessage(error instanceof Error ? error.message : "Unable to fund escrow.");
+        }
+      },
+    });
+  };
+
   const handleWalletTopup = async () => {
     const amount = Number(walletAmountInput);
     if (!amount || amount <= 0) {
@@ -1066,7 +1184,7 @@ const handleWalletWithdraw = async () => {
       setMessage("Enter a valid withdrawal amount.");
       return;
     }
-    if (amount > walletBalance) {
+    if (amount > walletBalanceDisplay) {
       setMessage("Not enough balance to withdraw.");
       return;
     }
@@ -1943,7 +2061,10 @@ const handleWalletWithdraw = async () => {
   );
 
   const renderTransactionDetail = () => {
-    if (!selectedTransaction) {
+    const tx = liveDataEnabled && selectedTransaction
+      ? displayTransactions.find((item) => item.id === selectedTransaction.id) ?? selectedTransaction
+      : selectedTransaction;
+    if (!tx) {
       return (
         <section className="screen active">
           <h2 className="page-title">Transaction</h2>
@@ -1953,9 +2074,13 @@ const handleWalletWithdraw = async () => {
         </section>
       );
     }
-    const tx = selectedTransaction;
     const canReviewMilestones = tx.counterpartyApproved && tx.status === "Active";
-    const isCurrentUserBuyer = currentUser.name === tx.buyer;
+    const isCurrentUserBuyer = sameEmail(currentUser.email, tx.buyerEmail);
+    const isAwaitingApproval = tx.lifecycleStatus === "pending_approval";
+    const isAwaitingFunding = tx.lifecycleStatus === "funding_pending";
+    const canApproveEscrow = !tx.isOwner && isAwaitingApproval;
+    const canFundEscrow = isCurrentUserBuyer && isAwaitingFunding;
+    const canCancelEscrow = Boolean(tx.isOwner) && tx.status !== "Cancelled" && tx.status !== "Released" && isAwaitingApproval;
     return (
       <section className="screen active">
         <h2 className="page-title">Transaction</h2>
@@ -2017,6 +2142,61 @@ const handleWalletWithdraw = async () => {
             </button>
           </div>
         </div>
+        {(canApproveEscrow || canFundEscrow || canCancelEscrow) ? (
+          <div className="card" style={{ marginTop: 12 }}>
+            <strong>Next step</strong>
+            <p className="muted" style={{ marginTop: 8, marginBottom: 12 }}>
+              {canApproveEscrow
+                ? "Review the invitation and approve or reject the escrow."
+                : canFundEscrow
+                  ? "Move dummy wallet funds into escrow so milestone work can begin."
+                  : "This draft is still waiting for counterparty approval."}
+            </p>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {canApproveEscrow ? (
+                <>
+                  <button
+                    className="btn"
+                    onClick={() => handleApproveEscrow(tx)}
+                    disabled={approveEscrowMutation.isPending}
+                  >
+                    {approveEscrowMutation.isPending ? "Approving..." : "Approve escrow"}
+                  </button>
+                  <button
+                    className="ghost"
+                    onClick={() => handleRejectEscrow(tx)}
+                    disabled={rejectEscrowMutation.isPending}
+                  >
+                    {rejectEscrowMutation.isPending ? "Rejecting..." : "Reject escrow"}
+                  </button>
+                </>
+              ) : null}
+              {canFundEscrow ? (
+                <button
+                  className="btn"
+                  onClick={() => handleFundEscrow(tx)}
+                  disabled={fundEscrowMutation.isPending || walletBalanceDisplay < tx.amount}
+                >
+                  {fundEscrowMutation.isPending ? "Funding..." : `Fund with dummy wallet (${formatCurrency(tx.amount)})`}
+                </button>
+              ) : null}
+              {canFundEscrow && walletBalanceDisplay < tx.amount ? (
+                <div className="muted" style={{ width: "100%" }}>
+                  Add more dummy wallet funds before funding this escrow.
+                </div>
+              ) : null}
+              {canCancelEscrow ? (
+                <button
+                  className="ghost"
+                  onClick={() => handleCancelEscrow(tx)}
+                  disabled={cancelEscrowMutation.isPending}
+                >
+                  {cancelEscrowMutation.isPending ? "Cancelling..." : "Cancel draft"}
+                </button>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
         {tx.milestones.length ? (
           <div className="card" style={{ marginTop: 12 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>

@@ -18,6 +18,7 @@ const fetchJSON = async <T>(input: string, init?: RequestInit): Promise<T> => {
 };
 
 type OverviewResponse = {
+  walletBalance?: string;
   summaryMetrics: SummaryMetric[];
   activeEscrows: EscrowRecord[];
   timelineEvents: TimelineEvent[];
@@ -138,6 +139,7 @@ const buildEscrowAction =
 export const useApproveEscrow = buildEscrowAction("approve");
 export const useRejectEscrow = buildEscrowAction("reject");
 export const useCancelEscrow = buildEscrowAction("cancel");
+export const useFundEscrow = buildEscrowAction("fund");
 
 type ResolvePayload = {
   disputeId: string;
@@ -163,9 +165,16 @@ export function useResolveDispute() {
 type CreateEscrowPayload = {
   title: string;
   counterpart: string;
+  counterpartyEmail: string;
   amount: number;
+  creatorRole: "buyer" | "seller";
   category?: string;
   description?: string;
+  milestones?: Array<{
+    title: string;
+    amount: number;
+    description?: string;
+  }>;
 };
 
 export function useCreateEscrow() {

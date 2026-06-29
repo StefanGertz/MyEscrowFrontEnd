@@ -5,9 +5,16 @@ import { proxyApiRequest } from "@/lib/serverProxy";
 type CreatePayload = {
   title: string;
   counterpart: string;
+  counterpartyEmail: string;
   amount: number;
+  creatorRole: "buyer" | "seller";
   category?: string;
   description?: string;
+  milestones?: Array<{
+    title: string;
+    amount: number;
+    description?: string;
+  }>;
 };
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -26,8 +33,11 @@ export async function POST(request: NextRequest) {
     title: body.title,
     description: body.description,
     counterpart: body.counterpart,
+    counterpartyEmail: body.counterpartyEmail,
     amount: body.amount,
+    creatorRole: body.creatorRole,
     category: body.category,
+    milestones: body.milestones,
     createdAt: new Date().toISOString(),
   });
 }
