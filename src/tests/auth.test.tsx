@@ -4,7 +4,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, act } from "@testing-library/react";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import {
+  useForgotPasswordMutation,
   useLoginMutation,
+  useResetPasswordMutation,
   useSignupMutation,
   useVerifyEmailMutation,
 } from "@/hooks/useAuthApi";
@@ -85,6 +87,33 @@ describe("auth flows", () => {
       });
       expect(response.user.email).toBe("demo@example.com");
       expect(response.token).toBe("test-token");
+    });
+  });
+
+  it("issues a password reset challenge", async () => {
+    const wrapper = createWrapper();
+    const forgotHook = renderHook(() => useForgotPasswordMutation(), { wrapper });
+
+    await act(async () => {
+      const response = await forgotHook.result.current.mutateAsync({
+        email: "demo@example.com",
+      });
+      expect(response.accepted).toBe(true);
+      expect(response.debugCode).toBe("654321");
+    });
+  });
+
+  it("resets the password with a valid code", async () => {
+    const wrapper = createWrapper();
+    const resetHook = renderHook(() => useResetPasswordMutation(), { wrapper });
+
+    await act(async () => {
+      const response = await resetHook.result.current.mutateAsync({
+        email: "demo@example.com",
+        code: "654321",
+        password: "NewPassword123!",
+      });
+      expect(response.success).toBe(true);
     });
   });
 });

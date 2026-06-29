@@ -621,7 +621,7 @@ function MockExperienceHome({ searchParams }: HomeProps) {
   }, [displayTransactions, currentUser.name]);
   const shouldUseFallbackNotifications = notificationsQuery.isError || notificationList.length === 0;
   const notificationsToRender = shouldUseFallbackNotifications ? fallbackNotifications : notificationList;
-  const timelineEntries = liveDataEnabled && liveTimelineEvents.length
+  const timelineEntries = liveDataEnabled
     ? liveTimelineEvents.map((event) => ({
         id: event.id,
         label: event.title,
@@ -1337,26 +1337,30 @@ const handleWalletWithdraw = async () => {
           <span className="muted" style={{ fontSize: 13 }}>Recent alerts</span>
         </div>
         <div className="tx-list" style={{ marginTop: 12 }}>
-          {timelineEntries.map((event) => (
-            <button
-              key={event.id}
-              className="tx-item timeline-entry-card tx-item--interactive"
-              onClick={() => {
-                const targetTx =
-                  (event.txId ? displayTransactions.find((tx) => tx.id === event.txId) : undefined) ??
-                  displayTransactions.find((tx) => tx.title === event.label || tx.counterpart === event.label) ??
-                  displayTransactions[0];
-                if (targetTx) {
-                  viewTransaction(targetTx);
-                }
-              }}
-            >
-              <div>
-                <div style={{ fontWeight: 700 }}>{event.label}</div>
-                <div className="muted">{event.detail}</div>
-              </div>
-            </button>
-          ))}
+          {timelineEntries.length === 0 ? (
+            <div className="muted">No milestone activity yet for this account.</div>
+          ) : (
+            timelineEntries.map((event) => (
+              <button
+                key={event.id}
+                className="tx-item timeline-entry-card tx-item--interactive"
+                onClick={() => {
+                  const targetTx =
+                    (event.txId ? displayTransactions.find((tx) => tx.id === event.txId) : undefined) ??
+                    displayTransactions.find((tx) => tx.title === event.label || tx.counterpart === event.label) ??
+                    displayTransactions[0];
+                  if (targetTx) {
+                    viewTransaction(targetTx);
+                  }
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 700 }}>{event.label}</div>
+                  <div className="muted">{event.detail}</div>
+                </div>
+              </button>
+            ))
+          )}
         </div>
       </div>
     </section>

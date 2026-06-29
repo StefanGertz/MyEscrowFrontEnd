@@ -89,9 +89,9 @@ export default function LoginPage() {
           />
           <div className="auth-helper">
             <Link href="/signup">Need an account?</Link>
-            <button type="button" className="ghost" disabled>
+            <Link href="/forgot-password" className="ghost">
               Forgot password?
-            </button>
+            </Link>
           </div>
           {error ? (
             <div className="auth-error" role="alert">

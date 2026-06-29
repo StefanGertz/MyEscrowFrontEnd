@@ -42,6 +42,22 @@ export const handlers = [
       debugCode: "123456",
     });
   }),
+  http.post(`${baseUrl}/api/auth/forgot-password`, async ({ request }) => {
+    const body = (await request.json()) as { email: string };
+    return HttpResponse.json({
+      accepted: true,
+      email: body.email,
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+      debugCode: "654321",
+    });
+  }),
+  http.post(`${baseUrl}/api/auth/reset-password`, async ({ request }) => {
+    const body = (await request.json()) as { email: string; code: string; password: string };
+    if (body.code !== "654321") {
+      return HttpResponse.json({ error: "Invalid or expired reset code." }, { status: 400 });
+    }
+    return HttpResponse.json({ success: true, email: body.email });
+  }),
   http.post(`${baseUrl}/api/dashboard/escrows/create`, async ({ request }) => {
     const body = (await request.json()) as {
       title: string;
