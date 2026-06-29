@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isMockApiEnabled, mockDisabledResponse } from "@/lib/mockToggle";
+import { isMockApiEnabled } from "@/lib/mockToggle";
+import { proxyApiRequest } from "@/lib/serverProxy";
 
 type LaunchParams = {
   params: {
@@ -10,16 +11,16 @@ type LaunchParams = {
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export async function POST(
-  _request: NextRequest,
+  request: NextRequest,
   context: { params: Promise<LaunchParams["params"]> },
 ) {
+  const { id } = await context.params;
+
   if (!isMockApiEnabled) {
-    return mockDisabledResponse();
+    return proxyApiRequest(request, `/api/dashboard/disputes/${id}/launch`);
   }
 
   await sleep(500);
-
-  const { id } = await context.params;
 
   return NextResponse.json({
     success: true,

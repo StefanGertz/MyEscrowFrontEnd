@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
-import { isMockApiEnabled, mockDisabledResponse } from "@/lib/mockToggle";
+import { isMockApiEnabled } from "@/lib/mockToggle";
+import { proxyApiRequest } from "@/lib/serverProxy";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-export async function GET() {
+export async function GET(request: Request) {
   if (!isMockApiEnabled) {
-    return mockDisabledResponse();
+    return proxyApiRequest(request, "/api/dashboard/notifications");
   }
 
   await sleep(200);

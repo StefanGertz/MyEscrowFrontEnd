@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { disputeTickets } from "@/lib/mockDashboard";
-import { isMockApiEnabled, mockDisabledResponse } from "@/lib/mockToggle";
+import { isMockApiEnabled } from "@/lib/mockToggle";
+import { proxyApiRequest } from "@/lib/serverProxy";
 
-export function GET() {
+export function GET(request: Request) {
   if (!isMockApiEnabled) {
-    return mockDisabledResponse();
+    return proxyApiRequest(request, "/api/dashboard/disputes");
   }
 
   return NextResponse.json({
