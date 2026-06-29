@@ -17,6 +17,8 @@ import {
 type EscrowFormState = {
   title: string;
   counterpart: string;
+  counterpartyEmail: string;
+  creatorRole: "buyer" | "seller";
   amount: string;
   description: string;
 };
@@ -36,6 +38,8 @@ export function LiveDashboard() {
   const [escrowForm, setEscrowForm] = useState<EscrowFormState>({
     title: "",
     counterpart: "",
+    counterpartyEmail: "",
+    creatorRole: "buyer",
     amount: "",
     description: "",
   });
@@ -59,18 +63,33 @@ export function LiveDashboard() {
     event.preventDefault();
     setFormError(null);
     const amountValue = Number(escrowForm.amount);
-    if (!escrowForm.title || !escrowForm.counterpart || Number.isNaN(amountValue) || amountValue <= 0) {
-      setFormError("Add a title, counterpart, and positive amount.");
+    if (
+      !escrowForm.title ||
+      !escrowForm.counterpart ||
+      !escrowForm.counterpartyEmail ||
+      Number.isNaN(amountValue) ||
+      amountValue <= 0
+    ) {
+      setFormError("Add a title, counterparty name, counterparty email, and positive amount.");
       return;
     }
     try {
       await createEscrow.mutateAsync({
         title: escrowForm.title,
         counterpart: escrowForm.counterpart,
+        counterpartyEmail: escrowForm.counterpartyEmail,
         amount: amountValue,
+        creatorRole: escrowForm.creatorRole,
         description: escrowForm.description || undefined,
       });
-      setEscrowForm({ title: "", counterpart: "", amount: "", description: "" });
+      setEscrowForm({
+        title: "",
+        counterpart: "",
+        counterpartyEmail: "",
+        creatorRole: "buyer",
+        amount: "",
+        description: "",
+      });
       pushToast({ variant: "success", title: "Escrow created in staging." });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to create escrow.";
@@ -251,6 +270,34 @@ export function LiveDashboard() {
                 }
                 placeholder="Acme Corp"
               />
+              <label className="muted" htmlFor="escrow-counterparty-email">
+                Counterparty email
+              </label>
+              <input
+                id="escrow-counterparty-email"
+                type="email"
+                value={escrowForm.counterpartyEmail}
+                onChange={(event) =>
+                  setEscrowForm((prev) => ({ ...prev, counterpartyEmail: event.target.value }))
+                }
+                placeholder="counterparty@example.com"
+              />
+              <label className="muted" htmlFor="escrow-creator-role">
+                I am the
+              </label>
+              <select
+                id="escrow-creator-role"
+                value={escrowForm.creatorRole}
+                onChange={(event) =>
+                  setEscrowForm((prev) => ({
+                    ...prev,
+                    creatorRole: event.target.value === "seller" ? "seller" : "buyer",
+                  }))
+                }
+              >
+                <option value="buyer">Buyer</option>
+                <option value="seller">Seller</option>
+              </select>
               <label className="muted" htmlFor="escrow-amount">
                 Amount (USD)
               </label>
