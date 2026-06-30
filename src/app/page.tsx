@@ -473,7 +473,7 @@ const mapEscrowsToTransactions = (
     return [];
   }
   return escrows.map((record, index) => {
-    const numericId = record.escrowId ?? Number(record.id.replace(/[^0-9]/g, "")) || 5000 + index;
+    const numericId = record.escrowId ?? (Number(record.id.replace(/[^0-9]/g, "")) || 5000 + index);
     const amountValue = parseCurrencyValue(record.amount);
     const counterpart = record.counterpart || "Counterparty";
     const approved = record.counterpartyApproved;
@@ -578,6 +578,9 @@ function MockExperienceHome({ searchParams }: HomeProps) {
   const [transactions, setTransactions] = useState<Transaction[]>(initialTransactions);
   const transactionsRef = useRef(transactions);
   const visibleTransactionsRef = useRef<Transaction[]>(transactions);
+  const [selectedTransactionToken, setSelectedTransactionToken] = useState<string | number | null>(() =>
+    initialScreen === "transaction" ? initialTxToken ?? null : null,
+  );
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(() => {
     if (initialScreen === "transaction" && initialTxToken) {
       return findTransactionByToken(initialTransactions, initialTxToken);
@@ -827,20 +830,22 @@ const navActiveId = useMemo<ScreenId>(() => {
   return activeScreen;
 }, [activeScreen]);
 
-const navigate = (screen: ScreenId, pushHistory = true) => {
-  setActiveScreen(screen);
-  setMessage(null);
-  if (screen !== "transaction") {
-    setSelectedTransaction(null);
-  }
-  if (pushHistory) {
-    const nextUrl = screen === "welcome" ? "/" : `/?screen=${screen}`;
+  const navigate = (screen: ScreenId, pushHistory = true) => {
+    setActiveScreen(screen);
+    setMessage(null);
+    if (screen !== "transaction") {
+      setSelectedTransaction(null);
+      setSelectedTransactionToken(null);
+    }
+    if (pushHistory) {
+      const nextUrl = screen === "welcome" ? "/" : `/?screen=${screen}`;
     window.history.pushState({ screen }, "", nextUrl);
   }
 };
 
 const viewTransaction = (tx: Transaction) => {
   setSelectedTransaction(tx);
+  setSelectedTransactionToken(tx.reference ?? tx.id);
   setMessage(null);
   const txToken = tx.reference ?? String(tx.id);
   window.history.pushState({ screen: "transaction", txId: txToken }, "", `/?screen=transaction&tx=${encodeURIComponent(txToken)}`);
@@ -877,8 +882,10 @@ useEffect(() => {
     const txFromState = state.txId ?? fallbackTx ?? undefined;
     setActiveScreen(screenFromState);
     if (screenFromState === "transaction" && txFromState) {
+      setSelectedTransactionToken(txFromState);
       setSelectedTransaction(findTransactionByToken(visibleTransactionsRef.current, txFromState));
     } else if (screenFromState !== "transaction") {
+      setSelectedTransactionToken(null);
       setSelectedTransaction(null);
     }
     setMessage(null);
@@ -886,18 +893,6 @@ useEffect(() => {
   window.addEventListener("popstate", handlePopState);
   return () => window.removeEventListener("popstate", handlePopState);
 }, []);
-
-useEffect(() => {
-  if (!liveDataEnabled || activeScreen !== "transaction" || !selectedTransaction) {
-    return;
-  }
-  const syncedTransaction =
-    findTransactionByToken(displayTransactions, selectedTransaction.reference ?? selectedTransaction.id) ??
-    null;
-  if (syncedTransaction && syncedTransaction.id !== selectedTransaction.id) {
-    setSelectedTransaction(syncedTransaction);
-  }
-}, [activeScreen, displayTransactions, selectedTransaction]);
 
 const updateTransaction = (id: number, mapper: (tx: Transaction) => Transaction) => {
   let updatedTx: Transaction | null = null;
@@ -2230,7 +2225,10 @@ const handleWalletWithdraw = async () => {
 
   const renderTransactionDetail = () => {
     const tx = liveDataEnabled && selectedTransaction
-      ? findTransactionByToken(displayTransactions, selectedTransaction.reference ?? selectedTransaction.id) ?? selectedTransaction
+      ? findTransactionByToken(
+          displayTransactions,
+          selectedTransactionToken ?? selectedTransaction.reference ?? selectedTransaction.id,
+        ) ?? selectedTransaction
       : selectedTransaction;
     if (!tx) {
       return (

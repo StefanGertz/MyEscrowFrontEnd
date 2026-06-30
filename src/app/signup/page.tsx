@@ -2,11 +2,30 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, Suspense, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { useToast } from "@/components/ToastProvider";
 
 export default function SignupPage() {
+  return (
+    <Suspense fallback={<SignupFallback />}>
+      <SignupContent />
+    </Suspense>
+  );
+}
+
+function SignupFallback() {
+  return (
+    <main className="auth-page">
+      <div className="auth-card">
+        <p className="auth-eyebrow">Create account</p>
+        <p className="lead">Loading signup screen...</p>
+      </div>
+    </main>
+  );
+}
+
+function SignupContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const invitedEmail = searchParams.get("email") ?? "";
