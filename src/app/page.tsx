@@ -140,6 +140,29 @@ const pickQueryValue = (value: string | string[] | undefined) =>
 const isScreenId = (value: string | undefined): value is ScreenId =>
   value ? screenIds.includes(value as ScreenId) : false;
 
+const normalizeTransactionToken = (value: string | number | undefined | null) => {
+  if (value === undefined || value === null) return null;
+  const text = String(value).trim();
+  if (!text) return null;
+  const digits = text.replace(/[^0-9]/g, "");
+  return {
+    raw: text,
+    digits: digits ? String(Number(digits)) : null,
+  };
+};
+
+const transactionMatchesToken = (tx: Transaction, value: string | number | undefined | null) => {
+  const token = normalizeTransactionToken(value);
+  if (!token) return false;
+  if (String(tx.id) === token.raw) return true;
+  if (tx.reference && tx.reference === token.raw) return true;
+  const referenceDigits = tx.reference ? normalizeTransactionToken(tx.reference)?.digits : null;
+  return Boolean(token.digits && referenceDigits && token.digits === referenceDigits);
+};
+
+const findTransactionByToken = (items: Transaction[], value: string | number | undefined | null) =>
+  items.find((item) => transactionMatchesToken(item, value)) ?? null;
+
 const defaultUser = {
   name: "Scott",
   email: "scott@example.com",
@@ -547,7 +570,7 @@ function MockExperienceHome({ searchParams }: HomeProps) {
   const initialScreenQuery = pickQueryValue(resolvedSearchParams?.screen);
   const initialScreen = isScreenId(initialScreenQuery) ? initialScreenQuery : "welcome";
   const initialTxQuery = pickQueryValue(resolvedSearchParams?.tx);
-  const initialTxId = initialTxQuery ? Number(initialTxQuery) : undefined;
+  const initialTxToken = initialTxQuery ?? undefined;
   const router = useRouter();
   const { user, isAuthenticated, isHydrating, logout } = useAuth();
   const [activeScreen, setActiveScreen] = useState<ScreenId>(initialScreen);
@@ -556,8 +579,8 @@ function MockExperienceHome({ searchParams }: HomeProps) {
   const transactionsRef = useRef(transactions);
   const visibleTransactionsRef = useRef<Transaction[]>(transactions);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(() => {
-    if (initialScreen === "transaction" && initialTxId) {
-      return initialTransactions.find((item) => item.id === initialTxId) ?? null;
+    if (initialScreen === "transaction" && initialTxToken) {
+      return findTransactionByToken(initialTransactions, initialTxToken);
     }
     return null;
   });
@@ -819,7 +842,8 @@ const navigate = (screen: ScreenId, pushHistory = true) => {
 const viewTransaction = (tx: Transaction) => {
   setSelectedTransaction(tx);
   setMessage(null);
-  window.history.pushState({ screen: "transaction", txId: tx.id }, "", `/?screen=transaction&tx=${tx.id}`);
+  const txToken = tx.reference ?? String(tx.id);
+  window.history.pushState({ screen: "transaction", txId: txToken }, "", `/?screen=transaction&tx=${encodeURIComponent(txToken)}`);
   setActiveScreen("transaction");
 };
 
@@ -848,12 +872,12 @@ useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const fallbackScreen = (params.get("screen") as ScreenId) || "welcome";
     const fallbackTx = params.get("tx");
-    const state = (event.state || {}) as { screen?: ScreenId; txId?: number };
+    const state = (event.state || {}) as { screen?: ScreenId; txId?: string | number };
     const screenFromState = state.screen || fallbackScreen;
-    const txFromState = state.txId ?? (fallbackTx ? Number(fallbackTx) : undefined);
+    const txFromState = state.txId ?? fallbackTx ?? undefined;
     setActiveScreen(screenFromState);
     if (screenFromState === "transaction" && txFromState) {
-      setSelectedTransaction(visibleTransactionsRef.current.find((item) => item.id === txFromState) ?? null);
+      setSelectedTransaction(findTransactionByToken(visibleTransactionsRef.current, txFromState));
     } else if (screenFromState !== "transaction") {
       setSelectedTransaction(null);
     }
@@ -862,6 +886,18 @@ useEffect(() => {
   window.addEventListener("popstate", handlePopState);
   return () => window.removeEventListener("popstate", handlePopState);
 }, []);
+
+useEffect(() => {
+  if (!liveDataEnabled || activeScreen !== "transaction" || !selectedTransaction) {
+    return;
+  }
+  const syncedTransaction =
+    findTransactionByToken(displayTransactions, selectedTransaction.reference ?? selectedTransaction.id) ??
+    null;
+  if (syncedTransaction && syncedTransaction.id !== selectedTransaction.id) {
+    setSelectedTransaction(syncedTransaction);
+  }
+}, [activeScreen, displayTransactions, selectedTransaction]);
 
 const updateTransaction = (id: number, mapper: (tx: Transaction) => Transaction) => {
   let updatedTx: Transaction | null = null;
@@ -2194,7 +2230,7 @@ const handleWalletWithdraw = async () => {
 
   const renderTransactionDetail = () => {
     const tx = liveDataEnabled && selectedTransaction
-      ? displayTransactions.find((item) => item.id === selectedTransaction.id) ?? selectedTransaction
+      ? findTransactionByToken(displayTransactions, selectedTransaction.reference ?? selectedTransaction.id) ?? selectedTransaction
       : selectedTransaction;
     if (!tx) {
       return (
