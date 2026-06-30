@@ -7,10 +7,12 @@ import { Header } from "@/components/Header";
 import { SignaturePad, type SignaturePadHandle } from "@/components/SignaturePad";
 import {
   useApproveEscrow,
+  useApproveMilestone,
   useCancelEscrow,
   useCreateEscrow,
   useFundEscrow,
   useRejectEscrow,
+  useRejectMilestone,
   useEscrowSummary,
   useEscrows,
   useNotifications,
@@ -583,7 +585,9 @@ function MockExperienceHome({ searchParams }: HomeProps) {
   const [dismissedNotifications, setDismissedNotifications] = useState<string[]>([]);
   const createEscrowMutation = useCreateEscrow();
   const approveEscrowMutation = useApproveEscrow();
+  const approveMilestoneMutation = useApproveMilestone();
   const rejectEscrowMutation = useRejectEscrow();
+  const rejectMilestoneMutation = useRejectMilestone();
   const cancelEscrowMutation = useCancelEscrow();
   const fundEscrowMutation = useFundEscrow();
   const notificationsQuery = useNotifications();
@@ -1034,6 +1038,34 @@ const updateTransaction = (id: number, mapper: (tx: Transaction) => Transaction)
     }
     if (target.status !== "Active") {
       setMessage("Milestones can only be approved once the escrow is active and funded.");
+      return;
+    }
+    if (liveDataEnabled) {
+      const escrowId = target.reference ?? `PO-${target.id}`;
+      const mutation = decision === "approve" ? approveMilestoneMutation : rejectMilestoneMutation;
+      const actionLabel = decision === "approve" ? "approve" : "reject";
+      const executeLiveDecision = async () => {
+        try {
+          await mutation.mutateAsync({ escrowId, milestoneId });
+          setMessage(
+            decision === "approve"
+              ? "Milestone approved and dummy funds released to the seller."
+              : "Milestone rejected and sent back for revision.",
+          );
+        } catch (error) {
+          setMessage(error instanceof Error ? error.message : `Unable to ${actionLabel} milestone.`);
+        }
+      };
+      if (decision === "approve") {
+        confirm({
+          title: "Approve milestone?",
+          body: "Approve this milestone and release only this milestone's dummy funds to the seller.",
+          confirmLabel: "Approve milestone",
+          onConfirm: executeLiveDecision,
+        });
+        return;
+      }
+      void executeLiveDecision();
       return;
     }
     const executeDecision = () => {
@@ -2236,16 +2268,16 @@ const handleWalletWithdraw = async () => {
                             <button
                               className="btn"
                               onClick={() => handleMilestoneDecision(tx.id, milestone.id, "approve")}
-                              disabled={!canReviewMilestones}
+                              disabled={!canReviewMilestones || approveMilestoneMutation.isPending}
                             >
-                              Approve
+                              {approveMilestoneMutation.isPending ? "Approving..." : "Approve"}
                             </button>
                             <button
                               className="ghost"
                               onClick={() => handleMilestoneDecision(tx.id, milestone.id, "reject")}
-                              disabled={!canReviewMilestones}
+                              disabled={!canReviewMilestones || rejectMilestoneMutation.isPending}
                             >
-                              Reject
+                              {rejectMilestoneMutation.isPending ? "Rejecting..." : "Reject"}
                             </button>
                           </>
                         ) : null}

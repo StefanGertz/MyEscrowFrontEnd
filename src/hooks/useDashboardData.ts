@@ -102,6 +102,11 @@ type EscrowActionPayload = {
   escrowId: string;
 };
 
+type MilestoneActionPayload = {
+  escrowId: string;
+  milestoneId: string;
+};
+
 export function useReleaseEscrow() {
   const queryClient = useQueryClient();
 
@@ -140,6 +145,28 @@ export const useApproveEscrow = buildEscrowAction("approve");
 export const useRejectEscrow = buildEscrowAction("reject");
 export const useCancelEscrow = buildEscrowAction("cancel");
 export const useFundEscrow = buildEscrowAction("fund");
+
+const buildMilestoneAction =
+  (path: string) =>
+  () => {
+    const queryClient = useQueryClient();
+    return useMutation({
+      mutationFn: ({ escrowId, milestoneId }: MilestoneActionPayload) =>
+        fetchJSON<{ escrowId: string; milestoneId: number }>(
+          `/api/dashboard/escrows/${escrowId}/milestones/${milestoneId}/${path}`,
+          {
+            method: "POST",
+          },
+        ),
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["dashboard", "escrows"] });
+        queryClient.invalidateQueries({ queryKey: ["dashboard", "overview"] });
+      },
+    });
+  };
+
+export const useApproveMilestone = buildMilestoneAction("approve");
+export const useRejectMilestone = buildMilestoneAction("reject");
 
 type ResolvePayload = {
   disputeId: string;
