@@ -9,10 +9,32 @@ import type {
 } from "@/lib/mockDashboard";
 import { apiFetch } from "@/lib/apiClient";
 
+const parseErrorMessage = async (response: Response) => {
+  const raw = await response.text();
+  if (!raw) {
+    return `Request failed: ${response.status}`;
+  }
+  try {
+    const parsed = JSON.parse(raw) as {
+      error?: string;
+      message?: string;
+      issues?: Array<{ message?: string }>;
+    };
+    if (parsed.message) return parsed.message;
+    if (parsed.error) return parsed.error;
+    if (parsed.issues?.length) {
+      return parsed.issues.map((issue) => issue.message).filter(Boolean).join(" ");
+    }
+  } catch {
+    // Fall back to the raw body if it is not JSON.
+  }
+  return raw;
+};
+
 const fetchJSON = async <T>(input: string, init?: RequestInit): Promise<T> => {
   const response = await apiFetch(input, init);
   if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`);
+    throw new Error(await parseErrorMessage(response));
   }
   return (await response.json()) as T;
 };
