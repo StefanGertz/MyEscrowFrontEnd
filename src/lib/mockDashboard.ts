@@ -8,6 +8,7 @@ export type SummaryMetric = {
 export type EscrowStatus = "success" | "warning";
 
 export type EscrowRecord = {
+  escrowId?: number;
   id: string;
   title?: string;
   description?: string;

@@ -450,7 +450,7 @@ const mapEscrowsToTransactions = (
     return [];
   }
   return escrows.map((record, index) => {
-    const numericId = Number(record.id.replace(/[^0-9]/g, "")) || 5000 + index;
+    const numericId = record.escrowId ?? Number(record.id.replace(/[^0-9]/g, "")) || 5000 + index;
     const amountValue = parseCurrencyValue(record.amount);
     const counterpart = record.counterpart || "Counterparty";
     const approved = record.counterpartyApproved;
