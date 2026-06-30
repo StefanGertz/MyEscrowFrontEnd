@@ -72,6 +72,7 @@ export const handlers = [
       counterpart: body.counterpart,
       amount: body.amount,
       success: true,
+      invitationStatus: "existing_user",
     });
   }),
   http.post(`${baseUrl}/api/dashboard/escrows/:id/release`, ({ params }) => {

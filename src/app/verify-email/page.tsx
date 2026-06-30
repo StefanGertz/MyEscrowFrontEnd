@@ -33,6 +33,7 @@ function VerifyEmailContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialEmail = searchParams.get("email") ?? "";
+  const inviteReference = searchParams.get("invite") ?? "";
   const presetCode = searchParams.get("debugCode") ?? "";
   const expiresAt = searchParams.get("expiresAt");
   const { completeAuth, isAuthenticated, isHydrating } = useAuth();
@@ -44,9 +45,9 @@ function VerifyEmailContent() {
 
   useEffect(() => {
     if (!isHydrating && isAuthenticated) {
-      router.replace("/");
+      router.replace(inviteReference ? "/?screen=dashboard" : "/");
     }
-  }, [isHydrating, isAuthenticated, router]);
+  }, [inviteReference, isHydrating, isAuthenticated, router]);
 
   const formattedExpiry = useMemo(() => {
     if (!expiresAt) return null;
@@ -67,8 +68,13 @@ function VerifyEmailContent() {
         code: form.code.trim(),
       });
       completeAuth(response);
-      pushToast({ variant: "success", title: "Email verified. Welcome back!" });
-      router.replace("/");
+      pushToast({
+        variant: "success",
+        title: inviteReference
+          ? `Email verified. Invitation ${inviteReference} is ready.`
+          : "Email verified. Welcome back!",
+      });
+      router.replace(inviteReference ? "/?screen=dashboard" : "/");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Verification failed.";
       setError(message);
@@ -110,6 +116,7 @@ function VerifyEmailContent() {
           <p className="lead">
             Enter the 6-digit code we sent to{" "}
             <strong>{form.email || "your inbox"}</strong>.
+            {inviteReference ? ` This will unlock invitation ${inviteReference}.` : null}
             {formattedExpiry ? ` Code expires around ${formattedExpiry}.` : null}
           </p>
         </div>
@@ -158,7 +165,23 @@ function VerifyEmailContent() {
               {resendMutation.isPending ? "Sending..." : "Resend code"}
             </button>
             <span>
-              Entered the wrong email? <Link href="/signup">Start over</Link>
+              Entered the wrong email?{" "}
+              <Link
+                href={`/signup${
+                  (() => {
+                    const params = new URLSearchParams();
+                    if (form.email) {
+                      params.set("email", form.email);
+                    }
+                    if (inviteReference) {
+                      params.set("invite", inviteReference);
+                    }
+                    return params.size ? `?${params.toString()}` : "";
+                  })()
+                }`}
+              >
+                Start over
+              </Link>
             </span>
           </div>
         </form>

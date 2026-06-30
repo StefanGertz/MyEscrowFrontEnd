@@ -9,6 +9,7 @@ import {
   useApproveEscrow,
   useApproveMilestone,
   useCancelEscrow,
+  type CreateEscrowResponse,
   useCreateEscrow,
   useFundEscrow,
   useRejectEscrow,
@@ -467,7 +468,9 @@ const mapEscrowsToTransactions = (
       status = "Cancelled";
     }
     const pendingDetail =
-      lifecycleStatus === "pending_approval"
+      lifecycleStatus === "pending_counterparty_signup"
+        ? `Waiting for ${counterpart} to create an account`
+        : lifecycleStatus === "pending_approval"
         ? `Waiting for ${counterpart}`
         : lifecycleStatus === "funding_pending"
           ? "Buyer funding required"
@@ -478,18 +481,23 @@ const mapEscrowsToTransactions = (
       {
         title: "Agreement drafted",
         detail: pendingDetail,
-        status: lifecycleStatus === "pending_approval" ? "active" : "complete",
+        status:
+          lifecycleStatus === "pending_counterparty_signup" || lifecycleStatus === "pending_approval"
+            ? "active"
+            : "complete",
       },
       {
         title: "Funding",
         detail:
-          lifecycleStatus === "pending_approval"
+          lifecycleStatus === "pending_counterparty_signup"
+            ? "Counterparty must join before approval"
+            : lifecycleStatus === "pending_approval"
             ? "Buyer deposits after approval"
             : lifecycleStatus === "funding_pending"
               ? "Buyer funding pending"
               : "Funds secured in escrow",
         status:
-          lifecycleStatus === "pending_approval"
+          lifecycleStatus === "pending_counterparty_signup" || lifecycleStatus === "pending_approval"
             ? "upcoming"
             : lifecycleStatus === "funding_pending"
               ? "active"
@@ -626,7 +634,18 @@ function MockExperienceHome({ searchParams }: HomeProps) {
     const entries: NotificationEntry[] = [];
     displayTransactions.forEach((tx) => {
       if (tx.status === "Pending") {
-        if (tx.lifecycleStatus === "pending_approval") {
+        if (tx.lifecycleStatus === "pending_counterparty_signup") {
+          entries.push({
+            id: `invite-${tx.id}`,
+            txId: tx.id,
+            label: tx.title,
+            detail: tx.isOwner
+              ? `Invitation sent. Waiting for ${tx.counterpart} to create and verify an account.`
+              : "Finish signup and verify your email to unlock this escrow.",
+            meta: "Signup required",
+            requiresAction: false,
+          });
+        } else if (tx.lifecycleStatus === "pending_approval") {
           const waitingOnName =
             tx.isOwner ? (tx.userRole === "buyer" ? tx.seller : tx.buyer) : "You";
           entries.push({
@@ -708,6 +727,9 @@ function MockExperienceHome({ searchParams }: HomeProps) {
       return false;
     }
     if (tx.status === "Pending") {
+      if (tx.lifecycleStatus === "pending_counterparty_signup") {
+        return false;
+      }
       if (tx.lifecycleStatus === "pending_approval") {
         return !tx.isOwner;
       }
@@ -952,7 +974,7 @@ const updateTransaction = (id: number, mapper: (tx: Transaction) => Transaction)
     const approvalDetail =
       createForm.role === "buyer" ? "Seller review pending" : "Buyer review pending";
     try {
-      const response = await createEscrowMutation.mutateAsync({
+      const response: CreateEscrowResponse = await createEscrowMutation.mutateAsync({
         title: responseTitle,
         counterpart: createForm.counterpartyName || "Counterparty",
         counterpartyEmail: createForm.counterpartyEmail || "counterparty@example.com",
@@ -966,19 +988,40 @@ const updateTransaction = (id: number, mapper: (tx: Transaction) => Transaction)
           description: milestone.description || undefined,
         })),
       });
+      const inviteStatus = response.invitationStatus ?? "existing_user";
+      const requiresSignup = inviteStatus === "signup_required" || inviteStatus === "verification_required";
+      const pendingContext =
+        inviteStatus === "signup_required"
+          ? "Counterparty signup pending"
+          : inviteStatus === "verification_required"
+            ? "Counterparty verification pending"
+            : approvalContext;
+      const pendingApprovalDetail =
+        inviteStatus === "signup_required"
+          ? `${createForm.counterpartyName || "Counterparty"} must create and verify a MyEscrow account.`
+          : inviteStatus === "verification_required"
+            ? `${createForm.counterpartyName || "Counterparty"} must verify their email before review.`
+            : approvalDetail;
       const timestamp = new Date().toISOString();
       const newTx: Transaction = {
         id: response.escrowId ?? Math.floor(10000 + Math.random() * 90000),
+        reference: response.reference,
         title: responseTitle,
         counterpart: createForm.role === "buyer" ? sellerInfo.name : buyerInfo.name,
         amount: escrowAmount,
         status: "Pending",
-        context: approvalContext,
+        context: pendingContext,
+        lifecycleStatus: requiresSignup ? "pending_counterparty_signup" : "pending_approval",
+        fundingStatus: "not_funded",
         counterpartyApproved: false,
         description: descriptionValue || undefined,
         steps: [
           { title: "Agreement drafted", detail: "Creator signed the agreement", status: "complete" },
-          { title: "Awaiting approval", detail: approvalDetail, status: "active" },
+          {
+            title: requiresSignup ? "Awaiting signup" : "Awaiting approval",
+            detail: pendingApprovalDetail,
+            status: "active",
+          },
           { title: "Funding pending", detail: "Buyer funds after approval", status: "upcoming" },
         ],
         buyer: buyerInfo.name,
@@ -996,8 +1039,10 @@ const updateTransaction = (id: number, mapper: (tx: Transaction) => Transaction)
           { id: randomId(), label: "Created", detail: `Created by ${currentUser.name}`, time: timestamp },
           {
             id: randomId(),
-            label: "Awaiting approval",
-            detail: `${createForm.counterpartyName || "Counterparty"} notified to review`,
+            label: requiresSignup ? "Invitation sent" : "Awaiting approval",
+            detail: requiresSignup
+              ? `${createForm.counterpartyName || "Counterparty"} must finish onboarding before review`
+              : `${createForm.counterpartyName || "Counterparty"} notified to review`,
             time: timestamp,
           },
         ],
@@ -1017,7 +1062,13 @@ const updateTransaction = (id: number, mapper: (tx: Transaction) => Transaction)
       setEditingMilestoneId(null);
       setAgreementAccepted(false);
       resetSignaturePad();
-      setMessage("Escrow drafted. Funding will start after both parties sign.");
+      setMessage(
+        inviteStatus === "signup_required"
+          ? "Invitation sent. Funding can continue after the counterparty creates and verifies an account."
+          : inviteStatus === "verification_required"
+            ? "Invitation sent. Funding can continue after the counterparty verifies their account."
+            : "Escrow drafted. Funding will start after both parties sign.",
+      );
       navigate("dashboard");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to create escrow. Try again shortly.");
@@ -2154,11 +2205,16 @@ const handleWalletWithdraw = async () => {
     }
     const canReviewMilestones = tx.counterpartyApproved && tx.status === "Active";
     const isCurrentUserBuyer = sameEmail(currentUser.email, tx.buyerEmail);
+    const isAwaitingSignup = tx.lifecycleStatus === "pending_counterparty_signup";
     const isAwaitingApproval = tx.lifecycleStatus === "pending_approval";
     const isAwaitingFunding = tx.lifecycleStatus === "funding_pending";
     const canApproveEscrow = !tx.isOwner && isAwaitingApproval;
     const canFundEscrow = isCurrentUserBuyer && isAwaitingFunding;
-    const canCancelEscrow = Boolean(tx.isOwner) && tx.status !== "Cancelled" && tx.status !== "Released" && isAwaitingApproval;
+    const canCancelEscrow =
+      Boolean(tx.isOwner) &&
+      tx.status !== "Cancelled" &&
+      tx.status !== "Released" &&
+      (isAwaitingSignup || isAwaitingApproval);
     return (
       <section className="screen active">
         <h2 className="page-title">Transaction</h2>

@@ -1,24 +1,33 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { useToast } from "@/components/ToastProvider";
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const invitedEmail = searchParams.get("email") ?? "";
+  const inviteReference = searchParams.get("invite") ?? "";
   const { login, isAuthenticated, isHydrating } = useAuth();
   const { pushToast } = useToast();
-  const [form, setForm] = useState({ email: "", password: "" });
+  const [form, setForm] = useState({ email: invitedEmail, password: "" });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isHydrating && isAuthenticated) {
-      router.replace("/");
+    if (invitedEmail) {
+      setForm((prev) => ({ ...prev, email: invitedEmail }));
     }
-  }, [isHydrating, isAuthenticated, router]);
+  }, [invitedEmail]);
+
+  useEffect(() => {
+    if (!isHydrating && isAuthenticated) {
+      router.replace(inviteReference ? "/?screen=dashboard" : "/");
+    }
+  }, [inviteReference, isHydrating, isAuthenticated, router]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -32,9 +41,11 @@ export default function LoginPage() {
       await login({ email: form.email, password: form.password });
       pushToast({
         variant: "success",
-        title: "Welcome back! Redirecting to your dashboard.",
+        title: inviteReference
+          ? `Welcome back. Invitation ${inviteReference} is ready to review.`
+          : "Welcome back! Redirecting to your dashboard.",
       });
-      router.replace("/");
+      router.replace(inviteReference ? "/?screen=dashboard" : "/");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unable to sign in.";
       setError(message);
@@ -48,6 +59,15 @@ export default function LoginPage() {
     return null;
   }
 
+  const signupParams = new URLSearchParams();
+  if (invitedEmail) {
+    signupParams.set("email", invitedEmail);
+  }
+  if (inviteReference) {
+    signupParams.set("invite", inviteReference);
+  }
+  const signupHref = signupParams.size ? `/signup?${signupParams.toString()}` : "/signup";
+
   return (
     <main className="auth-page">
       <div className="auth-card">
@@ -57,7 +77,9 @@ export default function LoginPage() {
             Access MyEscrow
           </h1>
           <p className="lead">
-            Track milestones, funding, and alerts from one secure console.
+            {inviteReference
+              ? `Sign in to continue escrow invitation ${inviteReference}.`
+              : "Track milestones, funding, and alerts from one secure console."}
           </p>
         </div>
         <form className="auth-form" onSubmit={handleSubmit}>
@@ -88,7 +110,7 @@ export default function LoginPage() {
             autoComplete="current-password"
           />
           <div className="auth-helper">
-            <Link href="/signup">Need an account?</Link>
+            <Link href={signupHref}>Need an account?</Link>
             <Link href="/forgot-password" className="ghost">
               Forgot password?
             </Link>

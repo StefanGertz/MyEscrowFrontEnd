@@ -74,7 +74,7 @@ export function LiveDashboard() {
       return;
     }
     try {
-      await createEscrow.mutateAsync({
+      const response = await createEscrow.mutateAsync({
         title: escrowForm.title,
         counterpart: escrowForm.counterpart,
         counterpartyEmail: escrowForm.counterpartyEmail,
@@ -82,6 +82,12 @@ export function LiveDashboard() {
         creatorRole: escrowForm.creatorRole,
         description: escrowForm.description || undefined,
       });
+      const inviteMessage =
+        response.invitationStatus === "signup_required"
+          ? "Invitation sent. The counterparty must create and verify an account before review."
+          : response.invitationStatus === "verification_required"
+            ? "Invitation sent. The counterparty must verify their existing account before review."
+            : "Escrow created in staging.";
       setEscrowForm({
         title: "",
         counterpart: "",
@@ -90,7 +96,7 @@ export function LiveDashboard() {
         amount: "",
         description: "",
       });
-      pushToast({ variant: "success", title: "Escrow created in staging." });
+      pushToast({ variant: "success", title: inviteMessage });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to create escrow.";
       setFormError(message);

@@ -1,18 +1,27 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { useToast } from "@/components/ToastProvider";
 
 export default function SignupPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const invitedEmail = searchParams.get("email") ?? "";
+  const inviteReference = searchParams.get("invite") ?? "";
   const { signup, isAuthenticated, isHydrating } = useAuth();
   const { pushToast } = useToast();
-  const [form, setForm] = useState({ name: "", email: "", password: "", confirmPassword: "" });
+  const [form, setForm] = useState({ name: "", email: invitedEmail, password: "", confirmPassword: "" });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (invitedEmail) {
+      setForm((prev) => ({ ...prev, email: invitedEmail }));
+    }
+  }, [invitedEmail]);
 
   const passwordChecks = useMemo(() => {
     const value = form.password;
@@ -28,9 +37,9 @@ export default function SignupPage() {
 
   useEffect(() => {
     if (!isHydrating && isAuthenticated) {
-      router.replace("/");
+      router.replace(inviteReference ? "/?screen=dashboard" : "/");
     }
-  }, [isHydrating, isAuthenticated, router]);
+  }, [inviteReference, isHydrating, isAuthenticated, router]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -57,17 +66,24 @@ export default function SignupPage() {
       if (result.status === "session") {
         pushToast({
           variant: "success",
-          title: "Account created. Let's build your first escrow.",
+          title: inviteReference
+            ? `Account created. Invitation ${inviteReference} is ready to review.`
+            : "Account created. Let's build your first escrow.",
         });
-        router.replace("/");
+        router.replace(inviteReference ? "/?screen=dashboard" : "/");
         return;
       }
       pushToast({
         variant: "info",
         title: "Verify your email",
-        body: "We emailed you a six-digit code to finish signup.",
+        body: inviteReference
+          ? "We emailed you a six-digit code. After verification, your invitation will be ready to review."
+          : "We emailed you a six-digit code to finish signup.",
       });
       const params = new URLSearchParams({ email: result.email });
+      if (inviteReference) {
+        params.set("invite", inviteReference);
+      }
       if (result.debugCode) {
         params.set("debugCode", result.debugCode);
       }
@@ -88,6 +104,15 @@ export default function SignupPage() {
     return null;
   }
 
+  const loginParams = new URLSearchParams();
+  if (invitedEmail) {
+    loginParams.set("email", invitedEmail);
+  }
+  if (inviteReference) {
+    loginParams.set("invite", inviteReference);
+  }
+  const loginHref = loginParams.size ? `/login?${loginParams.toString()}` : "/login";
+
   return (
     <main className="auth-page">
       <div className="auth-card">
@@ -97,7 +122,9 @@ export default function SignupPage() {
             Join MyEscrow
           </h1>
           <p className="lead">
-            Collaborate with buyers and sellers using milestone-based payouts.
+            {inviteReference
+              ? `Create your account to continue escrow invitation ${inviteReference}.`
+              : "Collaborate with buyers and sellers using milestone-based payouts."}
           </p>
         </div>
         <form className="auth-form" onSubmit={handleSubmit}>
@@ -169,7 +196,7 @@ export default function SignupPage() {
             {submitting ? "Creating account..." : "Create account"}
           </button>
           <div className="auth-footer">
-            Already have a login? <Link href="/login">Sign in</Link>
+            Already have a login? <Link href={loginHref}>Sign in</Link>
           </div>
         </form>
       </div>

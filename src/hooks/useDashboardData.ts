@@ -227,12 +227,20 @@ type CreateEscrowPayload = {
   }>;
 };
 
+export type CreateEscrowResponse = {
+  success: true;
+  escrowId: number;
+  reference?: string;
+  createdAt?: string;
+  invitationStatus?: "existing_user" | "signup_required" | "verification_required";
+};
+
 export function useCreateEscrow() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (payload: CreateEscrowPayload) =>
-      fetchJSON<{ escrowId: number }>("/api/dashboard/escrows/create", {
+      fetchJSON<CreateEscrowResponse>("/api/dashboard/escrows/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
