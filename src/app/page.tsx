@@ -659,12 +659,15 @@ function MockExperienceHome({ searchParams }: HomeProps) {
             requiresAction: !tx.isOwner,
           });
         } else if (tx.lifecycleStatus === "funding_pending") {
+          const buyerNeedsTopUp = sameEmail(tx.buyerEmail, currentUser.email) && walletBalanceDisplay < tx.amount;
           entries.push({
             id: `funding-${tx.id}`,
             txId: tx.id,
             label: tx.title,
-            detail: "Counterparty approved. Fund this escrow with dummy wallet money to activate it.",
-            meta: "Funding required",
+            detail: buyerNeedsTopUp
+              ? `Counterparty approved. Top up your wallet before funding ${tx.title}.`
+              : "Counterparty approved. Fund this escrow to activate milestone work.",
+            meta: buyerNeedsTopUp ? "Wallet top-up required" : "Funding required",
             requiresAction: sameEmail(tx.buyerEmail, currentUser.email),
           });
         }
@@ -704,7 +707,7 @@ function MockExperienceHome({ searchParams }: HomeProps) {
       });
     }
     return entries.slice(0, 4);
-  }, [displayTransactions, currentUser.email]);
+  }, [displayTransactions, currentUser.email, walletBalanceDisplay]);
   const shouldUseFallbackNotifications = notificationsQuery.isError || notificationList.length === 0;
   const notificationsToRender = shouldUseFallbackNotifications ? fallbackNotifications : notificationList;
   const timelineEntries = liveDataEnabled
@@ -2287,7 +2290,9 @@ const handleWalletWithdraw = async () => {
                   ? walletShortfall > 0
                     ? `Top up your wallet with ${formatCurrency(walletShortfall)} more before you can fund this escrow.`
                     : "Move dummy wallet funds into escrow so milestone work can begin."
-                  : "This draft is still waiting for counterparty approval."}
+                  : isAwaitingSignup
+                    ? "This escrow is waiting for the counterparty to finish signup and verification."
+                    : "This draft is still waiting for counterparty approval."}
             </p>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               {canApproveEscrow ? (
@@ -2342,7 +2347,13 @@ const handleWalletWithdraw = async () => {
             </div>
             {!canReviewMilestones ? (
               <div className="muted" style={{ marginTop: 8 }}>
-                Waiting on {isCurrentUserBuyer ? "the seller to approve" : "the buyer to approve and fund"} the escrow before milestone decisions can be made.
+                {isAwaitingSignup
+                  ? "Milestone decisions unlock after the counterparty finishes signup and verification."
+                  : isAwaitingApproval
+                    ? `Milestone decisions unlock after ${isCurrentUserBuyer ? "the seller approves" : "you approve"} the escrow.`
+                    : isAwaitingFunding
+                      ? `Milestone decisions unlock after ${isCurrentUserBuyer ? "you fund" : "the buyer funds"} the escrow.`
+                      : "Milestone decisions are not available yet."}
               </div>
             ) : null}
             <div className="tx-list" style={{ marginTop: 12 }}>
