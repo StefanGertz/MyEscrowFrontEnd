@@ -13,6 +13,7 @@ import {
   useFundEscrow,
   useRejectEscrow,
   useRejectMilestone,
+  useResubmitMilestone,
   useEscrowSummary,
   useEscrows,
   useNotifications,
@@ -588,6 +589,7 @@ function MockExperienceHome({ searchParams }: HomeProps) {
   const approveMilestoneMutation = useApproveMilestone();
   const rejectEscrowMutation = useRejectEscrow();
   const rejectMilestoneMutation = useRejectMilestone();
+  const resubmitMilestoneMutation = useResubmitMilestone();
   const cancelEscrowMutation = useCancelEscrow();
   const fundEscrowMutation = useFundEscrow();
   const notificationsQuery = useNotifications();
@@ -1144,6 +1146,50 @@ const updateTransaction = (id: number, mapper: (tx: Transaction) => Transaction)
       return;
     }
     executeDecision();
+  };
+
+  const handleMilestoneResubmit = async (txId: number, milestoneId: string) => {
+    const target = transactionsRef.current.find((item) => item.id === txId);
+    if (!target) {
+      setMessage("Transaction not found.");
+      return;
+    }
+    if (liveDataEnabled) {
+      const escrowId = target.reference ?? `PO-${target.id}`;
+      try {
+        await resubmitMilestoneMutation.mutateAsync({ escrowId, milestoneId });
+        setMessage("Milestone resubmitted for buyer review.");
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : "Unable to resubmit milestone.");
+      }
+      return;
+    }
+
+    const updated = updateTransaction(txId, (tx) => ({
+      ...tx,
+      milestones: tx.milestones.map((milestone) =>
+        milestone.id === milestoneId
+          ? {
+              ...milestone,
+              status: "pending",
+              rejectedAt: undefined,
+            }
+          : milestone,
+      ),
+      context: "Milestones active",
+      timeline: [
+        {
+          id: randomId(),
+          label: "Milestone resubmitted",
+          detail: "Seller resubmitted work for buyer review",
+          time: new Date().toISOString(),
+        },
+        ...tx.timeline,
+      ],
+    }));
+    if (updated) {
+      setMessage("Milestone resubmitted for buyer review.");
+    }
   };
 
   const handleApproveEscrow = async (tx: Transaction) => {
@@ -2282,6 +2328,14 @@ const handleWalletWithdraw = async () => {
                           </>
                         ) : null}
                       </>
+                    ) : milestone.status === "rejected" && sameEmail(tx.sellerEmail, currentUser.email) ? (
+                      <button
+                        className="ghost"
+                        onClick={() => handleMilestoneResubmit(tx.id, milestone.id)}
+                        disabled={resubmitMilestoneMutation.isPending}
+                      >
+                        {resubmitMilestoneMutation.isPending ? "Resubmitting..." : "Resubmit"}
+                      </button>
                     ) : (
                       <span className={`milestone-chip milestone-chip--${milestone.status}`}>
                         {milestone.status === "released" ? "Approved" : "Rejected"}

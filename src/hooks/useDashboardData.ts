@@ -167,6 +167,7 @@ const buildMilestoneAction =
 
 export const useApproveMilestone = buildMilestoneAction("approve");
 export const useRejectMilestone = buildMilestoneAction("reject");
+export const useResubmitMilestone = buildMilestoneAction("resubmit");
 
 type ResolvePayload = {
   disputeId: string;
