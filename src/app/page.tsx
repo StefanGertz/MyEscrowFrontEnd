@@ -2210,6 +2210,7 @@ const handleWalletWithdraw = async () => {
     const isAwaitingFunding = tx.lifecycleStatus === "funding_pending";
     const canApproveEscrow = !tx.isOwner && isAwaitingApproval;
     const canFundEscrow = isCurrentUserBuyer && isAwaitingFunding;
+    const walletShortfall = Math.max(tx.amount - walletBalanceDisplay, 0);
     const canCancelEscrow =
       Boolean(tx.isOwner) &&
       tx.status !== "Cancelled" &&
@@ -2283,7 +2284,9 @@ const handleWalletWithdraw = async () => {
               {canApproveEscrow
                 ? "Review the invitation and approve or reject the escrow."
                 : canFundEscrow
-                  ? "Move dummy wallet funds into escrow so milestone work can begin."
+                  ? walletShortfall > 0
+                    ? `Top up your wallet with ${formatCurrency(walletShortfall)} more before you can fund this escrow.`
+                    : "Move dummy wallet funds into escrow so milestone work can begin."
                   : "This draft is still waiting for counterparty approval."}
             </p>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -2316,7 +2319,8 @@ const handleWalletWithdraw = async () => {
               ) : null}
               {canFundEscrow && walletBalanceDisplay < tx.amount ? (
                 <div className="muted" style={{ width: "100%" }}>
-                  Add more dummy wallet funds before funding this escrow.
+                  Wallet balance: {formatCurrency(walletBalanceDisplay)}. Required: {formatCurrency(tx.amount)}. Top up
+                  your wallet before funding this escrow.
                 </div>
               ) : null}
               {canCancelEscrow ? (
