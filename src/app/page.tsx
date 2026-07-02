@@ -914,6 +914,11 @@ const updateTransaction = (id: number, mapper: (tx: Transaction) => Transaction)
   return updatedTx;
 };
 
+const findTransactionById = (id: number) => {
+  const pool = liveDataEnabled ? visibleTransactionsRef.current : transactionsRef.current;
+  return pool.find((item) => item.id === id) ?? null;
+};
+
   const handleCreateNext = () => {
     if (!createForm.counterpartyName || !createForm.counterpartyEmail || !Number(createForm.amount)) {
       setMessage("Fill in counterparty info and amount to continue.");
@@ -1110,7 +1115,7 @@ const updateTransaction = (id: number, mapper: (tx: Transaction) => Transaction)
   };
 
   const handleMilestoneDecision = (txId: number, milestoneId: string, decision: "approve" | "reject") => {
-    const target = transactionsRef.current.find((item) => item.id === txId);
+    const target = findTransactionById(txId);
     if (!target) {
       setMessage("Transaction not found.");
       return;
@@ -1234,7 +1239,7 @@ const updateTransaction = (id: number, mapper: (tx: Transaction) => Transaction)
   };
 
   const handleMilestoneResubmit = async (txId: number, milestoneId: string) => {
-    const target = transactionsRef.current.find((item) => item.id === txId);
+    const target = findTransactionById(txId);
     if (!target) {
       setMessage("Transaction not found.");
       return;
