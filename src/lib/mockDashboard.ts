@@ -20,6 +20,11 @@ export type EscrowRecord = {
   counterpartyApproved: boolean;
   lifecycleStatus?: string;
   fundingStatus?: string;
+  creatorRole?: "buyer" | "seller";
+  createdAt?: string;
+  approvedAt?: string;
+  buyerSignatureDataUrl?: string;
+  sellerSignatureDataUrl?: string;
   role?: "buyer" | "seller";
   isOwner?: boolean;
   buyer?: {

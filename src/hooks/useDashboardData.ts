@@ -122,6 +122,7 @@ type ReleasePayload = {
 
 type EscrowActionPayload = {
   escrowId: string;
+  signatureDataUrl?: string;
 };
 
 type MilestoneActionPayload = {
@@ -152,9 +153,15 @@ const buildEscrowAction =
   () => {
     const queryClient = useQueryClient();
     return useMutation({
-      mutationFn: ({ escrowId }: EscrowActionPayload) =>
+      mutationFn: ({ escrowId, signatureDataUrl }: EscrowActionPayload) =>
         fetchJSON<{ escrowId: string }>(`/api/dashboard/escrows/${escrowId}/${path}`, {
           method: "POST",
+          ...(signatureDataUrl
+            ? {
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ signatureDataUrl }),
+              }
+            : {}),
         }),
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: ["dashboard", "escrows"] });
@@ -220,6 +227,7 @@ type CreateEscrowPayload = {
   creatorRole: "buyer" | "seller";
   category?: string;
   description?: string;
+  signatureDataUrl?: string;
   milestones?: Array<{
     title: string;
     amount: number;

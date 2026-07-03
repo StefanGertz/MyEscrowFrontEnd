@@ -10,6 +10,7 @@ import {
 
 export type SignaturePadHandle = {
   clear: () => void;
+  getDataUrl: () => string | null;
 };
 
 type SignaturePadProps = {
@@ -49,6 +50,10 @@ export const SignaturePad = forwardRef<SignaturePadHandle, SignaturePadProps>(
 
     useImperativeHandle(ref, () => ({
       clear: () => clearCanvas(),
+      getDataUrl: () => {
+        const canvas = canvasRef.current;
+        return canvas && hasDrawnRef.current ? canvas.toDataURL("image/png") : null;
+      },
     }));
 
     useEffect(() => {

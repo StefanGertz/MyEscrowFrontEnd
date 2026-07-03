@@ -74,6 +74,11 @@ type Transaction = {
   context: string;
   lifecycleStatus?: string;
   fundingStatus?: string;
+  creatorRole?: "buyer" | "seller";
+  createdAt?: string;
+  approvedAt?: string;
+  buyerSignatureDataUrl?: string;
+  sellerSignatureDataUrl?: string;
   userRole?: "buyer" | "seller";
   isOwner?: boolean;
   steps: ProcessStep[];
@@ -400,6 +405,17 @@ const formatDateTime = (value: string) =>
     minute: "2-digit",
   });
 
+const formatAgreementDate = (value?: string) =>
+  value
+    ? new Date(value).toLocaleString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      })
+    : "Date unavailable";
+
 const randomId = () => Math.random().toString(36).slice(2, 9);
 
 const slugify = (value: string) =>
@@ -417,50 +433,204 @@ const parseCurrencyValue = (value: string) => {
 const sameEmail = (left?: string, right?: string) =>
   left?.trim().toLowerCase() === right?.trim().toLowerCase();
 
-const buildAgreementLines = (tx: Transaction) => {
-  const lines = [
-    `Agreement title: ${tx.title}`,
-    `Buyer: ${tx.buyer} (${tx.buyerEmail})`,
-    `Seller: ${tx.seller} (${tx.sellerEmail})`,
-    `Escrow amount: ${formatCurrency(tx.amount)}`,
-    `Status: ${tx.status} - ${tx.context}`,
-    "",
-    "Milestones:",
-  ];
-  tx.milestones.forEach((milestone, index) => {
-    lines.push(
-      `${index + 1}. ${milestone.title} - ${formatCurrency(milestone.amount)} (${milestone.status})${
-        milestone.description ? ` - ${milestone.description}` : ""
-      }`,
-    );
-  });
-  if (tx.timeline.length) {
-    lines.push("", "Recent timeline:");
-    tx.timeline.slice(0, 5).forEach((event) => {
-      lines.push(`${formatDateTime(event.time)} • ${event.label} - ${event.detail}`);
-    });
-  }
-  return lines;
-};
-
 const downloadAgreementPdf = (tx: Transaction) => {
   const doc = new jsPDF();
-  doc.setFontSize(16);
-  doc.text(tx.title, 14, 20);
-  doc.setFontSize(11);
-  let cursorY = 30;
-  const addLine = (line: string) => {
-    const wrapped = doc.splitTextToSize(line, 180);
-    wrapped.forEach((segment: string) => {
-      if (cursorY > 280) {
-        doc.addPage();
-        cursorY = 20;
-      }
-      doc.text(segment, 14, cursorY);
-      cursorY += 6;
-    });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 18;
+  const contentWidth = pageWidth - margin * 2;
+  const navy = [15, 76, 129] as const;
+  const teal = [30, 147, 145] as const;
+  const ink = [26, 38, 52] as const;
+  const muted = [92, 108, 124] as const;
+  const pale = [240, 246, 250] as const;
+  let cursorY = 0;
+
+  const addHeader = () => {
+    doc.setFillColor(...navy);
+    doc.rect(0, 0, pageWidth, 32, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(18);
+    doc.text("MYESCROW", margin, 15);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.text("ESCROW AGREEMENT", margin, 23);
+    doc.text(tx.reference ?? `ME-${tx.id}`, pageWidth - margin, 19, { align: "right" });
+    cursorY = 44;
   };
-  buildAgreementLines(tx).forEach(addLine);
+
+  const ensureSpace = (height: number) => {
+    if (cursorY + height <= pageHeight - 20) return;
+    doc.addPage();
+    addHeader();
+  };
+
+  const sectionTitle = (title: string) => {
+    ensureSpace(14);
+    doc.setDrawColor(...teal);
+    doc.setLineWidth(0.8);
+    doc.line(margin, cursorY, margin + 6, cursorY);
+    doc.setTextColor(...navy);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.text(title.toUpperCase(), margin + 9, cursorY + 1);
+    cursorY += 9;
+  };
+
+  const addWrappedText = (text: string, options?: { bold?: boolean; color?: readonly [number, number, number] }) => {
+    doc.setFont("helvetica", options?.bold ? "bold" : "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(...(options?.color ?? ink));
+    const lines = doc.splitTextToSize(text, contentWidth) as string[];
+    ensureSpace(lines.length * 5 + 2);
+    doc.text(lines, margin, cursorY);
+    cursorY += lines.length * 5 + 3;
+  };
+
+  addHeader();
+  doc.setTextColor(...ink);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(22);
+  const titleLines = doc.splitTextToSize(tx.title, contentWidth - 44) as string[];
+  doc.text(titleLines, margin, cursorY);
+  doc.setFillColor(...pale);
+  doc.roundedRect(pageWidth - margin - 42, cursorY - 6, 42, 18, 2, 2, "F");
+  doc.setTextColor(...navy);
+  doc.setFontSize(13);
+  doc.text(formatCurrency(tx.amount), pageWidth - margin - 4, cursorY + 5, { align: "right" });
+  cursorY += Math.max(titleLines.length * 8, 21);
+
+  doc.setFillColor(...pale);
+  doc.roundedRect(margin, cursorY, contentWidth, 25, 2, 2, "F");
+  doc.setFontSize(8);
+  doc.setTextColor(...muted);
+  doc.setFont("helvetica", "bold");
+  doc.text("BUYER", margin + 5, cursorY + 7);
+  doc.text("SELLER", margin + contentWidth / 2 + 4, cursorY + 7);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.setTextColor(...ink);
+  doc.text(tx.buyer, margin + 5, cursorY + 14);
+  doc.text(tx.seller, margin + contentWidth / 2 + 4, cursorY + 14);
+  doc.setFontSize(8);
+  doc.setTextColor(...muted);
+  doc.text(tx.buyerEmail, margin + 5, cursorY + 20);
+  doc.text(tx.sellerEmail, margin + contentWidth / 2 + 4, cursorY + 20);
+  cursorY += 36;
+
+  sectionTitle("Agreement terms");
+  addWrappedText(
+    tx.description ||
+      `The buyer and seller agree that ${formatCurrency(tx.amount)} will be held and released through MyEscrow according to the milestones below.`,
+  );
+
+  sectionTitle("Milestones");
+  if (!tx.milestones.length) {
+    addWrappedText("No separate milestones were specified for this agreement.", { color: muted });
+  } else {
+    tx.milestones.forEach((milestone, index) => {
+      const descriptionLines = milestone.description
+        ? (doc.splitTextToSize(milestone.description, contentWidth - 58) as string[])
+        : [];
+      const rowHeight = Math.max(15, 11 + descriptionLines.length * 4);
+      ensureSpace(rowHeight + 2);
+      doc.setFillColor(index % 2 === 0 ? 248 : 255, index % 2 === 0 ? 250 : 255, index % 2 === 0 ? 252 : 255);
+      doc.roundedRect(margin, cursorY - 4, contentWidth, rowHeight, 1.5, 1.5, "F");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(...ink);
+      doc.text(`${index + 1}. ${milestone.title}`, margin + 4, cursorY + 3);
+      doc.text(formatCurrency(milestone.amount), pageWidth - margin - 4, cursorY + 3, { align: "right" });
+      if (descriptionLines.length) {
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8);
+        doc.setTextColor(...muted);
+        doc.text(descriptionLines, margin + 9, cursorY + 9);
+      }
+      cursorY += rowHeight + 2;
+    });
+  }
+
+  ensureSpace(60);
+  sectionTitle("Signatures");
+  const inferredCreatorRole =
+    tx.creatorRole ?? (tx.timeline.find((event) => event.label === "Created")?.detail.includes("seller") ? "seller" : "buyer");
+  const creatorSignedAt = tx.createdAt ?? tx.timeline.find((event) => event.label === "Created")?.time;
+  const approvalEvent = tx.timeline.find((event) => /approved/i.test(event.label));
+  const signerWidth = (contentWidth - 8) / 2;
+  const signatureTop = cursorY;
+  const renderSignature = (
+    x: number,
+    role: "Buyer" | "Seller",
+    name: string,
+    email: string,
+    image: string | undefined,
+    signed: boolean,
+    signedAt: string | undefined,
+  ) => {
+    doc.setDrawColor(214, 224, 232);
+    doc.setFillColor(252, 253, 254);
+    doc.roundedRect(x, signatureTop, signerWidth, 45, 2, 2, "FD");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.setTextColor(...muted);
+    doc.text(role.toUpperCase(), x + 4, signatureTop + 7);
+    if (image && signed) {
+      doc.addImage(image, "PNG", x + 4, signatureTop + 9, signerWidth - 8, 16, undefined, "FAST");
+    } else if (signed) {
+      doc.setFont("times", "italic");
+      doc.setFontSize(18);
+      doc.setTextColor(...navy);
+      doc.text(name, x + 4, signatureTop + 22, { maxWidth: signerWidth - 8 });
+    } else {
+      doc.setFont("helvetica", "italic");
+      doc.setFontSize(10);
+      doc.setTextColor(...muted);
+      doc.text("Awaiting signature", x + 4, signatureTop + 21);
+    }
+    doc.setDrawColor(...teal);
+    doc.line(x + 4, signatureTop + 27, x + signerWidth - 4, signatureTop + 27);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(...ink);
+    doc.text(name, x + 4, signatureTop + 33);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(...muted);
+    doc.text(email, x + 4, signatureTop + 38);
+    doc.text(signed ? `Electronically signed ${formatAgreementDate(signedAt)}` : "Not yet signed", x + 4, signatureTop + 42);
+  };
+  const buyerSigned = inferredCreatorRole === "buyer" || tx.counterpartyApproved;
+  const sellerSigned = inferredCreatorRole === "seller" || tx.counterpartyApproved;
+  renderSignature(
+    margin,
+    "Buyer",
+    tx.buyer,
+    tx.buyerEmail,
+    tx.buyerSignatureDataUrl,
+    buyerSigned,
+    inferredCreatorRole === "buyer" ? creatorSignedAt : tx.approvedAt ?? approvalEvent?.time,
+  );
+  renderSignature(
+    margin + signerWidth + 8,
+    "Seller",
+    tx.seller,
+    tx.sellerEmail,
+    tx.sellerSignatureDataUrl,
+    sellerSigned,
+    inferredCreatorRole === "seller" ? creatorSignedAt : tx.approvedAt ?? approvalEvent?.time,
+  );
+
+  const pageCount = doc.getNumberOfPages();
+  for (let page = 1; page <= pageCount; page += 1) {
+    doc.setPage(page);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(...muted);
+    doc.text("Generated by MyEscrow • Electronic agreement record", margin, pageHeight - 9);
+    doc.text(`Page ${page} of ${pageCount}`, pageWidth - margin, pageHeight - 9, { align: "right" });
+  }
   doc.save(`${slugify(tx.title)}-agreement.pdf`);
 };
 
@@ -543,6 +713,11 @@ const mapEscrowsToTransactions = (
       context: record.stage || (approved ? "Milestones active" : "Approval pending"),
       lifecycleStatus,
       fundingStatus,
+      creatorRole: record.creatorRole,
+      createdAt: record.createdAt,
+      approvedAt: record.approvedAt,
+      buyerSignatureDataUrl: record.buyerSignatureDataUrl,
+      sellerSignatureDataUrl: record.sellerSignatureDataUrl,
       userRole: record.role ?? (isBuyer ? "buyer" : "seller"),
       isOwner: record.isOwner,
       steps,
@@ -605,6 +780,9 @@ function MockExperienceHome({ searchParams }: HomeProps) {
   const [signatureCaptured, setSignatureCaptured] = useState(false);
   const [signatureVersion, setSignatureVersion] = useState(0);
   const signaturePadRef = useRef<SignaturePadHandle | null>(null);
+  const [approvalSignatureCaptured, setApprovalSignatureCaptured] = useState(false);
+  const [approvalSignatureVersion, setApprovalSignatureVersion] = useState(0);
+  const approvalSignaturePadRef = useRef<SignaturePadHandle | null>(null);
   const [walletAmountInput, setWalletAmountInput] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [profile, setProfile] = useState({ name: defaultUser.name, email: defaultUser.email });
@@ -1012,6 +1190,11 @@ const findTransactionById = (id: number) => {
       createForm.role === "buyer" ? "Seller approval pending" : "Buyer approval pending";
     const approvalDetail =
       createForm.role === "buyer" ? "Seller review pending" : "Buyer review pending";
+    const signatureDataUrl = signaturePadRef.current?.getDataUrl();
+    if (!signatureDataUrl) {
+      setMessage("Please draw your signature before submitting.");
+      return;
+    }
     try {
       const response: CreateEscrowResponse = await createEscrowMutation.mutateAsync({
         title: responseTitle,
@@ -1021,6 +1204,7 @@ const findTransactionById = (id: number) => {
         creatorRole: createForm.role,
         category: createForm.category,
         description: descriptionValue || undefined,
+        signatureDataUrl,
         milestones: milestones.map((milestone) => ({
           title: milestone.title,
           amount: milestone.amount,
@@ -1052,6 +1236,10 @@ const findTransactionById = (id: number) => {
         context: pendingContext,
         lifecycleStatus: requiresSignup ? "pending_counterparty_signup" : "pending_approval",
         fundingStatus: "not_funded",
+        creatorRole: createForm.role,
+        createdAt: response.createdAt ?? timestamp,
+        buyerSignatureDataUrl: createForm.role === "buyer" ? signatureDataUrl : undefined,
+        sellerSignatureDataUrl: createForm.role === "seller" ? signatureDataUrl : undefined,
         counterpartyApproved: false,
         description: descriptionValue || undefined,
         steps: [
@@ -1284,8 +1472,16 @@ const findTransactionById = (id: number) => {
 
   const handleApproveEscrow = async (tx: Transaction) => {
     const escrowId = tx.reference ?? `PO-${tx.id}`;
+    const signatureDataUrl = approvalSignaturePadRef.current?.getDataUrl();
+    if (!signatureDataUrl) {
+      setMessage("Draw your signature before approving the agreement.");
+      return;
+    }
     try {
-      await approveEscrowMutation.mutateAsync({ escrowId });
+      await approveEscrowMutation.mutateAsync({ escrowId, signatureDataUrl });
+      approvalSignaturePadRef.current?.clear();
+      setApprovalSignatureCaptured(false);
+      setApprovalSignatureVersion((version) => version + 1);
       setMessage("Escrow approved. The buyer can now fund it with dummy wallet funds.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to approve escrow.");
@@ -2333,13 +2529,41 @@ const handleWalletWithdraw = async () => {
                     ? "This escrow is waiting for the counterparty to finish signup and verification."
                     : "This draft is still waiting for counterparty approval."}
             </p>
+            {canApproveEscrow ? (
+              <div className="sig-wrap" style={{ marginBottom: 12 }}>
+                <div className="muted" style={{ marginBottom: 6 }}>
+                  Your signature
+                </div>
+                <div className="signature-pad">
+                  <SignaturePad
+                    ref={approvalSignaturePadRef}
+                    resetVersion={approvalSignatureVersion}
+                    onSignedChange={setApprovalSignatureCaptured}
+                  />
+                </div>
+                <div style={{ display: "flex", gap: 8, marginTop: 10, alignItems: "center" }}>
+                  <button
+                    className="ghost"
+                    onClick={() => {
+                      approvalSignaturePadRef.current?.clear();
+                      setApprovalSignatureCaptured(false);
+                    }}
+                  >
+                    Clear
+                  </button>
+                  <div className="muted" style={{ marginLeft: "auto" }}>
+                    Sign to approve these terms
+                  </div>
+                </div>
+              </div>
+            ) : null}
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               {canApproveEscrow ? (
                 <>
                   <button
                     className="btn"
                     onClick={() => handleApproveEscrow(tx)}
-                    disabled={approveEscrowMutation.isPending}
+                    disabled={approveEscrowMutation.isPending || !approvalSignatureCaptured}
                   >
                     {approveEscrowMutation.isPending ? "Approving..." : "Approve escrow"}
                   </button>
