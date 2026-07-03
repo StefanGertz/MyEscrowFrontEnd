@@ -60,6 +60,13 @@ export const handlers = [
     }
     return HttpResponse.json({ success: true, email: body.email });
   }),
+  http.post(`${baseUrl}/api/auth/change-password`, async ({ request }) => {
+    const body = (await request.json()) as { currentPassword: string; newPassword: string };
+    if (body.currentPassword !== "CurrentPassword123!") {
+      return HttpResponse.json({ error: "Current password is incorrect." }, { status: 401 });
+    }
+    return HttpResponse.json({ success: true });
+  }),
   http.post(`${baseUrl}/api/dashboard/escrows/create`, async ({ request }) => {
     const body = (await request.json()) as {
       title: string;

@@ -37,6 +37,7 @@ import { useConfirmDialog } from "@/components/ConfirmDialogProvider";
 import { jsPDF } from "jspdf";
 import { LiveDashboard } from "@/components/LiveDashboard";
 import { NotificationTimestamp } from "@/components/NotificationTimestamp";
+import { ChangePasswordModal } from "@/components/ChangePasswordModal";
 import type { EscrowRecord } from "@/lib/mockDashboard";
 
 type ScreenId =
@@ -848,6 +849,7 @@ function MockExperienceHome({ searchParams }: HomeProps) {
   const greetingName = currentUser.name.trim().split(/\s+/)[0] || currentUser.name;
   const [kycMarked, setKycMarked] = useState(false);
   const [modalContent, setModalContent] = useState<ModalContent | null>(null);
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const [notificationsPanelOpen, setNotificationsPanelOpen] = useState(false);
   const createEscrowMutation = useCreateEscrow();
   const dismissNotificationMutation = useDismissNotification();
@@ -1760,11 +1762,7 @@ const handleWalletWithdraw = async () => {
       body: "For demo assistance or integration help, email support@myescrow.com.",
     });
 
-  const openSecurityModal = () =>
-    setModalContent({
-      title: "Change password",
-      body: "Enter your current password and choose a new one in the production app.",
-    });
+  const openSecurityModal = () => setChangePasswordOpen(true);
 
   const openBankModal = () =>
     setModalContent({
@@ -3145,6 +3143,9 @@ const handleWalletWithdraw = async () => {
             </div>
           </div>
         </div>
+      ) : null}
+      {changePasswordOpen ? (
+        <ChangePasswordModal onClose={() => setChangePasswordOpen(false)} />
       ) : null}
     </AppShell>
   );

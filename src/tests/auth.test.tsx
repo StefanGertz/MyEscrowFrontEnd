@@ -1,15 +1,18 @@
 "use client";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { renderHook, act } from "@testing-library/react";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { renderHook, act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
+  useChangePasswordMutation,
   useForgotPasswordMutation,
   useLoginMutation,
   useResetPasswordMutation,
   useSignupMutation,
   useVerifyEmailMutation,
 } from "@/hooks/useAuthApi";
+import { ChangePasswordModal } from "@/components/ChangePasswordModal";
+import { ToastProvider } from "@/components/ToastProvider";
 import { server } from "./server";
 
 const createWrapper = () => {
@@ -27,6 +30,20 @@ const createWrapper = () => {
   Wrapper.displayName = "QueryClientAuthTestProvider";
 
   return Wrapper;
+};
+
+const renderChangePasswordModal = (onClose = vi.fn()) => {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  render(
+    <QueryClientProvider client={queryClient}>
+      <ToastProvider>
+        <ChangePasswordModal onClose={onClose} />
+      </ToastProvider>
+    </QueryClientProvider>,
+  );
+  return onClose;
 };
 
 beforeAll(() => {
@@ -115,5 +132,40 @@ describe("auth flows", () => {
       });
       expect(response.success).toBe(true);
     });
+  });
+
+  it("changes the password through the authenticated API", async () => {
+    const wrapper = createWrapper();
+    const changeHook = renderHook(() => useChangePasswordMutation(), { wrapper });
+
+    await act(async () => {
+      const response = await changeHook.result.current.mutateAsync({
+        currentPassword: "CurrentPassword123!",
+        newPassword: "NewPassword456!",
+      });
+      expect(response.success).toBe(true);
+    });
+  });
+
+  it("validates and completes the settings password form", async () => {
+    const onClose = renderChangePasswordModal();
+    fireEvent.change(screen.getByLabelText("Current password"), {
+      target: { value: "CurrentPassword123!" },
+    });
+    fireEvent.change(screen.getByLabelText("New password"), {
+      target: { value: "NewPassword456!" },
+    });
+    fireEvent.change(screen.getByLabelText("Confirm new password"), {
+      target: { value: "DoesNotMatch456!" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Update password" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("New passwords do not match.");
+
+    fireEvent.change(screen.getByLabelText("Confirm new password"), {
+      target: { value: "NewPassword456!" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Update password" }));
+    await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
+    expect(screen.getByText("Password updated")).toBeInTheDocument();
   });
 });

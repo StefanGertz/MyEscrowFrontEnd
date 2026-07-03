@@ -49,6 +49,11 @@ type ResetPasswordPayload = {
   password: string;
 };
 
+type ChangePasswordPayload = {
+  currentPassword: string;
+  newPassword: string;
+};
+
 export type SignupVerificationResponse = {
   verificationRequired: true;
   email: string;
@@ -76,8 +81,8 @@ const parseErrorMessage = async (response: Response) => {
       message?: string;
       issues?: Array<{ message?: string }>;
     };
-    if (parsed.error) return parsed.error;
     if (parsed.message) return parsed.message;
+    if (parsed.error) return parsed.error;
     if (parsed.issues?.length) {
       return parsed.issues.map((issue) => issue.message).filter(Boolean).join(" ");
     }
@@ -138,5 +143,12 @@ export function useResetPasswordMutation() {
   return useMutation({
     mutationFn: (payload: ResetPasswordPayload) =>
       postJson<ResetPasswordPayload, BasicSuccessResponse>("/api/auth/reset-password", payload),
+  });
+}
+
+export function useChangePasswordMutation() {
+  return useMutation({
+    mutationFn: (payload: ChangePasswordPayload) =>
+      postJson<ChangePasswordPayload, BasicSuccessResponse>("/api/auth/change-password", payload),
   });
 }
