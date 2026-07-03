@@ -70,6 +70,9 @@ export function useEscrowSummary() {
     queryKey: ["dashboard", "overview"],
     queryFn: () => fetchJSON<OverviewResponse>("/api/dashboard/overview"),
     retry: 2,
+    refetchInterval: 5_000,
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true,
   });
 }
 
