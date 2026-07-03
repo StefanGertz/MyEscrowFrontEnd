@@ -26,6 +26,7 @@ import { useAuth } from "@/components/AuthProvider";
 import { useConfirmDialog } from "@/components/ConfirmDialogProvider";
 import { jsPDF } from "jspdf";
 import { LiveDashboard } from "@/components/LiveDashboard";
+import { NotificationTimestamp } from "@/components/NotificationTimestamp";
 import type { EscrowRecord } from "@/lib/mockDashboard";
 
 type ScreenId =
@@ -115,6 +116,7 @@ type NotificationEntry = {
   label: string;
   detail: string;
   meta: string;
+  createdAt?: string;
   txId?: number;
   requiresAction?: boolean;
 };
@@ -2847,7 +2849,9 @@ const handleWalletWithdraw = async () => {
                       </button>
                     </div>
                     <div className="notif-detail">{item.detail}</div>
-                    <div className="notif-meta">{item.meta}</div>
+                    <div className="notif-meta">
+                      {item.createdAt ? <NotificationTimestamp createdAt={item.createdAt} /> : item.meta}
+                    </div>
                   </div>
                 ))}
               </div>

@@ -17,6 +17,7 @@ export async function GET(request: Request) {
         label: "Seller approval pending",
         detail: "Northwind onboarding kit is waiting for Nora Studio to approve.",
         meta: "Just now",
+        createdAt: new Date(Date.now() - 45_000).toISOString(),
         txId: 10105,
       },
       {
@@ -24,6 +25,7 @@ export async function GET(request: Request) {
         label: "Summit Legal payout",
         detail: "Escrow closed and final payment sent to Summit Legal.",
         meta: "1h ago",
+        createdAt: new Date(Date.now() - 60 * 60_000).toISOString(),
         txId: 10103,
       },
       {
@@ -31,6 +33,7 @@ export async function GET(request: Request) {
         label: "Wedding DJ approval",
         detail: "Waiting for Acme DJ Corp to approve the Wedding DJ escrow.",
         meta: "2h ago",
+        createdAt: new Date(Date.now() - 2 * 60 * 60_000).toISOString(),
         txId: 10106,
       },
       {
@@ -38,6 +41,7 @@ export async function GET(request: Request) {
         label: "Restaurant tile milestone",
         detail: 'Review "Material acquisition" for Tiles R\' Us so funds can release.',
         meta: "$100k pending",
+        createdAt: new Date(Date.now() - 24 * 60 * 60_000).toISOString(),
         txId: 10107,
       },
     ],

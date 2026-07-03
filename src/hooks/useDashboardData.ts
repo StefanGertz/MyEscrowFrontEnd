@@ -60,6 +60,8 @@ type NotificationsResponse = {
     label: string;
     detail: string;
     meta: string;
+    createdAt?: string;
+    txId?: number;
   }>;
 };
 

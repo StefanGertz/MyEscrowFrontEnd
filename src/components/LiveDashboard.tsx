@@ -4,6 +4,7 @@ import { FormEvent, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { Header } from "@/components/Header";
+import { NotificationTimestamp } from "@/components/NotificationTimestamp";
 import { useAuth } from "@/components/AuthProvider";
 import { useToast } from "@/components/ToastProvider";
 import {
@@ -214,7 +215,13 @@ export function LiveDashboard() {
                       <strong>{notification.label}</strong>
                       <div className="muted">{notification.detail}</div>
                     </div>
-                    <div className="muted">{notification.meta}</div>
+                    <div className="muted">
+                      {notification.createdAt ? (
+                        <NotificationTimestamp createdAt={notification.createdAt} />
+                      ) : (
+                        notification.meta
+                      )}
+                    </div>
                   </li>
                 ))}
               </ul>
