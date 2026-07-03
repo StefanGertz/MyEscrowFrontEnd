@@ -18,6 +18,7 @@ import {
   useResubmitMilestone,
   useEscrowSummary,
   useEscrows,
+  useNotificationHistory,
   useNotifications,
   useWalletTopup,
   useWalletWithdraw,
@@ -795,6 +796,7 @@ function MockExperienceHome({ searchParams }: HomeProps) {
         email: user.email || profile.email,
       }
     : profile;
+  const greetingName = currentUser.name.trim().split(/\s+/)[0] || currentUser.name;
   const [kycMarked, setKycMarked] = useState(false);
   const [modalContent, setModalContent] = useState<ModalContent | null>(null);
   const [notificationsPanelOpen, setNotificationsPanelOpen] = useState(false);
@@ -808,9 +810,9 @@ function MockExperienceHome({ searchParams }: HomeProps) {
   const cancelEscrowMutation = useCancelEscrow();
   const fundEscrowMutation = useFundEscrow();
   const notificationsQuery = useNotifications();
+  const notificationHistoryQuery = useNotificationHistory();
   const overviewQuery = useEscrowSummary();
   const escrowsQuery = useEscrows();
-  const liveTimelineEvents = overviewQuery.data?.timelineEvents ?? [];
   const liveTransactions = useMemo(
     () =>
       liveDataEnabled
@@ -914,11 +916,12 @@ function MockExperienceHome({ searchParams }: HomeProps) {
   const shouldUseFallbackNotifications = !liveDataEnabled && (notificationsQuery.isError || notificationList.length === 0);
   const notificationsToRender = shouldUseFallbackNotifications ? fallbackNotifications : notificationList;
   const timelineEntries = liveDataEnabled
-    ? liveTimelineEvents.map((event) => ({
-        id: event.id,
-        label: event.title,
-        detail: event.meta,
-        txId: undefined,
+    ? (notificationHistoryQuery.data?.notifications ?? []).map((notification) => ({
+        id: notification.id,
+        label: notification.label,
+        detail: notification.detail,
+        txId: notification.txId,
+        createdAt: notification.createdAt,
       }))
     : dashboardTimelineEntries;
   const requiresCurrentUserAction = (notification: NotificationEntry): boolean => {
@@ -1655,7 +1658,7 @@ const handleWalletWithdraw = async () => {
     <section className="screen active">
       <h2 className="page-title">
         Welcome back,
-        <span style={{ fontWeight: 700, marginLeft: 6 }}>{currentUser.name}</span>
+        <span style={{ fontWeight: 700, marginLeft: 6 }}>{greetingName}</span>
       </h2>
       <div className="tiles">
         <div className="tile">
@@ -1818,12 +1821,12 @@ const handleWalletWithdraw = async () => {
       </div>
       <div className="card">
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <strong>Milestone timeline</strong>
-          <span className="muted" style={{ fontSize: 13 }}>Recent alerts</span>
+          <strong>Alert history</strong>
+          <span className="muted" style={{ fontSize: 13 }}>All account alerts</span>
         </div>
         <div className="tx-list" style={{ marginTop: 12 }}>
           {timelineEntries.length === 0 ? (
-            <div className="muted">No milestone activity yet for this account.</div>
+            <div className="muted">No alert history yet for this account.</div>
           ) : (
             timelineEntries.map((event) => (
               <button
@@ -1842,6 +1845,11 @@ const handleWalletWithdraw = async () => {
                 <div>
                   <div style={{ fontWeight: 700 }}>{event.label}</div>
                   <div className="muted">{event.detail}</div>
+                  {"createdAt" in event && event.createdAt ? (
+                    <div className="muted" style={{ marginTop: 4, fontSize: 13 }}>
+                      <NotificationTimestamp createdAt={event.createdAt} />
+                    </div>
+                  ) : null}
                 </div>
               </button>
             ))

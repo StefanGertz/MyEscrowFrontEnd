@@ -6,7 +6,8 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export async function GET(request: Request) {
   if (!isMockApiEnabled) {
-    return proxyApiRequest(request, "/api/dashboard/notifications");
+    const history = new URL(request.url).searchParams.get("history") === "true";
+    return proxyApiRequest(request, `/api/dashboard/notifications${history ? "?history=true" : ""}`);
   }
 
   await sleep(200);

@@ -96,6 +96,14 @@ export function useNotifications() {
   });
 }
 
+export function useNotificationHistory() {
+  return useQuery({
+    queryKey: ["dashboard", "notifications", "history"],
+    queryFn: () => fetchJSON<NotificationsResponse>("/api/dashboard/notifications?history=true"),
+    staleTime: 15 * 1000,
+  });
+}
+
 export function useDismissNotification() {
   const queryClient = useQueryClient();
 

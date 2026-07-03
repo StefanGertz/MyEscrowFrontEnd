@@ -130,6 +130,11 @@ describe("notification flows", () => {
         { id: "notif-1", label: "Alert", detail: "Needs review", meta: "Just now" },
       ],
     });
+    queryClient.setQueryData(["dashboard", "notifications", "history"], {
+      notifications: [
+        { id: "notif-1", label: "Alert", detail: "Needs review", meta: "Just now" },
+      ],
+    });
     const wrapper = createWrapper(queryClient);
     const dismissHook = renderHook(() => useDismissNotification(), { wrapper });
 
@@ -138,6 +143,11 @@ describe("notification flows", () => {
     });
 
     expect(queryClient.getQueryData(["dashboard", "notifications"])).toEqual({ notifications: [] });
+    expect(queryClient.getQueryData(["dashboard", "notifications", "history"])).toEqual({
+      notifications: [
+        { id: "notif-1", label: "Alert", detail: "Needs review", meta: "Just now" },
+      ],
+    });
   });
 });
 
