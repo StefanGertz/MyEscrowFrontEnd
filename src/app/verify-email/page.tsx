@@ -89,7 +89,7 @@ function VerifyEmailContent() {
       pushToast({
         variant: "info",
         title: "Verification email sent",
-        body: "Check your inbox for a new code.",
+        body: "It may take a few minutes. Check your spam or junk folder too.",
       });
       if (result.debugCode) {
         setForm((prev) => ({ ...prev, code: result.debugCode ?? prev.code }));
@@ -118,6 +118,9 @@ function VerifyEmailContent() {
             <strong>{form.email || "your inbox"}</strong>.
             {inviteReference ? ` This will unlock invitation ${inviteReference}.` : null}
             {formattedExpiry ? ` Code expires around ${formattedExpiry}.` : null}
+          </p>
+          <p className="muted" style={{ marginTop: 8 }}>
+            Delivery can take a few minutes. If it is not in your inbox, check your spam or junk folder.
           </p>
         </div>
         <form className="auth-form" onSubmit={handleSubmit}>

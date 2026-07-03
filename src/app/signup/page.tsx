@@ -96,8 +96,8 @@ function SignupContent() {
         variant: "info",
         title: "Verify your email",
         body: inviteReference
-          ? "We emailed you a six-digit code. After verification, your invitation will be ready to review."
-          : "We emailed you a six-digit code to finish signup.",
+          ? "We emailed you a six-digit code. It may take a few minutes; check spam or junk too. After verification, your invitation will be ready to review."
+          : "We emailed you a six-digit code. It may take a few minutes; check spam or junk too.",
       });
       const params = new URLSearchParams({ email: result.email });
       if (inviteReference) {
