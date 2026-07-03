@@ -96,6 +96,31 @@ export function useNotifications() {
   });
 }
 
+export function useDismissNotification() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (notificationId: string) =>
+      fetchJSON<{ success: true }>(
+        `/api/dashboard/notifications/${encodeURIComponent(notificationId)}/dismiss`,
+        { method: "POST" },
+      ),
+    onMutate: async (notificationId) => {
+      await queryClient.cancelQueries({ queryKey: ["dashboard", "notifications"] });
+      const previous = queryClient.getQueryData<NotificationsResponse>(["dashboard", "notifications"]);
+      queryClient.setQueryData<NotificationsResponse>(["dashboard", "notifications"], (current) => ({
+        notifications: current?.notifications.filter((notification) => notification.id !== notificationId) ?? [],
+      }));
+      return { previous };
+    },
+    onError: (_error, _notificationId, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(["dashboard", "notifications"], context.previous);
+      }
+    },
+  });
+}
+
 type LaunchPayload = {
   disputeId: string;
 };

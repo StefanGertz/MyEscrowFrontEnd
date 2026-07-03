@@ -11,6 +11,7 @@ import {
   useCancelEscrow,
   type CreateEscrowResponse,
   useCreateEscrow,
+  useDismissNotification,
   useFundEscrow,
   useRejectEscrow,
   useRejectMilestone,
@@ -797,8 +798,8 @@ function MockExperienceHome({ searchParams }: HomeProps) {
   const [kycMarked, setKycMarked] = useState(false);
   const [modalContent, setModalContent] = useState<ModalContent | null>(null);
   const [notificationsPanelOpen, setNotificationsPanelOpen] = useState(false);
-  const [dismissedNotifications, setDismissedNotifications] = useState<string[]>([]);
   const createEscrowMutation = useCreateEscrow();
+  const dismissNotificationMutation = useDismissNotification();
   const approveEscrowMutation = useApproveEscrow();
   const approveMilestoneMutation = useApproveMilestone();
   const rejectEscrowMutation = useRejectEscrow();
@@ -831,10 +832,6 @@ function MockExperienceHome({ searchParams }: HomeProps) {
     [displayTransactions],
   );
 
-  const activeNotifications = useMemo(
-    () => displayTransactions.filter((tx) => tx.status !== "Complete").length,
-    [displayTransactions],
-  );
   const notificationList = notificationsQuery.data?.notifications ?? [];
   const fallbackNotifications = useMemo<NotificationEntry[]>(() => {
     const entries: NotificationEntry[] = [];
@@ -914,7 +911,7 @@ function MockExperienceHome({ searchParams }: HomeProps) {
     }
     return entries.slice(0, 4);
   }, [displayTransactions, currentUser.email, walletBalanceDisplay]);
-  const shouldUseFallbackNotifications = notificationsQuery.isError || notificationList.length === 0;
+  const shouldUseFallbackNotifications = !liveDataEnabled && (notificationsQuery.isError || notificationList.length === 0);
   const notificationsToRender = shouldUseFallbackNotifications ? fallbackNotifications : notificationList;
   const timelineEntries = liveDataEnabled
     ? liveTimelineEvents.map((event) => ({
@@ -956,19 +953,23 @@ function MockExperienceHome({ searchParams }: HomeProps) {
     return false;
   };
   const orderedNotifications = [...notificationsToRender]
-    .sort((a, b) => Number(requiresCurrentUserAction(b)) - Number(requiresCurrentUserAction(a)))
-    .filter((item) => !dismissedNotifications.includes(item.id));
+    .sort((a, b) => Number(requiresCurrentUserAction(b)) - Number(requiresCurrentUserAction(a)));
 
   const handleDismissNotification = (notificationId: string) => {
-    setDismissedNotifications((prev) => (prev.includes(notificationId) ? prev : [...prev, notificationId]));
+    void dismissNotificationMutation.mutateAsync(notificationId).catch((error) => {
+      pushToast({
+        variant: "error",
+        title: error instanceof Error ? error.message : "Unable to dismiss notification.",
+      });
+    });
   };
-  const openNotifications = notificationList.length || activeNotifications;
+  const openNotifications = orderedNotifications.length;
 
 useEffect(() => {
   if (notificationsQuery.isError) {
     pushToast({
       variant: "error",
-      title: "Notifications failed to load. Showing demo alerts.",
+      title: "Notifications failed to load.",
     });
   }
 }, [notificationsQuery.isError, pushToast]);
@@ -2614,7 +2615,9 @@ const handleWalletWithdraw = async () => {
             </div>
             {!canReviewMilestones ? (
               <div className="muted" style={{ marginTop: 8 }}>
-                {isAwaitingSignup
+                {tx.status === "Complete"
+                  ? "All milestones have been released. This escrow is complete."
+                  : isAwaitingSignup
                   ? "Milestone decisions unlock after the counterparty finishes signup and verification."
                   : isAwaitingApproval
                     ? `Milestone decisions unlock after ${isCurrentUserBuyer ? "the seller approves" : "you approve"} the escrow.`

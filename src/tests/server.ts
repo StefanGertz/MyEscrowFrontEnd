@@ -99,6 +99,9 @@ export const handlers = [
       status: "cancelled",
     });
   }),
+  http.post(`${baseUrl}/api/dashboard/notifications/:id/dismiss`, () => {
+    return HttpResponse.json({ success: true });
+  }),
   http.post(`${baseUrl}/api/dashboard/disputes/:id/resolve`, ({ params }) => {
     return HttpResponse.json({
       disputeId: params.id,

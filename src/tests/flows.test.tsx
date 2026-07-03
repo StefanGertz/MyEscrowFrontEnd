@@ -8,18 +8,21 @@ import {
   useApproveEscrow,
   useRejectEscrow,
   useCancelEscrow,
+  useDismissNotification,
   useWalletTopup,
   useWalletWithdraw,
 } from "@/hooks/useDashboardData";
 import { server } from "./server";
 
-const createWrapper = () => {
-  const queryClient = new QueryClient({
+const createQueryClient = () =>
+  new QueryClient({
     defaultOptions: {
       queries: { retry: false },
       mutations: { retry: false },
     },
   });
+
+const createWrapper = (queryClient = createQueryClient()) => {
 
   const Wrapper = ({ children }: { children: React.ReactNode }) => (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
@@ -116,6 +119,25 @@ describe("dispute flows", () => {
       expect(response.disputeId).toBe("DSP-01");
       expect(response.resolvedAt).toBeTruthy();
     });
+  });
+});
+
+describe("notification flows", () => {
+  it("removes a dismissed notification from the cached inbox", async () => {
+    const queryClient = createQueryClient();
+    queryClient.setQueryData(["dashboard", "notifications"], {
+      notifications: [
+        { id: "notif-1", label: "Alert", detail: "Needs review", meta: "Just now" },
+      ],
+    });
+    const wrapper = createWrapper(queryClient);
+    const dismissHook = renderHook(() => useDismissNotification(), { wrapper });
+
+    await act(async () => {
+      await dismissHook.result.current.mutateAsync("notif-1");
+    });
+
+    expect(queryClient.getQueryData(["dashboard", "notifications"])).toEqual({ notifications: [] });
   });
 });
 
