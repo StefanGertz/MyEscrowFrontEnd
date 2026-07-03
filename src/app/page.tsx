@@ -203,31 +203,6 @@ const defaultUser = {
   email: "scott@example.com",
 };
 
-const roleFlowCopy = {
-  buyer: {
-    pill: "Buyer started escrow",
-    label: "View buyer creation flow",
-    steps: [
-      "Buyer creates the escrow in the app.",
-      "Seller receives an email invitation.",
-      "Seller signs in and sees Approval pending.",
-      "Seller reviews the agreement and accepts or rejects it.",
-      "The buyer sees Funding pending and deposits the funds.",
-    ],
-  },
-  seller: {
-    pill: "Seller started escrow",
-    label: "View seller creation flow",
-    steps: [
-      "Seller creates the escrow inside the app.",
-      "Buyer receives an email and signs in.",
-      "Buyer lands on the dashboard with Approval pending.",
-      "Buyer reviews the escrow and accepts or rejects it.",
-      "After approval, buyer returns to fund the escrow.",
-    ],
-  },
-} as const;
-
 const milestoneReleaseSteps = [
   "Seller opens an active escrow and submits the milestone for buyer review.",
   "The buyer receives an email and logs in to see Milestone pending.",
@@ -2011,21 +1986,6 @@ const handleWalletWithdraw = async () => {
                     <input type="radio" name="role" checked={createForm.role === role} readOnly />
                     <span className="role-copy">
                       {role === "buyer" ? "I'm the buyer" : "I'm the seller"}
-                      <span
-                        className="flow-info"
-                        tabIndex={0}
-                        aria-label={roleFlowCopy[role as "buyer" | "seller"].label}
-                      >
-                        i
-                        <div className="flow-hint">
-                          <div className="flow-pill">{roleFlowCopy[role as "buyer" | "seller"].pill}</div>
-                          <ol className="flow-steps">
-                            {roleFlowCopy[role as "buyer" | "seller"].steps.map((step) => (
-                              <li key={`${role}-${step}`}>{step}</li>
-                            ))}
-                          </ol>
-                        </div>
-                      </span>
                     </span>
                   </label>
                 ))}

@@ -829,66 +829,6 @@ select:focus {
   gap: 6px;
 }
 
-.flow-info {
-  width: 22px;
-  height: 22px;
-  border-radius: 999px;
-  border: 1px solid rgba(15, 76, 129, 0.3);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--brand);
-  background: rgba(20, 184, 166, 0.08);
-  cursor: pointer;
-  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
-  position: relative;
-  outline: none;
-}
-
-.flow-info:hover,
-.flow-info:focus-visible {
-  background: var(--brand);
-  color: #fff;
-  border-color: var(--brand);
-}
-
-.flow-info:focus-visible {
-  box-shadow: 0 0 0 2px rgba(15, 76, 129, 0.25);
-}
-
-.flow-info .flow-hint {
-  position: absolute;
-  top: calc(100% + 12px);
-  left: 50%;
-  transform: translate(-50%, 12px);
-  width: min(320px, 90vw);
-  background: var(--card);
-  border-radius: 12px;
-  border: 1px solid rgba(15, 76, 129, 0.16);
-  box-shadow: 0 16px 34px rgba(15, 76, 129, 0.18);
-  padding: 12px;
-  opacity: 0;
-  pointer-events: none;
-  display: none;
-  transition: opacity 0.2s ease, transform 0.2s ease;
-  z-index: 12;
-}
-
-.flow-info:hover .flow-hint,
-.flow-info:focus-visible .flow-hint {
-  display: block;
-  opacity: 1;
-  pointer-events: auto;
-  transform: translate(-50%, 0);
-}
-
-.flow-info .flow-hint ol {
-  margin: 10px 0 0;
-  padding-left: 18px;
-}
-
 .toolbar {
   position: fixed;
   left: 0;

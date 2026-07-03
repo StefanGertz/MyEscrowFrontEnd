@@ -48,18 +48,21 @@ const readStorage = (): AuthState => {
     return emptyAuthState();
   }
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    // Durable browser sessions are intentionally unsupported. Session storage
+    // survives refreshes but is cleared when the tab/browser session closes.
+    window.localStorage.removeItem(STORAGE_KEY);
+    const raw = window.sessionStorage.getItem(STORAGE_KEY);
     if (!raw) {
       return emptyAuthState();
     }
     const parsed = JSON.parse(raw) as { user?: AuthUser; token?: string; expiresAt?: string };
     if (!parsed.user || !parsed.token) {
-      window.localStorage.removeItem(STORAGE_KEY);
+      window.sessionStorage.removeItem(STORAGE_KEY);
       return emptyAuthState();
     }
     const expiresAt = resolveSessionExpiresAt(parsed.expiresAt);
     if (isSessionExpired(expiresAt)) {
-      window.localStorage.removeItem(STORAGE_KEY);
+      window.sessionStorage.removeItem(STORAGE_KEY);
       return emptyAuthState();
     }
     return {
@@ -69,17 +72,19 @@ const readStorage = (): AuthState => {
     };
   } catch {
     window.localStorage.removeItem(STORAGE_KEY);
+    window.sessionStorage.removeItem(STORAGE_KEY);
     return emptyAuthState();
   }
 };
 
 const writeStorage = (value: AuthState) => {
   if (typeof window === "undefined") return;
+  window.localStorage.removeItem(STORAGE_KEY);
   if (!value.user || !value.token || !value.expiresAt) {
-    window.localStorage.removeItem(STORAGE_KEY);
+    window.sessionStorage.removeItem(STORAGE_KEY);
     return;
   }
-  window.localStorage.setItem(
+  window.sessionStorage.setItem(
     STORAGE_KEY,
     JSON.stringify({ user: value.user, token: value.token, expiresAt: value.expiresAt }),
   );

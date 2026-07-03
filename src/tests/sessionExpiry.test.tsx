@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 import { AuthProvider, useAuth } from "@/components/AuthProvider";
 import { isSessionExpired, resolveSessionExpiresAt } from "@/lib/sessionExpiry";
@@ -24,7 +24,9 @@ const renderSession = () => {
 };
 
 beforeEach(() => {
+  cleanup();
   window.localStorage.clear();
+  window.sessionStorage.clear();
 });
 
 describe("session expiry", () => {
@@ -35,7 +37,7 @@ describe("session expiry", () => {
   });
 
   it("automatically signs out when the stored session expires", async () => {
-    window.localStorage.setItem(
+    window.sessionStorage.setItem(
       "myescrow.auth",
       JSON.stringify({
         token: "test-token",
@@ -48,6 +50,23 @@ describe("session expiry", () => {
 
     await waitFor(() => expect(screen.getByText("authenticated")).toBeTruthy());
     await waitFor(() => expect(screen.getByText("signed out")).toBeTruthy(), { timeout: 1_000 });
+    expect(window.sessionStorage.getItem("myescrow.auth")).toBeNull();
+  });
+
+  it("does not restore a durable session from a previous browser session", async () => {
+    window.localStorage.setItem(
+      "myescrow.auth",
+      JSON.stringify({
+        token: "legacy-token",
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+        user: { id: "user-1", name: "Stefan Gertz", email: "stefan@example.com" },
+      }),
+    );
+
+    const view = renderSession();
+
+    await waitFor(() => expect(view.getByText("signed out")).toBeTruthy());
     expect(window.localStorage.getItem("myescrow.auth")).toBeNull();
+    expect(window.sessionStorage.getItem("myescrow.auth")).toBeNull();
   });
 });
