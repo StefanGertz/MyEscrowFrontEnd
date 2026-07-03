@@ -71,7 +71,7 @@ type Transaction = {
   description?: string;
   counterpart: string;
   amount: number;
-  status: "Pending" | "Active" | "Released" | "Resolved" | "Cancelled";
+  status: "Pending" | "Active" | "Complete" | "Resolved" | "Cancelled";
   context: string;
   lifecycleStatus?: string;
   fundingStatus?: string;
@@ -341,7 +341,7 @@ const initialTransactions: Transaction[] = [
     title: "Summit Legal retainer",
     counterpart: "Summit Legal",
     amount: 300,
-    status: "Released",
+    status: "Complete",
     context: "All milestones paid",
     steps: [
       { title: "Agreement approved", detail: "Both sides signed", status: "complete" },
@@ -658,7 +658,7 @@ const mapEscrowsToTransactions = (
     if (lifecycleStatus === "funded") {
       status = "Active";
     } else if (lifecycleStatus === "completed") {
-      status = "Released";
+      status = "Complete";
     } else if (lifecycleStatus === "cancelled") {
       status = "Cancelled";
     }
@@ -832,7 +832,7 @@ function MockExperienceHome({ searchParams }: HomeProps) {
   );
 
   const activeNotifications = useMemo(
-    () => displayTransactions.filter((tx) => tx.status !== "Released").length,
+    () => displayTransactions.filter((tx) => tx.status !== "Complete").length,
     [displayTransactions],
   );
   const notificationList = notificationsQuery.data?.notifications ?? [];
@@ -1378,7 +1378,7 @@ const findTransactionById = (id: number) => {
         let status = tx.status;
         let context = tx.context;
         if (allReleased) {
-          status = "Released";
+          status = "Complete";
           context = "All milestones paid";
         } else if (anyRejected) {
           context = "Milestone requires attention";
@@ -1735,7 +1735,7 @@ const handleWalletWithdraw = async () => {
                   <div>{formatCurrency(tx.amount)}</div>
                   <span
                     className={`status-badge ${
-                      tx.status === "Released"
+                      tx.status === "Complete"
                         ? "status-released"
                         : tx.status === "Active"
                           ? "status-active"
@@ -2315,7 +2315,7 @@ const handleWalletWithdraw = async () => {
       <p className="lead">Past escrows and payouts.</p>
       <div className="card">
         {displayTransactions
-          .filter((tx) => tx.status === "Released")
+          .filter((tx) => tx.status === "Complete")
           .map((tx) => (
             <div key={tx.id} className="tx-item" style={{ marginBottom: 8 }}>
               <div>
@@ -2454,7 +2454,7 @@ const handleWalletWithdraw = async () => {
     const canCancelEscrow =
       Boolean(tx.isOwner) &&
       tx.status !== "Cancelled" &&
-      tx.status !== "Released" &&
+      tx.status !== "Complete" &&
       (isAwaitingSignup || isAwaitingApproval);
     return (
       <section className="screen active">
@@ -2495,7 +2495,7 @@ const handleWalletWithdraw = async () => {
               </div>
               <span
                   className={`status-badge ${
-                    tx.status === "Released"
+                    tx.status === "Complete"
                       ? "status-released"
                       : tx.status === "Active"
                         ? "status-active"
@@ -2506,9 +2506,11 @@ const handleWalletWithdraw = async () => {
               >
                 {tx.status}
               </span>
-              <div className="muted" style={{ marginTop: 8 }}>
-                {tx.context}
-              </div>
+              {tx.status !== "Complete" ? (
+                <div className="muted" style={{ marginTop: 8 }}>
+                  {tx.context}
+                </div>
+              ) : null}
             </div>
           </div>
           <div style={{ marginTop: 12, textAlign: "right" }}>
