@@ -27,6 +27,7 @@ import {
 } from "@/hooks/useDashboardData";
 import { useToast } from "@/components/ToastProvider";
 import { useAuth } from "@/components/AuthProvider";
+import { moveItem, sortByDeadline } from "@/lib/milestoneOrdering";
 import { useConfirmDialog } from "@/components/ConfirmDialogProvider";
 import { jsPDF } from "jspdf";
 import { LiveDashboard } from "@/components/LiveDashboard";
@@ -1160,16 +1161,18 @@ const findTransactionById = (id: number) => {
       return;
     }
     const nextId = editingMilestoneId ?? randomId();
-    setMilestones((prev) => [
-      ...prev,
-      {
-        id: nextId,
-        title: milestoneInputs.title,
-        amount: Number(milestoneInputs.amount),
-        description: milestoneInputs.description.trim(),
-        deadline: milestoneInputs.deadline,
-      },
-    ]);
+    setMilestones((prev) =>
+      sortByDeadline([
+        ...prev,
+        {
+          id: nextId,
+          title: milestoneInputs.title,
+          amount: Number(milestoneInputs.amount),
+          description: milestoneInputs.description.trim(),
+          deadline: milestoneInputs.deadline,
+        },
+      ]),
+    );
     setMilestoneInputs({ title: "", amount: "", description: "", deadline: "" });
     setEditingMilestoneId(null);
     setMilestoneWarning(null);
@@ -1200,6 +1203,11 @@ const findTransactionById = (id: number) => {
       setEditingMilestoneId(null);
     }
     setMilestoneWarning(null);
+    setMessage(null);
+  };
+
+  const handleMoveMilestone = (index: number, direction: -1 | 1) => {
+    setMilestones((prev) => moveItem(prev, index, index + direction));
     setMessage(null);
   };
 
@@ -2153,12 +2161,17 @@ const handleWalletWithdraw = async () => {
           <p className="muted" style={{ margin: "4px 0 8px", fontSize: 13 }}>
             Add payout checkpoints that should match your escrow amount.
           </p>
-        <div className="milestone-target">
+          <div className="milestone-target">
             <div>
               <div className="milestone-target__label">Escrow amount</div>
               <div className="milestone-target__sub">Milestones should total this value.</div>
             </div>
-            <div className="milestone-target__value">{formattedEscrowAmount}</div>
+            <div className="milestone-target__totals">
+              <div className="milestone-target__value">{formattedEscrowAmount}</div>
+              <div className="milestone-target__running">
+                Running total: {formatCurrency(milestoneTotal)}
+              </div>
+            </div>
           </div>
         <div className="milestone-form">
           <div className="form-field">
@@ -2230,7 +2243,7 @@ const handleWalletWithdraw = async () => {
           ) : (
             <>
               <div className="tx-list" style={{ marginTop: 8 }}>
-                {milestones.map((milestone) => (
+                {milestones.map((milestone, index) => (
                   <div key={milestone.id} className="tx-item milestone-entry">
                   <div className="milestone-entry__top">
                     <div>
@@ -2255,6 +2268,24 @@ const handleWalletWithdraw = async () => {
                       <button
                         type="button"
                         className="ghost"
+                        disabled={index === 0}
+                        onClick={() => handleMoveMilestone(index, -1)}
+                        aria-label={`Move ${milestone.title} up`}
+                      >
+                        Move up
+                      </button>
+                      <button
+                        type="button"
+                        className="ghost"
+                        disabled={index === milestones.length - 1}
+                        onClick={() => handleMoveMilestone(index, 1)}
+                        aria-label={`Move ${milestone.title} down`}
+                      >
+                        Move down
+                      </button>
+                      <button
+                        type="button"
+                        className="ghost"
                         onClick={() => handleEditMilestone(milestone.id)}
                       >
                         Edit
@@ -2269,9 +2300,6 @@ const handleWalletWithdraw = async () => {
                     </div>
                   </div>
                 ))}
-              </div>
-              <div className="muted" style={{ textAlign: "right", marginTop: 8 }}>
-                Total: {formatCurrency(milestoneTotal)}
               </div>
             </>
           )}
