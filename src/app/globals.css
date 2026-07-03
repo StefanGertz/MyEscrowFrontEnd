@@ -277,6 +277,10 @@ body {
   line-height: 1.45;
 }
 
+.tile > button {
+  margin-top: auto;
+}
+
 .home-stack {
   display: flex;
   flex-direction: column;
@@ -589,9 +593,13 @@ body {
 
 .milestone-form {
   display: grid;
-  grid-template-columns: 1fr minmax(120px, 160px) auto;
+  grid-template-columns: minmax(0, 1fr) minmax(120px, 160px) minmax(150px, 190px) auto;
   gap: 8px;
   align-items: end;
+}
+
+.milestone-form > .form-field {
+  margin-bottom: 0;
 }
 
 .milestone-target {
