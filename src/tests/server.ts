@@ -99,6 +99,12 @@ export const handlers = [
       status: "cancelled",
     });
   }),
+  http.post(`${baseUrl}/api/dashboard/escrows/:id/milestones/:milestoneId/request-changes`, ({ params }) => {
+    return HttpResponse.json({ success: true, escrowId: params.id, milestoneId: Number(params.milestoneId) });
+  }),
+  http.post(`${baseUrl}/api/dashboard/escrows/:id/milestones/:milestoneId/apply-changes`, ({ params }) => {
+    return HttpResponse.json({ success: true, escrowId: params.id, milestoneId: Number(params.milestoneId) });
+  }),
   http.post(`${baseUrl}/api/dashboard/notifications/:id/dismiss`, () => {
     return HttpResponse.json({ success: true });
   }),

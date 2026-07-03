@@ -8,6 +8,7 @@ import { SignaturePad, type SignaturePadHandle } from "@/components/SignaturePad
 import {
   useApproveEscrow,
   useApproveMilestone,
+  useApplyMilestoneChanges,
   useCancelEscrow,
   type CreateEscrowResponse,
   useCreateEscrow,
@@ -15,6 +16,7 @@ import {
   useFundEscrow,
   useRejectEscrow,
   useRejectMilestone,
+  useRequestMilestoneChanges,
   useResubmitMilestone,
   useEscrowSummary,
   useEscrows,
@@ -54,6 +56,13 @@ type TxMilestone = {
   title: string;
   amount: number;
   description?: string;
+  deadline?: string;
+  requestedTitle?: string;
+  requestedDescription?: string;
+  requestedAmount?: number;
+  requestedDeadline?: string;
+  changeRequestNote?: string;
+  changeRequestedAt?: string;
   status: "pending" | "released" | "rejected";
   releasedAt?: string;
   rejectedAt?: string;
@@ -99,6 +108,16 @@ type DraftMilestone = {
   title: string;
   amount: number;
   description: string;
+  deadline: string;
+};
+
+type MilestoneChangeDraft = {
+  milestoneId: string;
+  title: string;
+  description: string;
+  amount: string;
+  deadline: string;
+  note: string;
 };
 
 type WalletHistoryEntry = {
@@ -537,7 +556,8 @@ const downloadAgreementPdf = (tx: Transaction) => {
       const descriptionLines = milestone.description
         ? (doc.splitTextToSize(milestone.description, contentWidth - 58) as string[])
         : [];
-      const rowHeight = Math.max(15, 11 + descriptionLines.length * 4);
+      const deadlineText = milestone.deadline ? `Due ${formatHistoryDate(milestone.deadline)}` : "";
+      const rowHeight = Math.max(15, 11 + descriptionLines.length * 4 + (deadlineText ? 4 : 0));
       ensureSpace(rowHeight + 2);
       doc.setFillColor(index % 2 === 0 ? 248 : 255, index % 2 === 0 ? 250 : 255, index % 2 === 0 ? 252 : 255);
       doc.roundedRect(margin, cursorY - 4, contentWidth, rowHeight, 1.5, 1.5, "F");
@@ -551,6 +571,12 @@ const downloadAgreementPdf = (tx: Transaction) => {
         doc.setFontSize(8);
         doc.setTextColor(...muted);
         doc.text(descriptionLines, margin + 9, cursorY + 9);
+      }
+      if (deadlineText) {
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8);
+        doc.setTextColor(...muted);
+        doc.text(deadlineText, margin + 9, cursorY + 9 + descriptionLines.length * 4);
       }
       cursorY += rowHeight + 2;
     });
@@ -679,7 +705,7 @@ const mapEscrowsToTransactions = (
         title: "Agreement drafted",
         detail: pendingDetail,
         status:
-          lifecycleStatus === "pending_counterparty_signup" || lifecycleStatus === "pending_approval"
+          lifecycleStatus === "pending_counterparty_signup" || lifecycleStatus === "pending_approval" || lifecycleStatus === "changes_requested"
             ? "active"
             : "complete",
       },
@@ -690,11 +716,13 @@ const mapEscrowsToTransactions = (
             ? "Counterparty must join before approval"
             : lifecycleStatus === "pending_approval"
             ? "Buyer deposits after approval"
+            : lifecycleStatus === "changes_requested"
+              ? "Milestone changes must be resolved first"
             : lifecycleStatus === "funding_pending"
               ? "Buyer funding pending"
               : "Funds secured in escrow",
         status:
-          lifecycleStatus === "pending_counterparty_signup" || lifecycleStatus === "pending_approval"
+          lifecycleStatus === "pending_counterparty_signup" || lifecycleStatus === "pending_approval" || lifecycleStatus === "changes_requested"
             ? "upcoming"
             : lifecycleStatus === "funding_pending"
               ? "active"
@@ -734,6 +762,13 @@ const mapEscrowsToTransactions = (
         title: milestone.title,
         amount: parseCurrencyValue(milestone.amount),
         description: milestone.description,
+        deadline: milestone.deadline,
+        requestedTitle: milestone.requestedTitle,
+        requestedDescription: milestone.requestedDescription,
+        requestedAmount: milestone.requestedAmount ? parseCurrencyValue(milestone.requestedAmount) : undefined,
+        requestedDeadline: milestone.requestedDeadline,
+        changeRequestNote: milestone.changeRequestNote,
+        changeRequestedAt: milestone.changeRequestedAt,
         status: milestone.status,
         releasedAt: milestone.releasedAt,
         rejectedAt: milestone.rejectedAt,
@@ -777,9 +812,10 @@ function MockExperienceHome({ searchParams }: HomeProps) {
     description: "",
   });
   const [milestones, setMilestones] = useState<DraftMilestone[]>([]);
-  const [milestoneInputs, setMilestoneInputs] = useState({ title: "", amount: "", description: "" });
+  const [milestoneInputs, setMilestoneInputs] = useState({ title: "", amount: "", description: "", deadline: "" });
   const [editingMilestoneId, setEditingMilestoneId] = useState<string | null>(null);
   const [milestoneWarning, setMilestoneWarning] = useState<string | null>(null);
+  const [milestoneChangeDraft, setMilestoneChangeDraft] = useState<MilestoneChangeDraft | null>(null);
   const [agreementAccepted, setAgreementAccepted] = useState(false);
   const [signatureCaptured, setSignatureCaptured] = useState(false);
   const [signatureVersion, setSignatureVersion] = useState(0);
@@ -806,6 +842,8 @@ function MockExperienceHome({ searchParams }: HomeProps) {
   const approveMilestoneMutation = useApproveMilestone();
   const rejectEscrowMutation = useRejectEscrow();
   const rejectMilestoneMutation = useRejectMilestone();
+  const requestMilestoneChangesMutation = useRequestMilestoneChanges();
+  const applyMilestoneChangesMutation = useApplyMilestoneChanges();
   const resubmitMilestoneMutation = useResubmitMilestone();
   const cancelEscrowMutation = useCancelEscrow();
   const fundEscrowMutation = useFundEscrow();
@@ -999,7 +1037,11 @@ const agreementPreview = useMemo(() => {
     return intro;
   }
   const detail = milestones
-    .map((milestone, index) => `${index + 1}. ${milestone.title} - ${formatCurrency(milestone.amount)}`)
+    .map((milestone, index) =>
+      `${index + 1}. ${milestone.title} - ${formatCurrency(milestone.amount)}${
+        milestone.deadline ? ` - due ${formatHistoryDate(milestone.deadline)}` : ""
+      }`,
+    )
     .join("\n");
   return `${intro}\n\nMilestones:\n${detail}`;
 }, [createForm, milestones]);
@@ -1125,9 +1167,10 @@ const findTransactionById = (id: number) => {
         title: milestoneInputs.title,
         amount: Number(milestoneInputs.amount),
         description: milestoneInputs.description.trim(),
+        deadline: milestoneInputs.deadline,
       },
     ]);
-    setMilestoneInputs({ title: "", amount: "", description: "" });
+    setMilestoneInputs({ title: "", amount: "", description: "", deadline: "" });
     setEditingMilestoneId(null);
     setMilestoneWarning(null);
     setMessage(null);
@@ -1141,6 +1184,7 @@ const findTransactionById = (id: number) => {
           title: target.title,
           amount: target.amount.toString(),
           description: target.description ?? "",
+          deadline: target.deadline ?? "",
         });
         setEditingMilestoneId(id);
       }
@@ -1152,7 +1196,7 @@ const findTransactionById = (id: number) => {
   const handleRemoveMilestone = (id: string) => {
     setMilestones((prev) => prev.filter((item) => item.id !== id));
     if (editingMilestoneId === id) {
-      setMilestoneInputs({ title: "", amount: "", description: "" });
+      setMilestoneInputs({ title: "", amount: "", description: "", deadline: "" });
       setEditingMilestoneId(null);
     }
     setMilestoneWarning(null);
@@ -1215,6 +1259,7 @@ const findTransactionById = (id: number) => {
           title: milestone.title,
           amount: milestone.amount,
           description: milestone.description || undefined,
+          deadline: milestone.deadline ? new Date(`${milestone.deadline}T00:00:00.000Z`).toISOString() : undefined,
         })),
       });
       const inviteStatus = response.invitationStatus ?? "existing_user";
@@ -1266,6 +1311,7 @@ const findTransactionById = (id: number) => {
           title: milestone.title,
           amount: milestone.amount,
           description: milestone.description || undefined,
+          deadline: milestone.deadline || undefined,
           status: "pending",
         })),
         timeline: [
@@ -1291,7 +1337,7 @@ const findTransactionById = (id: number) => {
         description: "",
       });
       setMilestones([]);
-      setMilestoneInputs({ title: "", amount: "", description: "" });
+      setMilestoneInputs({ title: "", amount: "", description: "", deadline: "" });
       setEditingMilestoneId(null);
       setAgreementAccepted(false);
       resetSignaturePad();
@@ -1473,6 +1519,52 @@ const findTransactionById = (id: number) => {
     }));
     if (updated) {
       setMessage("Milestone resubmitted for buyer review.");
+    }
+  };
+
+  const beginMilestoneChangeRequest = (milestone: TxMilestone) => {
+    setMilestoneChangeDraft({
+      milestoneId: milestone.id,
+      title: milestone.title,
+      description: milestone.description ?? "",
+      amount: milestone.amount.toString(),
+      deadline: milestone.deadline?.slice(0, 10) ?? "",
+      note: "",
+    });
+  };
+
+  const handleRequestMilestoneChanges = async (tx: Transaction) => {
+    if (!milestoneChangeDraft || !milestoneChangeDraft.title.trim() || Number(milestoneChangeDraft.amount) <= 0) {
+      setMessage("Provide proposed milestone wording and a valid cost.");
+      return;
+    }
+    const escrowId = tx.reference ?? `PO-${tx.id}`;
+    try {
+      await requestMilestoneChangesMutation.mutateAsync({
+        escrowId,
+        milestoneId: milestoneChangeDraft.milestoneId,
+        title: milestoneChangeDraft.title.trim(),
+        description: milestoneChangeDraft.description.trim() || undefined,
+        amount: Number(milestoneChangeDraft.amount),
+        deadline: milestoneChangeDraft.deadline
+          ? new Date(`${milestoneChangeDraft.deadline}T00:00:00.000Z`).toISOString()
+          : undefined,
+        note: milestoneChangeDraft.note.trim() || undefined,
+      });
+      setMilestoneChangeDraft(null);
+      setMessage("Requested milestone changes sent to the escrow creator.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to request milestone changes.");
+    }
+  };
+
+  const handleApplyMilestoneChanges = async (tx: Transaction, milestoneId: string) => {
+    const escrowId = tx.reference ?? `PO-${tx.id}`;
+    try {
+      await applyMilestoneChangesMutation.mutateAsync({ escrowId, milestoneId });
+      setMessage("Requested changes applied. The escrow is ready for counterparty approval.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to apply requested changes.");
     }
   };
 
@@ -2095,6 +2187,19 @@ const handleWalletWithdraw = async () => {
                 }
               />
             </div>
+            <div className="form-field">
+              <label className="muted" htmlFor="milestone-deadline">
+                Deadline
+              </label>
+              <input
+                id="milestone-deadline"
+                type="date"
+                value={milestoneInputs.deadline}
+                onChange={(event) =>
+                  setMilestoneInputs((prev) => ({ ...prev, deadline: event.target.value }))
+                }
+              />
+            </div>
           <button type="button" className="ghost" onClick={handleAddMilestone}>
             {editingMilestoneId ? "Save milestone" : "Add milestone"}
           </button>
@@ -2135,6 +2240,11 @@ const handleWalletWithdraw = async () => {
                         <p className="muted" style={{ margin: "4px 0 0" }}>
                           {milestone.description}
                         </p>
+                      ) : null}
+                      {milestone.deadline ? (
+                        <div className="muted" style={{ marginTop: 4 }}>
+                          Due {formatHistoryDate(milestone.deadline)}
+                        </div>
                       ) : null}
                     </div>
                     <div style={{ textAlign: "right", fontWeight: 600 }}>
@@ -2213,6 +2323,11 @@ const handleWalletWithdraw = async () => {
                         <p className="muted" style={{ margin: "4px 0 0" }}>
                           {milestone.description}
                         </p>
+                      ) : null}
+                      {milestone.deadline ? (
+                        <div className="muted" style={{ marginTop: 4 }}>
+                          Due {formatHistoryDate(milestone.deadline)}
+                        </div>
                       ) : null}
                     </div>
                     <div style={{ textAlign: "right" }}>{formatCurrency(milestone.amount)}</div>
@@ -2456,6 +2571,7 @@ const handleWalletWithdraw = async () => {
     const isCurrentUserBuyer = sameEmail(currentUser.email, tx.buyerEmail);
     const isAwaitingSignup = tx.lifecycleStatus === "pending_counterparty_signup";
     const isAwaitingApproval = tx.lifecycleStatus === "pending_approval";
+    const isChangesRequested = tx.lifecycleStatus === "changes_requested";
     const isAwaitingFunding = tx.lifecycleStatus === "funding_pending";
     const canApproveEscrow = !tx.isOwner && isAwaitingApproval;
     const canFundEscrow = isCurrentUserBuyer && isAwaitingFunding;
@@ -2464,7 +2580,7 @@ const handleWalletWithdraw = async () => {
       Boolean(tx.isOwner) &&
       tx.status !== "Cancelled" &&
       tx.status !== "Complete" &&
-      (isAwaitingSignup || isAwaitingApproval);
+      (isAwaitingSignup || isAwaitingApproval || isChangesRequested);
     return (
       <section className="screen active">
         <h2 className="page-title">Transaction</h2>
@@ -2528,19 +2644,23 @@ const handleWalletWithdraw = async () => {
             </button>
           </div>
         </div>
-        {(canApproveEscrow || canFundEscrow || canCancelEscrow) ? (
+        {(canApproveEscrow || canFundEscrow || canCancelEscrow || (tx.isOwner && isChangesRequested)) ? (
           <div className="card" style={{ marginTop: 12 }}>
             <strong>Next step</strong>
             <p className="muted" style={{ marginTop: 8, marginBottom: 12 }}>
               {canApproveEscrow
                 ? "Review the invitation and approve or reject the escrow."
+                : tx.isOwner && isChangesRequested
+                  ? "Review and apply the requested milestone changes below."
                 : canFundEscrow
                   ? walletShortfall > 0
                     ? `Top up your wallet with ${formatCurrency(walletShortfall)} more before you can fund this escrow.`
                     : "Move dummy wallet funds into escrow so milestone work can begin."
                   : isAwaitingSignup
                     ? "This escrow is waiting for the counterparty to finish signup and verification."
-                    : "This draft is still waiting for counterparty approval."}
+                    : isChangesRequested
+                      ? "The escrow creator is reviewing requested milestone changes."
+                      : "This draft is still waiting for counterparty approval."}
             </p>
             {canApproveEscrow ? (
               <div className="sig-wrap" style={{ marginBottom: 12 }}>
@@ -2629,6 +2749,10 @@ const handleWalletWithdraw = async () => {
                   ? "Milestone decisions unlock after the counterparty finishes signup and verification."
                   : isAwaitingApproval
                     ? `Milestone decisions unlock after ${isCurrentUserBuyer ? "the seller approves" : "you approve"} the escrow.`
+                    : isChangesRequested
+                      ? tx.isOwner
+                        ? "Apply the requested revisions before sending the escrow back for approval."
+                        : "Your requested milestone changes are awaiting the creator's review."
                     : isAwaitingFunding
                       ? `Milestone decisions unlock after ${isCurrentUserBuyer ? "you fund" : "the buyer funds"} the escrow.`
                       : "Milestone decisions are not available yet."}
@@ -2652,11 +2776,100 @@ const handleWalletWithdraw = async () => {
                           {milestone.description}
                         </p>
                       ) : null}
+                      {milestone.deadline ? (
+                        <div className="muted" style={{ marginTop: 4 }}>
+                          Deadline {formatHistoryDate(milestone.deadline)}
+                        </div>
+                      ) : null}
                     </div>
                     <div style={{ textAlign: "right", fontWeight: 700 }}>{formatCurrency(milestone.amount)}</div>
                   </div>
+                  {milestone.changeRequestedAt ? (
+                    <div className="milestone-warning" style={{ marginTop: 10 }}>
+                      <strong>Requested revision</strong>
+                      <div style={{ marginTop: 6 }}>{milestone.requestedTitle}</div>
+                      <div className="muted">
+                        {milestone.requestedAmount !== undefined ? formatCurrency(milestone.requestedAmount) : null}
+                        {milestone.requestedDeadline
+                          ? ` • Due ${formatHistoryDate(milestone.requestedDeadline)}`
+                          : " • No deadline"}
+                      </div>
+                      {milestone.requestedDescription ? (
+                        <div className="muted" style={{ marginTop: 4 }}>{milestone.requestedDescription}</div>
+                      ) : null}
+                      {milestone.changeRequestNote ? (
+                        <div style={{ marginTop: 6 }}>Note: {milestone.changeRequestNote}</div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {milestoneChangeDraft?.milestoneId === milestone.id ? (
+                    <div className="card" style={{ marginTop: 10, padding: 12 }}>
+                      <strong>Propose milestone changes</strong>
+                      <div className="form-grid" style={{ marginTop: 10 }}>
+                        <div className="form-field">
+                          <label className="muted">Wording</label>
+                          <input
+                            value={milestoneChangeDraft.title}
+                            onChange={(event) => setMilestoneChangeDraft((current) => current ? { ...current, title: event.target.value } : current)}
+                          />
+                        </div>
+                        <div className="form-field">
+                          <label className="muted">Cost</label>
+                          <input
+                            type="number"
+                            min="0.01"
+                            step="0.01"
+                            value={milestoneChangeDraft.amount}
+                            onChange={(event) => setMilestoneChangeDraft((current) => current ? { ...current, amount: event.target.value } : current)}
+                          />
+                        </div>
+                        <div className="form-field">
+                          <label className="muted">Deadline</label>
+                          <input
+                            type="date"
+                            value={milestoneChangeDraft.deadline}
+                            onChange={(event) => setMilestoneChangeDraft((current) => current ? { ...current, deadline: event.target.value } : current)}
+                          />
+                        </div>
+                      </div>
+                      <div className="form-field" style={{ marginTop: 8 }}>
+                        <label className="muted">Description</label>
+                        <textarea
+                          rows={2}
+                          value={milestoneChangeDraft.description}
+                          onChange={(event) => setMilestoneChangeDraft((current) => current ? { ...current, description: event.target.value } : current)}
+                        />
+                      </div>
+                      <div className="form-field" style={{ marginTop: 8 }}>
+                        <label className="muted">Reason or note</label>
+                        <textarea
+                          rows={2}
+                          value={milestoneChangeDraft.note}
+                          onChange={(event) => setMilestoneChangeDraft((current) => current ? { ...current, note: event.target.value } : current)}
+                        />
+                      </div>
+                      <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                        <button className="btn" onClick={() => handleRequestMilestoneChanges(tx)} disabled={requestMilestoneChangesMutation.isPending}>
+                          {requestMilestoneChangesMutation.isPending ? "Sending..." : "Send request"}
+                        </button>
+                        <button className="ghost" onClick={() => setMilestoneChangeDraft(null)}>Cancel</button>
+                      </div>
+                    </div>
+                  ) : null}
                   <div className="milestone-actions">
-                    {milestone.status === "pending" ? (
+                    {canApproveEscrow && milestone.status === "pending" ? (
+                      <button className="ghost" onClick={() => beginMilestoneChangeRequest(milestone)}>
+                        Request changes
+                      </button>
+                    ) : tx.isOwner && milestone.changeRequestedAt ? (
+                      <button
+                        className="btn"
+                        onClick={() => handleApplyMilestoneChanges(tx, milestone.id)}
+                        disabled={applyMilestoneChangesMutation.isPending}
+                      >
+                        {applyMilestoneChangesMutation.isPending ? "Applying..." : "Apply requested changes"}
+                      </button>
+                    ) : milestone.status === "pending" ? (
                       <>
                         {isCurrentUserBuyer ? (
                           <>

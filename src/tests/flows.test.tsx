@@ -9,6 +9,8 @@ import {
   useRejectEscrow,
   useCancelEscrow,
   useDismissNotification,
+  useRequestMilestoneChanges,
+  useApplyMilestoneChanges,
   useWalletTopup,
   useWalletWithdraw,
 } from "@/hooks/useDashboardData";
@@ -147,6 +149,31 @@ describe("notification flows", () => {
       notifications: [
         { id: "notif-1", label: "Alert", detail: "Needs review", meta: "Just now" },
       ],
+    });
+  });
+});
+
+describe("pre-approval milestone changes", () => {
+  it("requests and applies milestone revisions", async () => {
+    const wrapper = createWrapper();
+    const requestHook = renderHook(() => useRequestMilestoneChanges(), { wrapper });
+    const applyHook = renderHook(() => useApplyMilestoneChanges(), { wrapper });
+
+    await act(async () => {
+      const response = await requestHook.result.current.mutateAsync({
+        escrowId: "PO-1001",
+        milestoneId: "12",
+        title: "Revised wording",
+        amount: 750,
+        deadline: "2026-08-15T00:00:00.000Z",
+        note: "Please extend the deadline.",
+      });
+      expect(response.milestoneId).toBe(12);
+    });
+
+    await act(async () => {
+      const response = await applyHook.result.current.mutateAsync({ escrowId: "PO-1001", milestoneId: "12" });
+      expect(response.escrowId).toBe("PO-1001");
     });
   });
 });

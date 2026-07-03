@@ -43,6 +43,13 @@ export type EscrowRecord = {
     amount: string;
     status: "pending" | "released" | "rejected";
     description?: string;
+    deadline?: string;
+    requestedTitle?: string;
+    requestedDescription?: string;
+    requestedAmount?: string;
+    requestedDeadline?: string;
+    changeRequestNote?: string;
+    changeRequestedAt?: string;
     releasedAt?: string;
     rejectedAt?: string;
   }>;

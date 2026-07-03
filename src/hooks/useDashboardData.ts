@@ -165,6 +165,14 @@ type MilestoneActionPayload = {
   milestoneId: string;
 };
 
+type MilestoneChangeRequestPayload = MilestoneActionPayload & {
+  title: string;
+  description?: string;
+  amount: number;
+  deadline?: string;
+  note?: string;
+};
+
 export function useReleaseEscrow() {
   const queryClient = useQueryClient();
 
@@ -233,6 +241,40 @@ export const useApproveMilestone = buildMilestoneAction("approve");
 export const useRejectMilestone = buildMilestoneAction("reject");
 export const useResubmitMilestone = buildMilestoneAction("resubmit");
 
+export function useRequestMilestoneChanges() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ escrowId, milestoneId, ...payload }: MilestoneChangeRequestPayload) =>
+      fetchJSON<{ escrowId: string; milestoneId: number }>(
+        `/api/dashboard/escrows/${escrowId}/milestones/${milestoneId}/request-changes`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        },
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "escrows"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "notifications"] });
+    },
+  });
+}
+
+export function useApplyMilestoneChanges() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ escrowId, milestoneId }: MilestoneActionPayload) =>
+      fetchJSON<{ escrowId: string; milestoneId: number }>(
+        `/api/dashboard/escrows/${escrowId}/milestones/${milestoneId}/apply-changes`,
+        { method: "POST" },
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "escrows"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "notifications"] });
+    },
+  });
+}
+
 type ResolvePayload = {
   disputeId: string;
 };
@@ -267,6 +309,7 @@ type CreateEscrowPayload = {
     title: string;
     amount: number;
     description?: string;
+    deadline?: string;
   }>;
 };
 
