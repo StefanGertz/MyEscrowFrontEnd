@@ -28,6 +28,11 @@ import {
 import { useToast } from "@/components/ToastProvider";
 import { useAuth } from "@/components/AuthProvider";
 import { moveItem, sortByDeadline } from "@/lib/milestoneOrdering";
+import {
+  resolveProfileDraft,
+  type ProfileDraft,
+  type ProfileIdentity,
+} from "@/lib/profileSettings";
 import { useConfirmDialog } from "@/components/ConfirmDialogProvider";
 import { jsPDF } from "jspdf";
 import { LiveDashboard } from "@/components/LiveDashboard";
@@ -826,13 +831,20 @@ function MockExperienceHome({ searchParams }: HomeProps) {
   const approvalSignaturePadRef = useRef<SignaturePadHandle | null>(null);
   const [walletAmountInput, setWalletAmountInput] = useState("");
   const [message, setMessage] = useState<string | null>(null);
-  const [profile, setProfile] = useState({ name: defaultUser.name, email: defaultUser.email });
-  const currentUser = liveDataEnabled && user
+  const [profileDraft, setProfileDraft] = useState<ProfileDraft>({
+    userId: "demo-scott",
+    name: defaultUser.name,
+    email: defaultUser.email,
+  });
+  const profileIdentity: ProfileIdentity = user
     ? {
-        name: user.name?.trim() || user.email || profile.name,
-        email: user.email || profile.email,
+        id: user.id,
+        name: user.name?.trim() || user.email,
+        email: user.email,
       }
-    : profile;
+    : { id: profileDraft.userId, name: profileDraft.name, email: profileDraft.email };
+  const currentUser = { name: profileIdentity.name, email: profileIdentity.email };
+  const profile = resolveProfileDraft(profileDraft, profileIdentity);
   const greetingName = currentUser.name.trim().split(/\s+/)[0] || currentUser.name;
   const [kycMarked, setKycMarked] = useState(false);
   const [modalContent, setModalContent] = useState<ModalContent | null>(null);
@@ -1728,6 +1740,14 @@ const handleWalletWithdraw = async () => {
     setMessage("Profile saved.");
   };
 
+  const handleProfileChange = (field: "name" | "email", value: string) => {
+    setProfileDraft((previous) => ({
+      userId: profileIdentity.id,
+      ...resolveProfileDraft(previous, profileIdentity),
+      [field]: value,
+    }));
+  };
+
   const handleLogout = () => {
     logout();
     pushToast({ variant: "info", title: "You have been signed out." });
@@ -2528,7 +2548,7 @@ const handleWalletWithdraw = async () => {
               type="text"
               value={profile.name}
               placeholder="Your name"
-              onChange={(event) => setProfile((prev) => ({ ...prev, name: event.target.value }))}
+              onChange={(event) => handleProfileChange("name", event.target.value)}
             />
             <label className="muted" htmlFor="profile-email">
               Email
@@ -2538,7 +2558,7 @@ const handleWalletWithdraw = async () => {
               type="email"
               value={profile.email}
               placeholder="you@example.com"
-              onChange={(event) => setProfile((prev) => ({ ...prev, email: event.target.value }))}
+              onChange={(event) => handleProfileChange("email", event.target.value)}
             />
           </div>
           <div className="settings-actions">

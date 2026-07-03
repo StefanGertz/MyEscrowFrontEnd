@@ -12,6 +12,7 @@ export type AuthUser = {
 export type AuthResponse = {
   token: string;
   user: AuthUser;
+  expiresAt?: string;
 };
 
 export type BasicSuccessResponse = {

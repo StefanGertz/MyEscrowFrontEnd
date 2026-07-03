@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { isMockApiEnabled } from "@/lib/mockToggle";
 import { proxyApiRequest } from "@/lib/serverProxy";
+import { resolveSessionExpiresAt } from "@/lib/sessionExpiry";
 
 const defaultUser = {
   id: "user-001",
@@ -28,6 +29,7 @@ export async function POST(request: Request) {
   }
   return NextResponse.json({
     token: "mock-token",
+    expiresAt: resolveSessionExpiresAt(),
     user: defaultUser,
   });
 }

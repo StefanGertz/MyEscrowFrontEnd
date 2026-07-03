@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { isMockApiEnabled } from "@/lib/mockToggle";
 import { proxyApiRequest } from "@/lib/serverProxy";
+import { resolveSessionExpiresAt } from "@/lib/sessionExpiry";
 
 const randomId = () => {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -23,6 +24,7 @@ export async function POST(request: Request) {
   }
   return NextResponse.json({
     token: "mock-token",
+    expiresAt: resolveSessionExpiresAt(),
     user: {
       id: randomId(),
       name: name.trim(),

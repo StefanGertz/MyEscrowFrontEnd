@@ -17,6 +17,7 @@ import {
   useSignupMutation,
 } from "@/hooks/useAuthApi";
 import { setClientAuthToken } from "@/lib/apiClient";
+import { isSessionExpired, resolveSessionExpiresAt } from "@/lib/sessionExpiry";
 
 type AuthContextValue = {
   user: AuthUser | null;
@@ -34,34 +35,53 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null);
 const STORAGE_KEY = "myescrow.auth";
 
-const readStorage = (): { user: AuthUser | null; token: string | null } => {
+type AuthState = {
+  user: AuthUser | null;
+  token: string | null;
+  expiresAt: string | null;
+};
+
+const emptyAuthState = (): AuthState => ({ user: null, token: null, expiresAt: null });
+
+const readStorage = (): AuthState => {
   if (typeof window === "undefined") {
-    return { user: null, token: null };
+    return emptyAuthState();
   }
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      return { user: null, token: null };
+      return emptyAuthState();
     }
-    const parsed = JSON.parse(raw) as { user: AuthUser; token: string };
+    const parsed = JSON.parse(raw) as { user?: AuthUser; token?: string; expiresAt?: string };
+    if (!parsed.user || !parsed.token) {
+      window.localStorage.removeItem(STORAGE_KEY);
+      return emptyAuthState();
+    }
+    const expiresAt = resolveSessionExpiresAt(parsed.expiresAt);
+    if (isSessionExpired(expiresAt)) {
+      window.localStorage.removeItem(STORAGE_KEY);
+      return emptyAuthState();
+    }
     return {
-      user: parsed.user ?? null,
-      token: parsed.token ?? null,
+      user: parsed.user,
+      token: parsed.token,
+      expiresAt,
     };
   } catch {
-    return { user: null, token: null };
+    window.localStorage.removeItem(STORAGE_KEY);
+    return emptyAuthState();
   }
 };
 
-const writeStorage = (value: { user: AuthUser | null; token: string | null }) => {
+const writeStorage = (value: AuthState) => {
   if (typeof window === "undefined") return;
-  if (!value.user || !value.token) {
+  if (!value.user || !value.token || !value.expiresAt) {
     window.localStorage.removeItem(STORAGE_KEY);
     return;
   }
   window.localStorage.setItem(
     STORAGE_KEY,
-    JSON.stringify({ user: value.user, token: value.token }),
+    JSON.stringify({ user: value.user, token: value.token, expiresAt: value.expiresAt }),
   );
 };
 
@@ -76,27 +96,42 @@ type SignupResult =
 export function AuthProvider({ children }: AuthProviderProps) {
   const loginMutation = useLoginMutation();
   const signupMutation = useSignupMutation();
-  const [state, setState] = useState<{ user: AuthUser | null; token: string | null }>({
-    user: null,
-    token: null,
-  });
+  const [state, setState] = useState<AuthState>(emptyAuthState);
   const [isHydrating, setIsHydrating] = useState(true);
+
+  const clearSession = useCallback(() => {
+    setState(emptyAuthState());
+    setClientAuthToken(null);
+    writeStorage(emptyAuthState());
+  }, []);
 
   useEffect(() => {
     const restored = readStorage();
     startTransition(() => {
       setState(restored);
-      if (restored.token) {
-        setClientAuthToken(restored.token);
-      }
+      setClientAuthToken(restored.token);
+      writeStorage(restored);
       setIsHydrating(false);
     });
   }, []);
 
+  useEffect(() => {
+    if (!state.token || !state.expiresAt) return;
+
+    const remainingMs = Date.parse(state.expiresAt) - Date.now();
+    const timeoutId = window.setTimeout(clearSession, Math.max(0, remainingMs));
+    return () => window.clearTimeout(timeoutId);
+  }, [clearSession, state.expiresAt, state.token]);
+
   const adoptSession = useCallback((response: AuthResponse) => {
-      setState({ user: response.user, token: response.token });
+      const nextState: AuthState = {
+        user: response.user,
+        token: response.token,
+        expiresAt: resolveSessionExpiresAt(response.expiresAt),
+      };
+      setState(nextState);
       setClientAuthToken(response.token);
-      writeStorage({ user: response.user, token: response.token });
+      writeStorage(nextState);
   }, []);
 
   const login = useCallback(
@@ -124,11 +159,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     [signupMutation, adoptSession],
   );
 
-  const logout = useCallback(() => {
-    setState({ user: null, token: null });
-    setClientAuthToken(null);
-    writeStorage({ user: null, token: null });
-  }, []);
+  const logout = clearSession;
 
   const value = useMemo<AuthContextValue>(() => {
     return {

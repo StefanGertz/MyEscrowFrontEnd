@@ -1,10 +1,12 @@
 import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
+import { resolveSessionExpiresAt } from "@/lib/sessionExpiry";
 
 const baseUrl = "https://staging-api.myescrow.example/v1";
 
 const sessionResponse = (email: string) => ({
   token: "test-token",
+  expiresAt: resolveSessionExpiresAt(),
   user: {
     id: "user-session",
     name: email.split("@")[0] || "Tester",
