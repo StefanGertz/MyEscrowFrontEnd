@@ -1357,7 +1357,7 @@ select:focus {
 
 .toast-viewport {
   position: fixed;
-  top: calc(12px + env(safe-area-inset-top));
+  top: calc(74px + env(safe-area-inset-top));
   right: clamp(12px, 4vw, 32px);
   display: flex;
   flex-direction: column;
