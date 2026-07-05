@@ -2903,11 +2903,6 @@ const handleWalletWithdraw = async () => {
               >
                 {tx.status}
               </span>
-              {tx.status !== "Complete" ? (
-                <div className="muted" style={{ marginTop: 8 }}>
-                  {tx.context}
-                </div>
-              ) : null}
             </div>
           </div>
           <div style={{ marginTop: 12, textAlign: "right" }}>
