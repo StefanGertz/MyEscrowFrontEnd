@@ -223,6 +223,13 @@ body {
   transform: none;
 }
 
+.agreement-download-button:disabled {
+  border-color: #cbd5e1;
+  background: #e2e8f0;
+  color: #64748b;
+  opacity: 1;
+}
+
 .ghost {
   padding: 8px 12px;
 }

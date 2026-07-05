@@ -2911,7 +2911,14 @@ const handleWalletWithdraw = async () => {
             </div>
           </div>
           <div style={{ marginTop: 12, textAlign: "right" }}>
-            <button className="ghost" onClick={() => downloadAgreementPdf(tx)}>
+            <button
+              className="ghost agreement-download-button"
+              onClick={() => {
+                if (tx.counterpartyApproved) downloadAgreementPdf(tx);
+              }}
+              disabled={!tx.counterpartyApproved}
+              title={tx.counterpartyApproved ? undefined : "Available after counterparty approval"}
+            >
               Download agreement (PDF)
             </button>
           </div>
@@ -3048,13 +3055,13 @@ const handleWalletWithdraw = async () => {
                   : isAwaitingSignup
                   ? "Milestone decisions unlock after the counterparty finishes signup and verification."
                   : isAwaitingApproval
-                    ? `Milestone decisions unlock after ${isCurrentUserBuyer ? "the seller approves" : "you approve"} the escrow.`
+                    ? "Milestone decisions unlock after the agreement is signed and the escrow is funded."
                     : isChangesRequested
                       ? tx.isOwner
                         ? "Review each requested revision. You can edit the proposal, accept it, or keep the original milestone."
                         : "Your requested milestone changes are awaiting the creator's review."
                     : isAwaitingFunding
-                      ? `Milestone decisions unlock after ${isCurrentUserBuyer ? "you fund" : "the buyer funds"} the escrow.`
+                      ? "Milestone decisions unlock after the agreement is signed and the escrow is funded."
                       : "Milestone decisions are not available yet."}
               </div>
             ) : null}
