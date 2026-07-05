@@ -18,3 +18,12 @@ export function formatCurrencyInput(value: string): string {
   });
   return value.includes(".") ? `$${whole}.${fraction ?? ""}` : `$${whole}`;
 }
+
+export function formatCurrencyValue(value: number): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+}

@@ -32,7 +32,11 @@ import {
 import { useToast } from "@/components/ToastProvider";
 import { useAuth } from "@/components/AuthProvider";
 import { moveItem, sortByDeadline } from "@/lib/milestoneOrdering";
-import { formatCurrencyInput, normalizeCurrencyInput } from "@/lib/currencyInput";
+import {
+  formatCurrencyInput,
+  formatCurrencyValue as formatCurrency,
+  normalizeCurrencyInput,
+} from "@/lib/currencyInput";
 import {
   resolveProfileDraft,
   type ProfileDraft,
@@ -433,9 +437,6 @@ const bottomNav: Array<{ id: ScreenId; label: string }> = [
   { id: "create", label: "Create" },
   { id: "wallet", label: "Wallet" },
 ];
-
-const formatCurrency = (value: number) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value);
 
 const formatHistoryDate = (value: string) =>
   new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric" });
@@ -2008,10 +2009,10 @@ const handleWalletWithdraw = async () => {
               <div>
                 <div className="muted">{pendingCard.context}</div>
                 <div style={{ fontSize: 18, fontWeight: 700 }}>{pendingCard.title}</div>
-                <div className="muted" style={{ marginTop: 4 }}>
-                  {pendingCard.counterpart}
-                </div>
               </div>
+            </div>
+            <div className="alert-counterparty-row">
+              <div className="muted">{pendingCard.counterpart}</div>
               <button className="ghost" onClick={() => viewTransaction(pendingCard)}>
                 View escrow
               </button>
@@ -2331,7 +2332,11 @@ const handleWalletWithdraw = async () => {
   const renderMilestones = () => {
     const escrowAmount = Number(createForm.amount) || 0;
     const formattedEscrowAmount = createForm.amount ? formatCurrency(escrowAmount) : "-";
-    const remainingEscrowAmount = escrowAmount - milestoneTotal;
+    const draftMilestoneAmount = Number(milestoneInputs.amount) || 0;
+    const escrowAmountCents = Math.round(escrowAmount * 100);
+    const milestoneTotalCents = milestones.reduce((sum, milestone) => sum + Math.round(milestone.amount * 100), 0);
+    const draftMilestoneAmountCents = Math.round(draftMilestoneAmount * 100);
+    const remainingEscrowAmount = (escrowAmountCents - milestoneTotalCents - draftMilestoneAmountCents) / 100;
 
     return (
       <section className="screen active">
@@ -2362,17 +2367,6 @@ const handleWalletWithdraw = async () => {
             </div>
             <div className="milestone-target__totals">
               <div className="milestone-target__value">{formattedEscrowAmount}</div>
-              <div className="milestone-target__running">
-                Running total: {formatCurrency(milestoneTotal)}
-              </div>
-              <output
-                className="milestone-target__remaining"
-                data-overdrawn={remainingEscrowAmount < 0}
-                aria-label="Remaining escrow amount"
-              >
-                <span>Remaining escrow amount</span>
-                <strong>{formatCurrency(remainingEscrowAmount)}</strong>
-              </output>
             </div>
           </div>
         <div className="milestone-form">
@@ -2395,10 +2389,12 @@ const handleWalletWithdraw = async () => {
               </label>
               <input
                 id="milestone-amount"
-                type="number"
-                value={milestoneInputs.amount}
+                type="text"
+                inputMode="decimal"
+                value={formatCurrencyInput(milestoneInputs.amount)}
+                placeholder="$0.00"
                 onChange={(event) =>
-                  setMilestoneInputs((prev) => ({ ...prev, amount: event.target.value }))
+                  setMilestoneInputs((prev) => ({ ...prev, amount: normalizeCurrencyInput(event.target.value) }))
                 }
               />
             </div>
@@ -2455,7 +2451,24 @@ const handleWalletWithdraw = async () => {
           />
         </div>
         <div className="milestone-add-action">
-          <button type="button" className="ghost" onClick={handleAddMilestone}>
+          <output
+            className="milestone-target__remaining"
+            data-overdrawn={remainingEscrowAmount < 0}
+            data-complete={remainingEscrowAmount === 0}
+            aria-label="Remaining escrow amount"
+          >
+            <span>Remaining escrow amount</span>
+            <strong>
+              {formatCurrency(remainingEscrowAmount)}
+              {remainingEscrowAmount === 0 ? <span aria-hidden="true"> ✓</span> : null}
+            </strong>
+          </output>
+          <button
+            type="button"
+            className="ghost"
+            onClick={handleAddMilestone}
+            disabled={!editingMilestoneId && remainingEscrowAmount === 0}
+          >
             {editingMilestoneId ? "Save milestone" : "Add milestone"}
           </button>
         </div>
@@ -2647,14 +2660,16 @@ const handleWalletWithdraw = async () => {
       <div className="card wallet-card">
         <div className="muted">Available balance</div>
         <div style={{ fontWeight: 800, fontSize: 18 }}>{formatCurrency(walletBalanceDisplay)}</div>
-        <label className="muted" style={{ marginTop: 8 }}>
+        <label className="muted" htmlFor="wallet-amount" style={{ marginTop: 8 }}>
           Top-up (mock)
         </label>
         <input
-          type="number"
-          value={walletAmountInput}
-          placeholder="Amount to deposit"
-          onChange={(event) => setWalletAmountInput(event.target.value)}
+          id="wallet-amount"
+          type="text"
+          inputMode="decimal"
+          value={formatCurrencyInput(walletAmountInput)}
+          placeholder="$0.00"
+          onChange={(event) => setWalletAmountInput(normalizeCurrencyInput(event.target.value))}
         />
         <div className="wallet-actions">
           <button className="btn" onClick={handleWalletTopup} disabled={walletTopup.isPending}>
@@ -3100,11 +3115,11 @@ const handleWalletWithdraw = async () => {
                               <label className="muted" htmlFor={`review-amount-${milestone.id}`}>Amount</label>
                               <input
                                 id={`review-amount-${milestone.id}`}
-                                type="number"
-                                min="0.01"
-                                step="0.01"
-                                value={reviewDraft.amount}
-                                onChange={(event) => updateMilestoneReviewDraft(milestone, { amount: event.target.value })}
+                                type="text"
+                                inputMode="decimal"
+                                value={formatCurrencyInput(reviewDraft.amount)}
+                                placeholder="$0.00"
+                                onChange={(event) => updateMilestoneReviewDraft(milestone, { amount: normalizeCurrencyInput(event.target.value) })}
                               />
                             </div>
                             <div className="form-field">
@@ -3174,11 +3189,11 @@ const handleWalletWithdraw = async () => {
                         <div className="form-field">
                           <label className="muted">Cost</label>
                           <input
-                            type="number"
-                            min="0.01"
-                            step="0.01"
-                            value={milestoneChangeDraft.amount}
-                            onChange={(event) => setMilestoneChangeDraft((current) => current ? { ...current, amount: event.target.value } : current)}
+                            type="text"
+                            inputMode="decimal"
+                            value={formatCurrencyInput(milestoneChangeDraft.amount)}
+                            placeholder="$0.00"
+                            onChange={(event) => setMilestoneChangeDraft((current) => current ? { ...current, amount: normalizeCurrencyInput(event.target.value) } : current)}
                           />
                         </div>
                         <div className="form-field">

@@ -361,6 +361,27 @@ body {
   font-size: 13px;
 }
 
+.alert-head {
+  margin-top: 6px;
+}
+
+.alert-counterparty-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.alert-counterparty-row .muted {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.alert-counterparty-row button {
+  flex: 0 0 auto;
+}
+
 .process-steps {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -625,8 +646,24 @@ body {
 
 .milestone-add-action {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
   margin-top: -4px;
+}
+
+.milestone-add-action .milestone-target__remaining {
+  flex: 1 1 260px;
+  max-width: 330px;
+  margin-top: 0;
+}
+
+.milestone-add-action button:disabled {
+  border-color: #cbd5e1;
+  background: #e2e8f0;
+  color: #64748b;
+  opacity: 1;
 }
 
 .milestone-target {
@@ -664,12 +701,6 @@ body {
   text-align: right;
 }
 
-.milestone-target__running {
-  margin-top: 2px;
-  font-size: 13px;
-  color: var(--muted);
-}
-
 .milestone-target__remaining {
   display: flex;
   align-items: center;
@@ -688,6 +719,12 @@ body {
 .milestone-target__remaining[data-overdrawn="true"] {
   border-color: rgba(185, 28, 28, 0.35);
   color: #b91c1c;
+}
+
+.milestone-target__remaining[data-complete="true"] {
+  border-color: rgba(21, 128, 61, 0.4);
+  background: rgba(34, 197, 94, 0.12);
+  color: #15803d;
 }
 
 .milestone-warning {
@@ -1313,18 +1350,18 @@ select:focus {
 
 .toast-viewport {
   position: fixed;
-  bottom: calc(24px + env(safe-area-inset-bottom));
+  top: calc(12px + env(safe-area-inset-top));
   right: clamp(12px, 4vw, 32px);
   display: flex;
   flex-direction: column;
+  align-items: flex-end;
   gap: 8px;
   z-index: 80;
   pointer-events: none;
 }
 
 .toast {
-  min-width: 220px;
-  max-width: 320px;
+  width: min(320px, calc(100vw - 24px));
   padding: 12px 14px;
   border-radius: 12px;
   font-weight: 600;
@@ -1675,6 +1712,10 @@ select:focus {
 
   .milestone-add-action button {
     width: 100%;
+  }
+
+  .milestone-add-action .milestone-target__remaining {
+    max-width: none;
   }
 
   .toolbar-shell {
