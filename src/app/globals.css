@@ -524,6 +524,13 @@ body {
   max-width: 520px;
 }
 
+.create-flow__intro-steps {
+  margin: 0 0 8px;
+  padding-left: 22px;
+  list-style: decimal;
+  list-style-position: outside;
+}
+
 .create-flow__grid {
   display: flex;
   flex-direction: column;

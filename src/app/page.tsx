@@ -2190,7 +2190,7 @@ const handleWalletWithdraw = async () => {
           <span className="create-flow__eyebrow">Step 1 - Transaction details</span>
           <h2 className="page-title create-flow__title">Create a new transaction</h2>
           <div className="lead create-flow__lead">
-            <ol style={{ margin: "0 0 8px", paddingLeft: 22 }}>
+            <ol className="create-flow__intro-steps">
               <li>Invite your counterparty.</li>
               <li>Set the amount.</li>
             </ol>
