@@ -2712,13 +2712,19 @@ const handleWalletWithdraw = async () => {
         {displayTransactions
           .filter((tx) => tx.status === "Complete")
           .map((tx) => (
-            <div key={tx.id} className="tx-item" style={{ marginBottom: 8 }}>
+            <button
+              key={tx.id}
+              type="button"
+              className="tx-item tx-item-button"
+              onClick={() => viewTransaction(tx)}
+              aria-label={`View transaction ${tx.title}`}
+            >
               <div>
                 <strong>{tx.title}</strong>
                 <div className="muted">{tx.counterpart}</div>
               </div>
               <div>{formatCurrency(tx.amount)}</div>
-            </div>
+            </button>
           ))}
       </div>
     </section>
@@ -2859,8 +2865,8 @@ const handleWalletWithdraw = async () => {
               </p>
             </div>
           ) : null}
-          <div style={{ display: "flex", gap: 12, alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
-            <div>
+          <div className="transaction-overview">
+            <div className="transaction-parties">
               <div className="muted">Buyer</div>
               <div style={{ fontWeight: 700 }}>{tx.buyer}</div>
               {tx.buyerParty?.partyType === "business" ? (
@@ -2884,13 +2890,14 @@ const handleWalletWithdraw = async () => {
                 {tx.sellerEmail}
               </div>
             </div>
-            <div style={{ textAlign: "right" }}>
-              <div className="muted">Amount</div>
-              <div style={{ fontWeight: 700 }}>{formatCurrency(tx.amount)}</div>
-              <div className="muted" style={{ marginTop: 8 }}>
-                Status
+            <div className="transaction-financial-summary">
+              <div className="transaction-summary-field">
+                <div className="muted">Amount</div>
+                <div style={{ fontWeight: 700 }}>{formatCurrency(tx.amount)}</div>
               </div>
-              <span
+              <div className="transaction-summary-field">
+                <div className="muted">Status</div>
+                <span
                   className={`status-badge ${
                     tx.status === "Complete"
                       ? "status-released"
@@ -2900,9 +2907,10 @@ const handleWalletWithdraw = async () => {
                           ? "status-pending"
                           : "status-active"
                   }`}
-              >
-                {tx.status}
-              </span>
+                >
+                  {tx.status}
+                </span>
+              </div>
             </div>
           </div>
           <div style={{ marginTop: 12, textAlign: "right" }}>

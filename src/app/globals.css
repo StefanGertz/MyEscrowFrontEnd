@@ -230,6 +230,24 @@ body {
   opacity: 1;
 }
 
+.transaction-overview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.transaction-financial-summary {
+  display: grid;
+  gap: 8px;
+  text-align: right;
+}
+
+.transaction-summary-field .status-badge {
+  margin-top: 3px;
+}
+
 .ghost {
   padding: 8px 12px;
 }
@@ -937,6 +955,8 @@ select:focus {
   width: 100%;
   text-align: left;
   background: rgba(255, 255, 255, 0.96);
+  color: inherit;
+  font: inherit;
   cursor: pointer;
   margin-bottom: 8px;
   transition: box-shadow 0.2s ease, border-color 0.2s ease;
@@ -945,6 +965,11 @@ select:focus {
 .tx-item-button:hover {
   box-shadow: 0 12px 24px rgba(15, 76, 129, 0.12);
   border-color: rgba(15, 76, 129, 0.2);
+}
+
+.tx-item-button:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 3px;
 }
 
 .milestone-entry {
@@ -1663,6 +1688,26 @@ select:focus {
   .tile,
   .card {
     padding: 14px;
+  }
+
+  .transaction-overview {
+    align-items: stretch;
+  }
+
+  .transaction-parties,
+  .transaction-financial-summary {
+    width: 100%;
+  }
+
+  .transaction-financial-summary {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: end;
+    margin-top: 8px;
+    text-align: left;
+  }
+
+  .transaction-summary-field:last-child {
+    text-align: right;
   }
 
   .tx-item {
