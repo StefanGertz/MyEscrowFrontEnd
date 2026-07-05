@@ -25,6 +25,9 @@ import {
   useWalletTopup,
   useWalletTransactions,
   useWalletWithdraw,
+  useBusinessProfile,
+  type BusinessDetails,
+  type PartyIdentity,
 } from "@/hooks/useDashboardData";
 import { useToast } from "@/components/ToastProvider";
 import { useAuth } from "@/components/AuthProvider";
@@ -107,10 +110,32 @@ type Transaction = {
   buyerEmail: string;
   seller: string;
   sellerEmail: string;
+  buyerParty?: PartyDisplay;
+  sellerParty?: PartyDisplay;
   milestones: TxMilestone[];
   timeline: TimelineEntry[];
   counterpartyApproved: boolean;
 };
+
+type PartyDisplay = {
+  partyType: "individual" | "business";
+  representativeName?: string;
+  representativeTitle?: string;
+  registrationCountry?: string;
+  registrationNumber?: string;
+  registeredAddress?: string;
+};
+
+const emptyBusinessDetails = (): BusinessDetails => ({
+  legalName: "",
+  registrationCountry: "",
+  registrationNumber: "",
+  registeredAddress: "",
+  representativeTitle: "",
+});
+
+const businessDetailsComplete = (details: BusinessDetails) =>
+  Object.values(details).every((value) => value.trim().length >= 2);
 
 type DraftMilestone = {
   id: string;
@@ -523,7 +548,7 @@ const downloadAgreementPdf = (tx: Transaction) => {
   cursorY += Math.max(titleLines.length * 8, 21);
 
   doc.setFillColor(...pale);
-  doc.roundedRect(margin, cursorY, contentWidth, 25, 2, 2, "F");
+  doc.roundedRect(margin, cursorY, contentWidth, 31, 2, 2, "F");
   doc.setFontSize(8);
   doc.setTextColor(...muted);
   doc.setFont("helvetica", "bold");
@@ -536,9 +561,28 @@ const downloadAgreementPdf = (tx: Transaction) => {
   doc.text(tx.seller, margin + contentWidth / 2 + 4, cursorY + 14);
   doc.setFontSize(8);
   doc.setTextColor(...muted);
-  doc.text(tx.buyerEmail, margin + 5, cursorY + 20);
-  doc.text(tx.sellerEmail, margin + contentWidth / 2 + 4, cursorY + 20);
-  cursorY += 36;
+  if (tx.buyerParty?.partyType === "business") {
+    doc.text(`Represented by ${tx.buyerParty.representativeName ?? "Authorized representative"}${tx.buyerParty.representativeTitle ? `, ${tx.buyerParty.representativeTitle}` : ""}`, margin + 5, cursorY + 20);
+  }
+  if (tx.sellerParty?.partyType === "business") {
+    doc.text(`Represented by ${tx.sellerParty.representativeName ?? "Authorized representative"}${tx.sellerParty.representativeTitle ? `, ${tx.sellerParty.representativeTitle}` : ""}`, margin + contentWidth / 2 + 4, cursorY + 20);
+  }
+  doc.text(tx.buyerEmail, margin + 5, cursorY + 26);
+  doc.text(tx.sellerEmail, margin + contentWidth / 2 + 4, cursorY + 26);
+  cursorY += 42;
+
+  const businessIdentityLines = [
+    tx.buyerParty?.partyType === "business"
+      ? `Buyer registration: ${tx.buyerParty.registrationNumber ?? "Not provided"} (${tx.buyerParty.registrationCountry ?? "Jurisdiction not provided"}); ${tx.buyerParty.registeredAddress ?? "Address not provided"}.`
+      : null,
+    tx.sellerParty?.partyType === "business"
+      ? `Seller registration: ${tx.sellerParty.registrationNumber ?? "Not provided"} (${tx.sellerParty.registrationCountry ?? "Jurisdiction not provided"}); ${tx.sellerParty.registeredAddress ?? "Address not provided"}.`
+      : null,
+  ].filter((line): line is string => Boolean(line));
+  if (businessIdentityLines.length) {
+    sectionTitle("Business identities");
+    businessIdentityLines.forEach((line) => addWrappedText(line));
+  }
 
   sectionTitle("Agreement terms");
   addWrappedText(
@@ -634,7 +678,7 @@ const downloadAgreementPdf = (tx: Transaction) => {
   renderSignature(
     margin,
     "Buyer",
-    tx.buyer,
+    tx.buyerParty?.representativeName ?? tx.buyer,
     tx.buyerEmail,
     tx.buyerSignatureDataUrl,
     buyerSigned,
@@ -643,7 +687,7 @@ const downloadAgreementPdf = (tx: Transaction) => {
   renderSignature(
     margin + signerWidth + 8,
     "Seller",
-    tx.seller,
+    tx.sellerParty?.representativeName ?? tx.seller,
     tx.sellerEmail,
     tx.sellerSignatureDataUrl,
     sellerSigned,
@@ -755,6 +799,22 @@ const mapEscrowsToTransactions = (
       buyerEmail: buyer.email,
       seller: seller.name,
       sellerEmail: seller.email,
+      buyerParty: {
+        partyType: buyer.partyType ?? "individual",
+        ...(buyer.representativeName ? { representativeName: buyer.representativeName } : {}),
+        ...(buyer.representativeTitle ? { representativeTitle: buyer.representativeTitle } : {}),
+        ...(buyer.registrationCountry ? { registrationCountry: buyer.registrationCountry } : {}),
+        ...(buyer.registrationNumber ? { registrationNumber: buyer.registrationNumber } : {}),
+        ...(buyer.registeredAddress ? { registeredAddress: buyer.registeredAddress } : {}),
+      },
+      sellerParty: {
+        partyType: seller.partyType ?? "individual",
+        ...(seller.representativeName ? { representativeName: seller.representativeName } : {}),
+        ...(seller.representativeTitle ? { representativeTitle: seller.representativeTitle } : {}),
+        ...(seller.registrationCountry ? { registrationCountry: seller.registrationCountry } : {}),
+        ...(seller.registrationNumber ? { registrationNumber: seller.registrationNumber } : {}),
+        ...(seller.registeredAddress ? { registeredAddress: seller.registeredAddress } : {}),
+      },
       milestones: (record.milestones ?? []).map((milestone) => ({
         id: milestone.id.toString(),
         title: milestone.title,
@@ -814,6 +874,8 @@ function MockExperienceHome({ searchParams }: HomeProps) {
     amount: "",
     category: "Goods",
     description: "",
+    partyType: "individual" as "individual" | "business",
+    business: emptyBusinessDetails(),
   });
   const [milestones, setMilestones] = useState<DraftMilestone[]>([]);
   const [milestoneInputs, setMilestoneInputs] = useState({ title: "", amount: "", description: "", deadline: "" });
@@ -829,6 +891,8 @@ function MockExperienceHome({ searchParams }: HomeProps) {
   const [approvalSignatureCaptured, setApprovalSignatureCaptured] = useState(false);
   const [approvalSignatureVersion, setApprovalSignatureVersion] = useState(0);
   const approvalSignaturePadRef = useRef<SignaturePadHandle | null>(null);
+  const [approvalPartyType, setApprovalPartyType] = useState<"individual" | "business">("individual");
+  const [approvalBusiness, setApprovalBusiness] = useState<BusinessDetails>(emptyBusinessDetails);
   const [walletAmountInput, setWalletAmountInput] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [profileDraft, setProfileDraft] = useState<ProfileDraft>({
@@ -857,6 +921,7 @@ function MockExperienceHome({ searchParams }: HomeProps) {
   const [notificationsPanelOpen, setNotificationsPanelOpen] = useState(false);
 
   const createEscrowMutation = useCreateEscrow();
+  const businessProfileQuery = useBusinessProfile();
   const dismissNotificationMutation = useDismissNotification();
   const approveEscrowMutation = useApproveEscrow();
   const approveMilestoneMutation = useApproveMilestone();
@@ -1065,12 +1130,15 @@ useEffect(() => {
     [milestones],
   );
 
-const agreementPreview = useMemo(() => {
+const agreementPreview = (() => {
   const amountValue = Number(createForm.amount) || 0;
   const descriptionValue = createForm.description.trim();
   const descriptionLine = descriptionValue ? `\nDescription: ${descriptionValue}` : "";
-  const intro = `Buyer: ${createForm.role === "buyer" ? "You" : createForm.counterpartyEmail || "Buyer pending"}\nSeller: ${
-    createForm.role === "seller" ? "You" : createForm.counterpartyEmail || "Seller pending"
+  const creatorLabel = createForm.partyType === "business"
+    ? `${createForm.business.legalName || "Business pending"}, represented by ${currentUser.name}${createForm.business.representativeTitle ? `, ${createForm.business.representativeTitle}` : ""}`
+    : currentUser.name;
+  const intro = `Buyer: ${createForm.role === "buyer" ? creatorLabel : createForm.counterpartyEmail || "Buyer pending"}\nSeller: ${
+    createForm.role === "seller" ? creatorLabel : createForm.counterpartyEmail || "Seller pending"
   }\nAmount: ${formatCurrency(amountValue)}${descriptionLine}`;
   if (!milestones.length) {
     return intro;
@@ -1083,7 +1151,7 @@ const agreementPreview = useMemo(() => {
     )
     .join("\n");
   return `${intro}\n\nMilestones:\n${detail}`;
-}, [createForm, milestones]);
+})();
 
 const navActiveId = useMemo<ScreenId>(() => {
   if (["milestones", "agreement"].includes(activeScreen)) {
@@ -1223,6 +1291,10 @@ const findTransactionById = (id: number) => {
       setMessage("Enter the counterparty email and amount to continue.");
       return;
     }
+    if (createForm.partyType === "business" && !businessDetailsComplete(createForm.business)) {
+      setMessage("Complete all business identity fields before continuing.");
+      return;
+    }
     setMessage(null);
     navigate("milestones");
   };
@@ -1323,6 +1395,9 @@ const findTransactionById = (id: number) => {
         counterpartyEmail: createForm.counterpartyEmail || "counterparty@example.com",
         amount: escrowAmount,
         creatorRole: createForm.role,
+        creatorParty: createForm.partyType === "business"
+          ? { type: "business", business: createForm.business }
+          : { type: "individual" },
         category: createForm.category,
         description: descriptionValue || undefined,
         signatureDataUrl,
@@ -1336,13 +1411,14 @@ const findTransactionById = (id: number) => {
       const inviteStatus = response.invitationStatus ?? "existing_user";
       const requiresSignup = inviteStatus === "signup_required" || inviteStatus === "verification_required";
       const counterpartyName = response.counterpart ?? createForm.counterpartyEmail;
+      const creatorDisplayName = createForm.partyType === "business" ? createForm.business.legalName : currentUser.name;
       const buyerInfo =
         createForm.role === "buyer"
-          ? { name: currentUser.name, email: currentUser.email }
+          ? { name: creatorDisplayName, email: currentUser.email }
           : { name: counterpartyName, email: createForm.counterpartyEmail };
       const sellerInfo =
         createForm.role === "seller"
-          ? { name: currentUser.name, email: currentUser.email }
+          ? { name: creatorDisplayName, email: currentUser.email }
           : { name: counterpartyName, email: createForm.counterpartyEmail };
       const pendingContext =
         inviteStatus === "signup_required"
@@ -1386,6 +1462,24 @@ const findTransactionById = (id: number) => {
         buyerEmail: buyerInfo.email,
         seller: sellerInfo.name,
         sellerEmail: sellerInfo.email,
+        buyerParty: createForm.role === "buyer"
+          ? { partyType: createForm.partyType, ...(createForm.partyType === "business" ? {
+              representativeName: currentUser.name,
+              representativeTitle: createForm.business.representativeTitle,
+              registrationCountry: createForm.business.registrationCountry,
+              registrationNumber: createForm.business.registrationNumber,
+              registeredAddress: createForm.business.registeredAddress,
+            } : {}) }
+          : { partyType: "individual" },
+        sellerParty: createForm.role === "seller"
+          ? { partyType: createForm.partyType, ...(createForm.partyType === "business" ? {
+              representativeName: currentUser.name,
+              representativeTitle: createForm.business.representativeTitle,
+              registrationCountry: createForm.business.registrationCountry,
+              registrationNumber: createForm.business.registrationNumber,
+              registeredAddress: createForm.business.registeredAddress,
+            } : {}) }
+          : { partyType: "individual" },
         milestones: milestones.map((milestone) => ({
           id: milestone.id,
           title: milestone.title,
@@ -1414,6 +1508,8 @@ const findTransactionById = (id: number) => {
         amount: "",
         category: "Goods",
         description: "",
+        partyType: "individual",
+        business: emptyBusinessDetails(),
       });
       setMilestones([]);
       setMilestoneInputs({ title: "", amount: "", description: "", deadline: "" });
@@ -1700,11 +1796,20 @@ const findTransactionById = (id: number) => {
       setMessage("Draw your signature before approving the agreement.");
       return;
     }
+    if (approvalPartyType === "business" && !businessDetailsComplete(approvalBusiness)) {
+      setMessage("Complete all business identity fields before approving the escrow.");
+      return;
+    }
+    const counterpartyParty: PartyIdentity = approvalPartyType === "business"
+      ? { type: "business", business: approvalBusiness }
+      : { type: "individual" };
     try {
-      await approveEscrowMutation.mutateAsync({ escrowId, signatureDataUrl });
+      await approveEscrowMutation.mutateAsync({ escrowId, signatureDataUrl, counterpartyParty });
       approvalSignaturePadRef.current?.clear();
       setApprovalSignatureCaptured(false);
       setApprovalSignatureVersion((version) => version + 1);
+      setApprovalPartyType("individual");
+      setApprovalBusiness(emptyBusinessDetails());
       setMessage("Escrow approved. The buyer can now fund it with dummy wallet funds.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to approve escrow.");
@@ -2117,6 +2222,51 @@ const handleWalletWithdraw = async () => {
                   </label>
                 ))}
               </div>
+            </div>
+            <div className="create-form-section">
+              <div className="muted create-form-label">You are creating this escrow as</div>
+              <div className="role-toggle create-form-role">
+                {(["individual", "business"] as const).map((partyType) => (
+                  <label
+                    key={partyType}
+                    className={`role-option ${createForm.partyType === partyType ? "active" : ""}`}
+                    onClick={() => setCreateForm((current) => ({
+                      ...current,
+                      partyType,
+                      business: partyType === "business" && businessProfileQuery.data?.businessProfile && !Object.values(current.business).some((value) => value.trim())
+                        ? businessProfileQuery.data.businessProfile
+                        : current.business,
+                    }))}
+                  >
+                    <input type="radio" name="creator-party-type" checked={createForm.partyType === partyType} readOnly />
+                    <span className="role-copy">{partyType === "individual" ? "Myself" : "A business"}</span>
+                  </label>
+                ))}
+              </div>
+              {createForm.partyType === "business" ? (
+                <div className="business-identity-fields">
+                  <div className="form-field">
+                    <label className="muted">Legal business name</label>
+                    <input value={createForm.business.legalName} onChange={(event) => setCreateForm((current) => ({ ...current, business: { ...current.business, legalName: event.target.value } }))} />
+                  </div>
+                  <div className="form-field">
+                    <label className="muted">Registration country</label>
+                    <input value={createForm.business.registrationCountry} onChange={(event) => setCreateForm((current) => ({ ...current, business: { ...current.business, registrationCountry: event.target.value } }))} />
+                  </div>
+                  <div className="form-field">
+                    <label className="muted">Registration number</label>
+                    <input value={createForm.business.registrationNumber} onChange={(event) => setCreateForm((current) => ({ ...current, business: { ...current.business, registrationNumber: event.target.value } }))} />
+                  </div>
+                  <div className="form-field">
+                    <label className="muted">Your title</label>
+                    <input value={createForm.business.representativeTitle} placeholder="Director, owner, officer…" onChange={(event) => setCreateForm((current) => ({ ...current, business: { ...current.business, representativeTitle: event.target.value } }))} />
+                  </div>
+                  <div className="form-field business-identity-fields__address">
+                    <label className="muted">Registered address</label>
+                    <textarea rows={2} value={createForm.business.registeredAddress} onChange={(event) => setCreateForm((current) => ({ ...current, business: { ...current.business, registeredAddress: event.target.value } }))} />
+                  </div>
+                </div>
+              ) : null}
             </div>
             <div className="create-form-section">
               <div className="form-field">
@@ -2732,6 +2882,11 @@ const handleWalletWithdraw = async () => {
             <div>
               <div className="muted">Buyer</div>
               <div style={{ fontWeight: 700 }}>{tx.buyer}</div>
+              {tx.buyerParty?.partyType === "business" ? (
+                <div className="muted" style={{ fontSize: 13, marginTop: 3 }}>
+                  Represented by {tx.buyerParty.representativeName}{tx.buyerParty.representativeTitle ? `, ${tx.buyerParty.representativeTitle}` : ""}
+                </div>
+              ) : null}
               <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
                 {tx.buyerEmail}
               </div>
@@ -2739,6 +2894,11 @@ const handleWalletWithdraw = async () => {
                 Seller
               </div>
               <div style={{ fontWeight: 700 }}>{tx.seller}</div>
+              {tx.sellerParty?.partyType === "business" ? (
+                <div className="muted" style={{ fontSize: 13, marginTop: 3 }}>
+                  Represented by {tx.sellerParty.representativeName}{tx.sellerParty.representativeTitle ? `, ${tx.sellerParty.representativeTitle}` : ""}
+                </div>
+              ) : null}
               <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
                 {tx.sellerEmail}
               </div>
@@ -2794,7 +2954,46 @@ const handleWalletWithdraw = async () => {
                       : "This draft is still waiting for counterparty approval."}
             </p>
             {canApproveEscrow ? (
-              <div className="sig-wrap" style={{ marginBottom: 12 }}>
+              <div style={{ marginBottom: 12 }}>
+                <div className="muted" style={{ marginBottom: 6 }}>You are signing as</div>
+                <div className="role-toggle">
+                  {(["individual", "business"] as const).map((partyType) => (
+                    <label key={partyType} className={`role-option ${approvalPartyType === partyType ? "active" : ""}`} onClick={() => {
+                      setApprovalPartyType(partyType);
+                      if (partyType === "business" && businessProfileQuery.data?.businessProfile && !Object.values(approvalBusiness).some((value) => value.trim())) {
+                        setApprovalBusiness(businessProfileQuery.data.businessProfile);
+                      }
+                    }}>
+                      <input type="radio" name="approval-party-type" checked={approvalPartyType === partyType} readOnly />
+                      <span className="role-copy">{partyType === "individual" ? "Myself" : "A business"}</span>
+                    </label>
+                  ))}
+                </div>
+                {approvalPartyType === "business" ? (
+                  <div className="business-identity-fields" style={{ marginBottom: 12 }}>
+                    <div className="form-field">
+                      <label className="muted">Legal business name</label>
+                      <input value={approvalBusiness.legalName} onChange={(event) => setApprovalBusiness((current) => ({ ...current, legalName: event.target.value }))} />
+                    </div>
+                    <div className="form-field">
+                      <label className="muted">Registration country</label>
+                      <input value={approvalBusiness.registrationCountry} onChange={(event) => setApprovalBusiness((current) => ({ ...current, registrationCountry: event.target.value }))} />
+                    </div>
+                    <div className="form-field">
+                      <label className="muted">Registration number</label>
+                      <input value={approvalBusiness.registrationNumber} onChange={(event) => setApprovalBusiness((current) => ({ ...current, registrationNumber: event.target.value }))} />
+                    </div>
+                    <div className="form-field">
+                      <label className="muted">Your title</label>
+                      <input value={approvalBusiness.representativeTitle} onChange={(event) => setApprovalBusiness((current) => ({ ...current, representativeTitle: event.target.value }))} />
+                    </div>
+                    <div className="form-field business-identity-fields__address">
+                      <label className="muted">Registered address</label>
+                      <textarea rows={2} value={approvalBusiness.registeredAddress} onChange={(event) => setApprovalBusiness((current) => ({ ...current, registeredAddress: event.target.value }))} />
+                    </div>
+                  </div>
+                ) : null}
+                <div className="sig-wrap">
                 <div className="muted" style={{ marginBottom: 6 }}>
                   Your signature
                 </div>
@@ -2818,6 +3017,7 @@ const handleWalletWithdraw = async () => {
                   <div className="muted" style={{ marginLeft: "auto" }}>
                     Sign to approve these terms
                   </div>
+                </div>
                 </div>
               </div>
             ) : null}

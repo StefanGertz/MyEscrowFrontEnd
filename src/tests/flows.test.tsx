@@ -61,6 +61,8 @@ describe("escrow flows", () => {
         title: "Integration escrow",
         counterpartyEmail: "northwind@example.com",
         amount: 75000,
+        creatorRole: "buyer",
+        creatorParty: { type: "individual" },
         category: "Services",
         description: "Staging test escrow",
       });

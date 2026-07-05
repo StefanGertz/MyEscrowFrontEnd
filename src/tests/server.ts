@@ -84,6 +84,9 @@ export const handlers = [
       invitationStatus: "existing_user",
     });
   }),
+  http.get(`${baseUrl}/api/dashboard/business-profile`, () => {
+    return HttpResponse.json({ businessProfile: null });
+  }),
   http.post(`${baseUrl}/api/dashboard/escrows/:id/release`, ({ params }) => {
     return HttpResponse.json({
       escrowId: params.id,

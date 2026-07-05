@@ -178,9 +178,29 @@ type ReleasePayload = {
   escrowId: string;
 };
 
+export type BusinessDetails = {
+  legalName: string;
+  registrationCountry: string;
+  registrationNumber: string;
+  registeredAddress: string;
+  representativeTitle: string;
+};
+
+export type PartyIdentity =
+  | { type: "individual" }
+  | { type: "business"; business: BusinessDetails };
+
+export function useBusinessProfile() {
+  return useQuery({
+    queryKey: ["dashboard", "business-profile"],
+    queryFn: () => fetchJSON<{ businessProfile: BusinessDetails | null }>("/api/dashboard/business-profile"),
+  });
+}
+
 type EscrowActionPayload = {
   escrowId: string;
   signatureDataUrl?: string;
+  counterpartyParty?: PartyIdentity;
 };
 
 type MilestoneActionPayload = {
@@ -227,19 +247,20 @@ const buildEscrowAction =
   () => {
     const queryClient = useQueryClient();
     return useMutation({
-      mutationFn: ({ escrowId, signatureDataUrl }: EscrowActionPayload) =>
+      mutationFn: ({ escrowId, ...payload }: EscrowActionPayload) =>
         fetchJSON<{ escrowId: string }>(`/api/dashboard/escrows/${escrowId}/${path}`, {
           method: "POST",
-          ...(signatureDataUrl
+          ...(Object.keys(payload).length
             ? {
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ signatureDataUrl }),
+                body: JSON.stringify(payload),
               }
             : {}),
         }),
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: ["dashboard", "escrows"] });
         queryClient.invalidateQueries({ queryKey: ["dashboard", "overview"] });
+        queryClient.invalidateQueries({ queryKey: ["dashboard", "business-profile"] });
       },
     });
   };
@@ -336,6 +357,7 @@ type CreateEscrowPayload = {
   counterpartyEmail: string;
   amount: number;
   creatorRole: "buyer" | "seller";
+  creatorParty: PartyIdentity;
   category?: string;
   description?: string;
   signatureDataUrl?: string;
@@ -369,6 +391,7 @@ export function useCreateEscrow() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["dashboard", "overview"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard", "escrows"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "business-profile"] });
     },
   });
 }

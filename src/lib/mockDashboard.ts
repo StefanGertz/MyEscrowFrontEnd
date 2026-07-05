@@ -31,11 +31,23 @@ export type EscrowRecord = {
     id: string;
     name: string;
     email: string;
+    partyType?: "individual" | "business";
+    representativeName?: string;
+    representativeTitle?: string;
+    registrationCountry?: string;
+    registrationNumber?: string;
+    registeredAddress?: string;
   };
   seller?: {
     id: string;
     name: string;
     email: string;
+    partyType?: "individual" | "business";
+    representativeName?: string;
+    representativeTitle?: string;
+    registrationCountry?: string;
+    registrationNumber?: string;
+    registeredAddress?: string;
   };
   milestones?: Array<{
     id: number;

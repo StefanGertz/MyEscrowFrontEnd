@@ -77,6 +77,7 @@ export function LiveDashboard() {
         counterpartyEmail: escrowForm.counterpartyEmail,
         amount: amountValue,
         creatorRole: escrowForm.creatorRole,
+        creatorParty: { type: "individual" },
         description: escrowForm.description || undefined,
       });
       const inviteMessage =
