@@ -17,7 +17,6 @@ import {
 
 type EscrowFormState = {
   title: string;
-  counterpart: string;
   counterpartyEmail: string;
   creatorRole: "buyer" | "seller";
   amount: string;
@@ -38,7 +37,6 @@ export function LiveDashboard() {
   const createFormRef = useRef<HTMLDivElement | null>(null);
   const [escrowForm, setEscrowForm] = useState<EscrowFormState>({
     title: "",
-    counterpart: "",
     counterpartyEmail: "",
     creatorRole: "buyer",
     amount: "",
@@ -66,18 +64,16 @@ export function LiveDashboard() {
     const amountValue = Number(escrowForm.amount);
     if (
       !escrowForm.title ||
-      !escrowForm.counterpart ||
       !escrowForm.counterpartyEmail ||
       Number.isNaN(amountValue) ||
       amountValue <= 0
     ) {
-      setFormError("Add a title, counterparty name, counterparty email, and positive amount.");
+      setFormError("Add a title, counterparty email, and positive amount.");
       return;
     }
     try {
       const response = await createEscrow.mutateAsync({
         title: escrowForm.title,
-        counterpart: escrowForm.counterpart,
         counterpartyEmail: escrowForm.counterpartyEmail,
         amount: amountValue,
         creatorRole: escrowForm.creatorRole,
@@ -91,7 +87,6 @@ export function LiveDashboard() {
             : "Escrow created in staging.";
       setEscrowForm({
         title: "",
-        counterpart: "",
         counterpartyEmail: "",
         creatorRole: "buyer",
         amount: "",
@@ -270,18 +265,6 @@ export function LiveDashboard() {
                 value={escrowForm.title}
                 onChange={(event) => setEscrowForm((prev) => ({ ...prev, title: event.target.value }))}
                 placeholder="Project name"
-              />
-              <label className="muted" htmlFor="escrow-counterpart">
-                Counterparty
-              </label>
-              <input
-                id="escrow-counterpart"
-                type="text"
-                value={escrowForm.counterpart}
-                onChange={(event) =>
-                  setEscrowForm((prev) => ({ ...prev, counterpart: event.target.value }))
-                }
-                placeholder="Acme Corp"
               />
               <label className="muted" htmlFor="escrow-counterparty-email">
                 Counterparty email

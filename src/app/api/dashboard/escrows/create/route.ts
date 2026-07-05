@@ -4,7 +4,6 @@ import { proxyApiRequest } from "@/lib/serverProxy";
 
 type CreatePayload = {
   title: string;
-  counterpart: string;
   counterpartyEmail: string;
   amount: number;
   creatorRole: "buyer" | "seller";
@@ -32,7 +31,7 @@ export async function POST(request: NextRequest) {
     escrowId: Math.floor(10000 + Math.random() * 90000),
     title: body.title,
     description: body.description,
-    counterpart: body.counterpart,
+    counterpart: body.counterpartyEmail,
     counterpartyEmail: body.counterpartyEmail,
     amount: body.amount,
     creatorRole: body.creatorRole,

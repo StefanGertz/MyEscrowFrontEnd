@@ -65,6 +65,18 @@ type NotificationsResponse = {
   }>;
 };
 
+export type WalletTransaction = {
+  id: string;
+  amount: string;
+  type: string;
+  direction: "credit" | "debit";
+  createdAt: string;
+};
+
+type WalletTransactionsResponse = {
+  transactions: WalletTransaction[];
+};
+
 export function useEscrowSummary() {
   return useQuery({
     queryKey: ["dashboard", "overview"],
@@ -104,6 +116,14 @@ export function useNotificationHistory() {
     queryKey: ["dashboard", "notifications", "history"],
     queryFn: () => fetchJSON<NotificationsResponse>("/api/dashboard/notifications?history=true"),
     staleTime: 15 * 1000,
+  });
+}
+
+export function useWalletTransactions(enabled = true) {
+  return useQuery({
+    queryKey: ["dashboard", "wallet", "transactions"],
+    queryFn: () => fetchJSON<WalletTransactionsResponse>("/api/dashboard/wallet/transactions"),
+    enabled,
   });
 }
 
@@ -174,6 +194,14 @@ type MilestoneChangeRequestPayload = MilestoneActionPayload & {
   amount: number;
   deadline?: string;
   note?: string;
+};
+
+type MilestoneChangeReviewPayload = MilestoneActionPayload & {
+  decision: "accept" | "reject";
+  title?: string;
+  description?: string;
+  amount?: number;
+  deadline?: string | null;
 };
 
 export function useReleaseEscrow() {
@@ -266,10 +294,14 @@ export function useRequestMilestoneChanges() {
 export function useApplyMilestoneChanges() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ escrowId, milestoneId }: MilestoneActionPayload) =>
+    mutationFn: ({ escrowId, milestoneId, ...payload }: MilestoneChangeReviewPayload) =>
       fetchJSON<{ escrowId: string; milestoneId: number }>(
         `/api/dashboard/escrows/${escrowId}/milestones/${milestoneId}/apply-changes`,
-        { method: "POST" },
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        },
       ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["dashboard", "escrows"] });
@@ -301,7 +333,6 @@ export function useResolveDispute() {
 
 type CreateEscrowPayload = {
   title: string;
-  counterpart: string;
   counterpartyEmail: string;
   amount: number;
   creatorRole: "buyer" | "seller";
@@ -320,6 +351,7 @@ export type CreateEscrowResponse = {
   success: true;
   escrowId: number;
   reference?: string;
+  counterpart?: string;
   createdAt?: string;
   invitationStatus?: "existing_user" | "signup_required" | "verification_required";
 };
@@ -357,6 +389,7 @@ export function useWalletTopup() {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["dashboard", "overview"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "wallet", "transactions"] });
     },
   });
 }
@@ -373,6 +406,7 @@ export function useWalletWithdraw() {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["dashboard", "overview"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "wallet", "transactions"] });
     },
   });
 }

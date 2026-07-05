@@ -1,3 +1,7 @@
+"use client";
+
+import { useState } from "react";
+
 type HeaderProps = {
   notificationCount?: number;
   primaryLabel?: string;
@@ -19,6 +23,13 @@ export function Header({
   onAlertsClick,
   onSettingsClick,
 }: HeaderProps) {
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  const runMenuAction = (action?: () => void) => {
+    setMenuOpen(false);
+    action?.();
+  };
+
   return (
     <header className="app-header">
       <button className="brand" type="button" onClick={onBrandClick}>
@@ -58,7 +69,63 @@ export function Header({
           Log out
         </button>
       </div>
+
+      <div className="mobile-header-actions">
+        <button
+          className="icon-btn mobile-alerts-btn"
+          type="button"
+          aria-label="Open alerts"
+          data-has-notif={notificationCount > 0}
+          onClick={onAlertsClick}
+        >
+          <BellIcon />
+          <span>Alerts</span>
+        </button>
+        <div className="header-menu">
+          <button
+            className="icon-btn header-menu-toggle"
+            type="button"
+            aria-label={menuOpen ? "Close account menu" : "Open account menu"}
+            aria-expanded={menuOpen}
+            aria-controls="account-menu"
+            onClick={() => setMenuOpen((current) => !current)}
+          >
+            <MenuIcon />
+          </button>
+          {menuOpen ? (
+            <div id="account-menu" className="header-menu-popover" role="menu">
+              <button type="button" role="menuitem" onClick={() => runMenuAction(onSettingsClick)}>
+                <SettingsIcon />
+                Settings
+              </button>
+              <button type="button" role="menuitem" onClick={() => runMenuAction(onLogoutClick)}>
+                <LogoutIcon />
+                Log out
+              </button>
+            </div>
+          ) : null}
+        </div>
+      </div>
     </header>
+  );
+}
+
+function MenuIcon() {
+  return (
+    <svg
+      aria-hidden
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+    >
+      <line x1="4" y1="7" x2="20" y2="7" />
+      <line x1="4" y1="12" x2="20" y2="12" />
+      <line x1="4" y1="17" x2="20" y2="17" />
+    </svg>
   );
 }
 

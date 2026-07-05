@@ -70,7 +70,7 @@ export const handlers = [
   http.post(`${baseUrl}/api/dashboard/escrows/create`, async ({ request }) => {
     const body = (await request.json()) as {
       title: string;
-      counterpart: string;
+      counterpartyEmail: string;
       amount: number;
       description?: string;
     };
@@ -78,7 +78,7 @@ export const handlers = [
       escrowId: 55555,
       title: body.title,
       description: body.description,
-      counterpart: body.counterpart,
+      counterpart: body.counterpartyEmail,
       amount: body.amount,
       success: true,
       invitationStatus: "existing_user",
@@ -136,6 +136,9 @@ export const handlers = [
       success: true,
       balance: 1250.5 - body.amount,
     });
+  }),
+  http.get(`${baseUrl}/api/dashboard/wallet/transactions`, () => {
+    return HttpResponse.json({ transactions: [] });
   }),
 ];
 

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { renderHook, act } from "@testing-library/react";
+import { renderHook, act, waitFor } from "@testing-library/react";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import {
   useCreateEscrow,
@@ -12,6 +12,7 @@ import {
   useRequestMilestoneChanges,
   useApplyMilestoneChanges,
   useWalletTopup,
+  useWalletTransactions,
   useWalletWithdraw,
 } from "@/hooks/useDashboardData";
 import { server } from "./server";
@@ -58,7 +59,7 @@ describe("escrow flows", () => {
     await act(async () => {
       const response = await createHook.result.current.mutateAsync({
         title: "Integration escrow",
-        counterpart: "Northwind Agency",
+        counterpartyEmail: "northwind@example.com",
         amount: 75000,
         category: "Services",
         description: "Staging test escrow",
@@ -172,13 +173,37 @@ describe("pre-approval milestone changes", () => {
     });
 
     await act(async () => {
-      const response = await applyHook.result.current.mutateAsync({ escrowId: "PO-1001", milestoneId: "12" });
+      const response = await applyHook.result.current.mutateAsync({
+        escrowId: "PO-1001",
+        milestoneId: "12",
+        decision: "accept",
+        title: "Creator-reviewed wording",
+        amount: 725,
+        deadline: null,
+      });
       expect(response.escrowId).toBe("PO-1001");
+    });
+
+    await act(async () => {
+      const response = await applyHook.result.current.mutateAsync({
+        escrowId: "PO-1001",
+        milestoneId: "13",
+        decision: "reject",
+      });
+      expect(response.milestoneId).toBe(13);
     });
   });
 });
 
 describe("wallet flows", () => {
+  it("returns an empty wallet history for a new user", async () => {
+    const wrapper = createWrapper();
+    const transactionsHook = renderHook(() => useWalletTransactions(), { wrapper });
+
+    await waitFor(() => expect(transactionsHook.result.current.isSuccess).toBe(true));
+    expect(transactionsHook.result.current.data?.transactions).toEqual([]);
+  });
+
   it("tops up and withdraws", async () => {
     const wrapper = createWrapper();
     const topupHook = renderHook(() => useWalletTopup(), { wrapper });

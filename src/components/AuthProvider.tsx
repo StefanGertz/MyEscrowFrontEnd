@@ -10,6 +10,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   type AuthResponse,
   type AuthUser,
@@ -99,16 +100,18 @@ type SignupResult =
   | { status: "verification"; email: string; expiresAt?: string; debugCode?: string };
 
 export function AuthProvider({ children }: AuthProviderProps) {
+  const queryClient = useQueryClient();
   const loginMutation = useLoginMutation();
   const signupMutation = useSignupMutation();
   const [state, setState] = useState<AuthState>(emptyAuthState);
   const [isHydrating, setIsHydrating] = useState(true);
 
   const clearSession = useCallback(() => {
+    queryClient.removeQueries({ queryKey: ["dashboard"] });
     setState(emptyAuthState());
     setClientAuthToken(null);
     writeStorage(emptyAuthState());
-  }, []);
+  }, [queryClient]);
 
   useEffect(() => {
     const restored = readStorage();
@@ -129,6 +132,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [clearSession, state.expiresAt, state.token]);
 
   const adoptSession = useCallback((response: AuthResponse) => {
+      queryClient.removeQueries({ queryKey: ["dashboard"] });
       const nextState: AuthState = {
         user: response.user,
         token: response.token,
@@ -137,7 +141,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setState(nextState);
       setClientAuthToken(response.token);
       writeStorage(nextState);
-  }, []);
+  }, [queryClient]);
 
   const login = useCallback(
     async (payload: { email: string; password: string }) => {
