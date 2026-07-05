@@ -180,9 +180,6 @@ type ReleasePayload = {
 
 export type BusinessDetails = {
   legalName: string;
-  registrationCountry: string;
-  registrationNumber: string;
-  registeredAddress: string;
   representativeTitle: string;
 };
 

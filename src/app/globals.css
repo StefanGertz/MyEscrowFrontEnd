@@ -1019,17 +1019,9 @@ select:focus {
   background: rgba(244, 250, 255, 0.82);
 }
 
-.business-identity-fields__address {
-  grid-column: 1 / -1;
-}
-
 @media (max-width: 560px) {
   .business-identity-fields {
     grid-template-columns: 1fr;
-  }
-
-  .business-identity-fields__address {
-    grid-column: auto;
   }
 }
 

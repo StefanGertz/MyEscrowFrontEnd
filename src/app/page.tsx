@@ -128,9 +128,6 @@ type PartyDisplay = {
 
 const emptyBusinessDetails = (): BusinessDetails => ({
   legalName: "",
-  registrationCountry: "",
-  registrationNumber: "",
-  registeredAddress: "",
   representativeTitle: "",
 });
 
@@ -570,19 +567,6 @@ const downloadAgreementPdf = (tx: Transaction) => {
   doc.text(tx.buyerEmail, margin + 5, cursorY + 26);
   doc.text(tx.sellerEmail, margin + contentWidth / 2 + 4, cursorY + 26);
   cursorY += 42;
-
-  const businessIdentityLines = [
-    tx.buyerParty?.partyType === "business"
-      ? `Buyer registration: ${tx.buyerParty.registrationNumber ?? "Not provided"} (${tx.buyerParty.registrationCountry ?? "Jurisdiction not provided"}); ${tx.buyerParty.registeredAddress ?? "Address not provided"}.`
-      : null,
-    tx.sellerParty?.partyType === "business"
-      ? `Seller registration: ${tx.sellerParty.registrationNumber ?? "Not provided"} (${tx.sellerParty.registrationCountry ?? "Jurisdiction not provided"}); ${tx.sellerParty.registeredAddress ?? "Address not provided"}.`
-      : null,
-  ].filter((line): line is string => Boolean(line));
-  if (businessIdentityLines.length) {
-    sectionTitle("Business identities");
-    businessIdentityLines.forEach((line) => addWrappedText(line));
-  }
 
   sectionTitle("Agreement terms");
   addWrappedText(
@@ -1292,7 +1276,7 @@ const findTransactionById = (id: number) => {
       return;
     }
     if (createForm.partyType === "business" && !businessDetailsComplete(createForm.business)) {
-      setMessage("Complete all business identity fields before continuing.");
+      setMessage("Enter the Business Name and Your Title before continuing.");
       return;
     }
     setMessage(null);
@@ -1466,18 +1450,12 @@ const findTransactionById = (id: number) => {
           ? { partyType: createForm.partyType, ...(createForm.partyType === "business" ? {
               representativeName: currentUser.name,
               representativeTitle: createForm.business.representativeTitle,
-              registrationCountry: createForm.business.registrationCountry,
-              registrationNumber: createForm.business.registrationNumber,
-              registeredAddress: createForm.business.registeredAddress,
             } : {}) }
           : { partyType: "individual" },
         sellerParty: createForm.role === "seller"
           ? { partyType: createForm.partyType, ...(createForm.partyType === "business" ? {
               representativeName: currentUser.name,
               representativeTitle: createForm.business.representativeTitle,
-              registrationCountry: createForm.business.registrationCountry,
-              registrationNumber: createForm.business.registrationNumber,
-              registeredAddress: createForm.business.registeredAddress,
             } : {}) }
           : { partyType: "individual" },
         milestones: milestones.map((milestone) => ({
@@ -1797,7 +1775,7 @@ const findTransactionById = (id: number) => {
       return;
     }
     if (approvalPartyType === "business" && !businessDetailsComplete(approvalBusiness)) {
-      setMessage("Complete all business identity fields before approving the escrow.");
+      setMessage("Enter the Business Name and Your Title before approving the escrow.");
       return;
     }
     const counterpartyParty: PartyIdentity = approvalPartyType === "business"
@@ -2246,24 +2224,12 @@ const handleWalletWithdraw = async () => {
               {createForm.partyType === "business" ? (
                 <div className="business-identity-fields">
                   <div className="form-field">
-                    <label className="muted">Legal business name</label>
+                    <label className="muted">Business Name</label>
                     <input value={createForm.business.legalName} onChange={(event) => setCreateForm((current) => ({ ...current, business: { ...current.business, legalName: event.target.value } }))} />
                   </div>
                   <div className="form-field">
-                    <label className="muted">Registration country</label>
-                    <input value={createForm.business.registrationCountry} onChange={(event) => setCreateForm((current) => ({ ...current, business: { ...current.business, registrationCountry: event.target.value } }))} />
-                  </div>
-                  <div className="form-field">
-                    <label className="muted">Registration number</label>
-                    <input value={createForm.business.registrationNumber} onChange={(event) => setCreateForm((current) => ({ ...current, business: { ...current.business, registrationNumber: event.target.value } }))} />
-                  </div>
-                  <div className="form-field">
-                    <label className="muted">Your title</label>
+                    <label className="muted">Your Title</label>
                     <input value={createForm.business.representativeTitle} placeholder="Director, owner, officer…" onChange={(event) => setCreateForm((current) => ({ ...current, business: { ...current.business, representativeTitle: event.target.value } }))} />
-                  </div>
-                  <div className="form-field business-identity-fields__address">
-                    <label className="muted">Registered address</label>
-                    <textarea rows={2} value={createForm.business.registeredAddress} onChange={(event) => setCreateForm((current) => ({ ...current, business: { ...current.business, registeredAddress: event.target.value } }))} />
                   </div>
                 </div>
               ) : null}
@@ -2972,24 +2938,12 @@ const handleWalletWithdraw = async () => {
                 {approvalPartyType === "business" ? (
                   <div className="business-identity-fields" style={{ marginBottom: 12 }}>
                     <div className="form-field">
-                      <label className="muted">Legal business name</label>
+                      <label className="muted">Business Name</label>
                       <input value={approvalBusiness.legalName} onChange={(event) => setApprovalBusiness((current) => ({ ...current, legalName: event.target.value }))} />
                     </div>
                     <div className="form-field">
-                      <label className="muted">Registration country</label>
-                      <input value={approvalBusiness.registrationCountry} onChange={(event) => setApprovalBusiness((current) => ({ ...current, registrationCountry: event.target.value }))} />
-                    </div>
-                    <div className="form-field">
-                      <label className="muted">Registration number</label>
-                      <input value={approvalBusiness.registrationNumber} onChange={(event) => setApprovalBusiness((current) => ({ ...current, registrationNumber: event.target.value }))} />
-                    </div>
-                    <div className="form-field">
-                      <label className="muted">Your title</label>
+                      <label className="muted">Your Title</label>
                       <input value={approvalBusiness.representativeTitle} onChange={(event) => setApprovalBusiness((current) => ({ ...current, representativeTitle: event.target.value }))} />
-                    </div>
-                    <div className="form-field business-identity-fields__address">
-                      <label className="muted">Registered address</label>
-                      <textarea rows={2} value={approvalBusiness.registeredAddress} onChange={(event) => setApprovalBusiness((current) => ({ ...current, registeredAddress: event.target.value }))} />
                     </div>
                   </div>
                 ) : null}
