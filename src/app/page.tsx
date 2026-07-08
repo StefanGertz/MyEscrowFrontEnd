@@ -2842,6 +2842,7 @@ const handleWalletWithdraw = async () => {
     const isChangesRequested = tx.lifecycleStatus === "changes_requested";
     const isAwaitingFunding = tx.lifecycleStatus === "funding_pending";
     const canApproveEscrow = !tx.isOwner && isAwaitingApproval;
+    const canRequestMilestoneChanges = !tx.isOwner && (isAwaitingApproval || isChangesRequested);
     const canFundEscrow = isCurrentUserBuyer && isAwaitingFunding;
     const walletShortfall = Math.max(tx.amount - walletBalanceDisplay, 0);
     const canCancelEscrow =
@@ -3186,7 +3187,7 @@ const handleWalletWithdraw = async () => {
                     </div>
                   ) : null}
                   {milestoneChangeDraft?.milestoneId === milestone.id ? (
-                    <div className="card" style={{ marginTop: 10, padding: 12 }}>
+                    <div className="card milestone-change-card" style={{ marginTop: 10, padding: 12 }}>
                       <strong>Propose milestone changes</strong>
                       <div className="form-grid" style={{ marginTop: 10 }}>
                         <div className="form-field">
@@ -3218,7 +3219,8 @@ const handleWalletWithdraw = async () => {
                       <div className="form-field" style={{ marginTop: 8 }}>
                         <label className="muted">Description</label>
                         <textarea
-                          rows={2}
+                          rows={Math.max(3, Math.min(8, Math.ceil(milestoneChangeDraft.description.length / 26)))}
+                          className="milestone-change-card__description"
                           value={milestoneChangeDraft.description}
                           onChange={(event) => setMilestoneChangeDraft((current) => current ? { ...current, description: event.target.value } : current)}
                         />
@@ -3240,7 +3242,7 @@ const handleWalletWithdraw = async () => {
                     </div>
                   ) : null}
                   <div className="milestone-actions">
-                    {canApproveEscrow && milestone.status === "pending" ? (
+                    {canRequestMilestoneChanges && milestone.status === "pending" ? (
                       <button className="ghost" onClick={() => beginMilestoneChangeRequest(milestone)}>
                         Request changes
                       </button>
@@ -3357,6 +3359,7 @@ const handleWalletWithdraw = async () => {
   return (
     <AppShell screenId={activeScreen}>
       <Header
+        activeScreen={activeScreen}
         notificationCount={openNotifications}
         primaryLabel="New escrow"
         onPrimaryClick={() => navigate("create")}

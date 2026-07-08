@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 type HeaderProps = {
+  activeScreen?: string;
   notificationCount?: number;
   primaryLabel?: string;
   primaryDisabled?: boolean;
@@ -14,6 +15,7 @@ type HeaderProps = {
 };
 
 export function Header({
+  activeScreen,
   notificationCount = 0,
   primaryLabel = "New Escrow",
   primaryDisabled = false,
@@ -23,16 +25,18 @@ export function Header({
   onAlertsClick,
   onSettingsClick,
 }: HeaderProps) {
-  const [menuOpen, setMenuOpen] = useState(false);
+  const menuScope = activeScreen ?? "default";
+  const [openMenuScope, setOpenMenuScope] = useState<string | null>(null);
+  const menuOpen = openMenuScope === menuScope;
 
   const runMenuAction = (action?: () => void) => {
-    setMenuOpen(false);
+    setOpenMenuScope(null);
     action?.();
   };
 
   return (
     <header className="app-header">
-      <button className="brand" type="button" onClick={onBrandClick}>
+      <button className="brand" type="button" onClick={() => runMenuAction(onBrandClick)}>
         <span aria-hidden className="logo-mark">
           ME
         </span>
@@ -46,7 +50,7 @@ export function Header({
           className="primary-btn"
           type="button"
           disabled={primaryDisabled}
-          onClick={onPrimaryClick}
+          onClick={() => runMenuAction(onPrimaryClick)}
         >
           <SparkIcon />
           {primaryLabel}
@@ -55,16 +59,16 @@ export function Header({
           className="icon-btn"
           type="button"
           data-has-notif={notificationCount > 0}
-          onClick={onAlertsClick}
+          onClick={() => runMenuAction(onAlertsClick)}
         >
           <BellIcon />
           Alerts
         </button>
-        <button className="icon-btn" type="button" onClick={onSettingsClick}>
+        <button className="icon-btn" type="button" onClick={() => runMenuAction(onSettingsClick)}>
           <SettingsIcon />
           Settings
         </button>
-        <button className="icon-btn" type="button" onClick={onLogoutClick}>
+        <button className="icon-btn" type="button" onClick={() => runMenuAction(onLogoutClick)}>
           <LogoutIcon />
           Log out
         </button>
@@ -76,7 +80,7 @@ export function Header({
           type="button"
           aria-label="Open alerts"
           data-has-notif={notificationCount > 0}
-          onClick={onAlertsClick}
+          onClick={() => runMenuAction(onAlertsClick)}
         >
           <BellIcon />
           <span>Alerts</span>
@@ -88,7 +92,9 @@ export function Header({
             aria-label={menuOpen ? "Close account menu" : "Open account menu"}
             aria-expanded={menuOpen}
             aria-controls="account-menu"
-            onClick={() => setMenuOpen((current) => !current)}
+            onClick={() => {
+              setOpenMenuScope((current) => (current === menuScope ? null : menuScope));
+            }}
           >
             <MenuIcon />
           </button>

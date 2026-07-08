@@ -128,12 +128,6 @@ function LoginContent() {
             }
             autoComplete="current-password"
           />
-          <div className="auth-helper">
-            <Link href={signupHref}>Need an account?</Link>
-            <Link href="/forgot-password" className="ghost">
-              Forgot password?
-            </Link>
-          </div>
           {error ? (
             <div className="auth-error" role="alert">
               {error}
@@ -142,6 +136,12 @@ function LoginContent() {
           <button className="btn" type="submit" disabled={submitting}>
             {submitting ? "Signing in..." : "Sign in"}
           </button>
+          <div className="auth-helper">
+            <Link href={signupHref}>Need an account?</Link>
+            <Link href="/forgot-password" className="ghost">
+              Forgot password?
+            </Link>
+          </div>
         </form>
       </div>
     </main>

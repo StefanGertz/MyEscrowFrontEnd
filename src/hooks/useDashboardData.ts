@@ -235,6 +235,7 @@ export function useReleaseEscrow() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["dashboard", "escrows"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard", "overview"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "notifications"] });
     },
   });
 }
@@ -258,6 +259,7 @@ const buildEscrowAction =
         queryClient.invalidateQueries({ queryKey: ["dashboard", "escrows"] });
         queryClient.invalidateQueries({ queryKey: ["dashboard", "overview"] });
         queryClient.invalidateQueries({ queryKey: ["dashboard", "business-profile"] });
+        queryClient.invalidateQueries({ queryKey: ["dashboard", "notifications"] });
       },
     });
   };
@@ -282,6 +284,7 @@ const buildMilestoneAction =
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: ["dashboard", "escrows"] });
         queryClient.invalidateQueries({ queryKey: ["dashboard", "overview"] });
+        queryClient.invalidateQueries({ queryKey: ["dashboard", "notifications"] });
       },
     });
   };

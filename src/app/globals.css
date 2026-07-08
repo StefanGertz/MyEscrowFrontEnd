@@ -847,14 +847,17 @@ body {
   }
 }
 
+input:not([type]),
 input[type="text"],
 input[type="email"],
 input[type="number"],
+input[type="password"],
 input[type="tel"],
 input[type="date"],
 textarea,
 select {
   width: 100%;
+  min-width: 0;
   padding: 10px 12px;
   border-radius: 12px;
   border: 1px solid rgba(15, 76, 129, 0.18);
@@ -866,6 +869,19 @@ select {
   box-shadow: 0 10px 22px rgba(15, 76, 129, 0.08);
   transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
   box-sizing: border-box;
+}
+
+.milestone-change-card {
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.milestone-change-card .form-field {
+  min-width: 0;
+}
+
+.milestone-change-card__description {
+  min-height: 116px;
 }
 
 .date-input-control {
@@ -907,7 +923,13 @@ select {
   outline-offset: 1px;
 }
 
-input:focus,
+input:not([type]):focus,
+input[type="text"]:focus,
+input[type="email"]:focus,
+input[type="number"]:focus,
+input[type="password"]:focus,
+input[type="tel"]:focus,
+input[type="date"]:focus,
 textarea:focus,
 select:focus {
   outline: none;
@@ -1610,6 +1632,22 @@ select:focus {
 }
 
 @media (max-width: 768px) {
+  .app:has(+ .toast-viewport .toast) .app-main {
+    padding-top: calc(104px + env(safe-area-inset-top));
+  }
+
+  .toast-viewport {
+    top: calc(74px + env(safe-area-inset-top));
+    left: 12px;
+    right: 12px;
+    align-items: stretch;
+  }
+
+  .toast {
+    width: 100%;
+    text-align: center;
+  }
+
   .app-main {
     padding: 16px 12px calc(80px + env(safe-area-inset-bottom));
   }

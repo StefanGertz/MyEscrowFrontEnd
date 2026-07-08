@@ -1,6 +1,10 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { Header } from "@/components/Header";
+
+afterEach(() => {
+  cleanup();
+});
 
 describe("mobile header menu", () => {
   it("keeps alerts visible and moves account actions into the menu", () => {
@@ -28,5 +32,15 @@ describe("mobile header menu", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open account menu" }));
     fireEvent.click(within(screen.getByRole("menu")).getByRole("menuitem", { name: "Log out" }));
     expect(onLogoutClick).toHaveBeenCalledOnce();
+  });
+
+  it("closes the account menu when the active screen changes", () => {
+    const { rerender } = render(<Header activeScreen="dashboard" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open account menu" }));
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+
+    rerender(<Header activeScreen="wallet" />);
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 });
