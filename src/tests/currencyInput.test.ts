@@ -22,7 +22,7 @@ describe("escrow currency input", () => {
   });
 
   it("preserves cents in displayed monetary values", () => {
-    expect(formatCurrencyValue(1200)).toBe("$1,200");
+    expect(formatCurrencyValue(1200)).toBe("$1,200.00");
     expect(formatCurrencyValue(1200.5)).toBe("$1,200.50");
     expect(formatCurrencyValue(1200.99)).toBe("$1,200.99");
   });
