@@ -371,7 +371,7 @@ export function useRequestAgreementChanges() {
   return useMutation({
     mutationFn: ({ escrowId, ...payload }: AgreementChangeRequestPayload) =>
       fetchJSON<{ escrowId: string }>(
-        `/api/dashboard/escrows/${escrowId}/request-changes`,
+        `/api/dashboard/escrows/${escrowId}/agreement-changes`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
