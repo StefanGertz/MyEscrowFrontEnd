@@ -2337,6 +2337,9 @@ const handleWalletWithdraw = async () => {
     const milestoneTotalCents = milestones.reduce((sum, milestone) => sum + Math.round(milestone.amount * 100), 0);
     const draftMilestoneAmountCents = Math.round(draftMilestoneAmount * 100);
     const remainingEscrowAmount = (escrowAmountCents - milestoneTotalCents - draftMilestoneAmountCents) / 100;
+    const hasDraftMilestoneAmount = draftMilestoneAmountCents > 0;
+    const addMilestoneDisabled = !editingMilestoneId
+      && (remainingEscrowAmount < 0 || (remainingEscrowAmount === 0 && !hasDraftMilestoneAmount));
 
     return (
       <section className="screen active">
@@ -2467,7 +2470,7 @@ const handleWalletWithdraw = async () => {
             type="button"
             className="ghost"
             onClick={handleAddMilestone}
-            disabled={!editingMilestoneId && remainingEscrowAmount === 0}
+            disabled={addMilestoneDisabled}
           >
             {editingMilestoneId ? "Save milestone" : "Add milestone"}
           </button>
@@ -2545,6 +2548,9 @@ const handleWalletWithdraw = async () => {
             </>
           )}
           <div style={{ marginTop: 12, display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <button className="ghost" onClick={() => navigate("welcome")}>
+              Cancel
+            </button>
             <button className="ghost" onClick={() => navigate("create")}>
               Back
             </button>
