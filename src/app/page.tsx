@@ -3043,6 +3043,18 @@ const handleWalletWithdraw = async () => {
       0,
     );
     const draftAgreementTotal = agreementChangeDraft ? agreementDraftTotal(agreementChangeDraft) : 0;
+    const hasNewAgreementMilestone = Boolean(agreementChangeDraft?.milestones.some((milestone) => milestone.isNew));
+    const agreementDraftReady = Boolean(
+      agreementChangeDraft &&
+        agreementChangeDraft.milestones.every(
+          (milestone) =>
+            milestone.title.trim() &&
+            Number.isFinite(Number(milestone.amount)) &&
+            Number(milestone.amount) > 0,
+        ) &&
+        Math.round(draftAgreementTotal * 100) === Math.round(tx.amount * 100),
+    );
+    const agreementSubmitLabel = hasNewAgreementMilestone ? "Add milestone to agreement" : "Send agreement request";
     const canCancelEscrow =
       Boolean(tx.isOwner) &&
       tx.status !== "Cancelled" &&
@@ -3456,7 +3468,7 @@ const handleWalletWithdraw = async () => {
                   ))}
                 </div>
                 <button className="ghost" style={{ marginTop: 10 }} onClick={addAgreementChangeMilestone}>
-                  Add milestone
+                  Draft another milestone
                 </button>
                 <div className="form-field" style={{ marginTop: 12 }}>
                   <label className="muted">Reason or note</label>
@@ -3467,8 +3479,12 @@ const handleWalletWithdraw = async () => {
                   />
                 </div>
                 <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
-                  <button className="btn" onClick={() => handleRequestAgreementChanges(tx)} disabled={requestAgreementChangesMutation.isPending}>
-                    {requestAgreementChangesMutation.isPending ? "Sending..." : "Send agreement request"}
+                  <button
+                    className="btn"
+                    onClick={() => handleRequestAgreementChanges(tx)}
+                    disabled={requestAgreementChangesMutation.isPending || !agreementDraftReady}
+                  >
+                    {requestAgreementChangesMutation.isPending ? "Sending..." : agreementSubmitLabel}
                   </button>
                   <button className="ghost" onClick={() => setAgreementChangeDraft(null)}>Cancel</button>
                 </div>
