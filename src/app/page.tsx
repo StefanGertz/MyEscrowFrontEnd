@@ -3146,13 +3146,11 @@ const handleWalletWithdraw = async () => {
             </button>
           </div>
         </div>
-        {(canApproveEscrow || canFundEscrow || canCancelEscrow || canEditDraftEscrow || (tx.isOwner && isChangesRequested)) ? (
+        {(canFundEscrow || canCancelEscrow || canEditDraftEscrow || (tx.isOwner && isChangesRequested)) ? (
           <div className="card" style={{ marginTop: 12 }}>
             <strong>Next step</strong>
             <p className="muted" style={{ marginTop: 8, marginBottom: 12 }}>
-              {canApproveEscrow
-                ? "Review the invitation and approve or reject the escrow."
-                : tx.isOwner && isChangesRequested
+              {tx.isOwner && isChangesRequested
                   ? "Review the requested agreement changes below."
                 : canFundEscrow
                   ? walletShortfall > 0
@@ -3164,81 +3162,7 @@ const handleWalletWithdraw = async () => {
                       ? "The escrow creator is reviewing requested milestone changes."
                       : "This draft is still waiting for counterparty approval."}
             </p>
-            {canApproveEscrow ? (
-              <div style={{ marginBottom: 12 }}>
-                <div className="muted" style={{ marginBottom: 6 }}>You are signing as</div>
-                <div className="role-toggle">
-                  {(["individual", "business"] as const).map((partyType) => (
-                    <label key={partyType} className={`role-option ${approvalPartyType === partyType ? "active" : ""}`} onClick={() => {
-                      setApprovalPartyType(partyType);
-                      if (partyType === "business" && businessProfileQuery.data?.businessProfile && !Object.values(approvalBusiness).some((value) => value.trim())) {
-                        setApprovalBusiness(businessProfileQuery.data.businessProfile);
-                      }
-                    }}>
-                      <input type="radio" name="approval-party-type" checked={approvalPartyType === partyType} readOnly />
-                      <span className="role-copy">{partyType === "individual" ? "Myself" : "A business"}</span>
-                    </label>
-                  ))}
-                </div>
-                {approvalPartyType === "business" ? (
-                  <div className="business-identity-fields" style={{ marginBottom: 12 }}>
-                    <div className="form-field">
-                      <label className="muted">Business Name</label>
-                      <input value={approvalBusiness.legalName} onChange={(event) => setApprovalBusiness((current) => ({ ...current, legalName: event.target.value }))} />
-                    </div>
-                    <div className="form-field">
-                      <label className="muted">Your Title</label>
-                      <input value={approvalBusiness.representativeTitle} onChange={(event) => setApprovalBusiness((current) => ({ ...current, representativeTitle: event.target.value }))} />
-                    </div>
-                  </div>
-                ) : null}
-                <div className="sig-wrap">
-                <div className="muted" style={{ marginBottom: 6 }}>
-                  Your signature
-                </div>
-                <div className="signature-pad">
-                  <SignaturePad
-                    ref={approvalSignaturePadRef}
-                    resetVersion={approvalSignatureVersion}
-                    onSignedChange={setApprovalSignatureCaptured}
-                  />
-                </div>
-                <div style={{ display: "flex", gap: 8, marginTop: 10, alignItems: "center" }}>
-                  <button
-                    className="ghost"
-                    onClick={() => {
-                      approvalSignaturePadRef.current?.clear();
-                      setApprovalSignatureCaptured(false);
-                    }}
-                  >
-                    Clear
-                  </button>
-                  <div className="muted" style={{ marginLeft: "auto" }}>
-                    Sign to approve these terms
-                  </div>
-                </div>
-                </div>
-              </div>
-            ) : null}
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {canApproveEscrow ? (
-                <>
-                  <button
-                    className="btn"
-                    onClick={() => handleApproveEscrow(tx)}
-                    disabled={approveEscrowMutation.isPending || !approvalSignatureCaptured}
-                  >
-                    {approveEscrowMutation.isPending ? "Approving..." : "Approve escrow"}
-                  </button>
-                  <button
-                    className="ghost"
-                    onClick={() => handleRejectEscrow(tx)}
-                    disabled={rejectEscrowMutation.isPending}
-                  >
-                    {rejectEscrowMutation.isPending ? "Rejecting..." : "Reject escrow"}
-                  </button>
-                </>
-              ) : null}
               {canFundEscrow ? (
                 <button
                   className="btn"
@@ -3395,6 +3319,38 @@ const handleWalletWithdraw = async () => {
             ) : null}
           </div>
         ) : null}
+        {(isAwaitingApproval || isChangesRequested) &&
+        tx.milestones.length &&
+        !(canRequestMilestoneChanges && agreementChangeDraft) &&
+        !(tx.isOwner && isChangesRequested && hasAgreementChangeRequest) ? (
+          <div className="card" style={{ marginTop: 12 }}>
+            <strong>Agreement milestones</strong>
+            <div className="tx-list" style={{ marginTop: 12 }}>
+              {tx.milestones
+                .filter((milestone) => milestone.amount > 0 || !milestone.changeRequestedAt)
+                .map((milestone) => (
+                  <div key={milestone.id} className="tx-item milestone-entry">
+                    <div className="milestone-entry__top">
+                      <div>
+                        <strong>{milestone.title}</strong>
+                        {milestone.description ? (
+                          <p className="muted" style={{ margin: "4px 0 0" }}>
+                            {milestone.description}
+                          </p>
+                        ) : null}
+                        <div className="muted" style={{ marginTop: 4 }}>
+                          {milestone.deadline ? `Deadline ${formatHistoryDate(milestone.deadline)}` : "No deadline"}
+                        </div>
+                      </div>
+                      <div style={{ textAlign: "right", fontWeight: 700 }}>
+                        {formatCurrency(milestone.amount)}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </div>
+        ) : null}
         {canRequestMilestoneChanges ? (
           <div className="card agreement-change-card" style={{ marginTop: 12 }}>
             <div className="agreement-change-card__heading">
@@ -3502,6 +3458,84 @@ const handleWalletWithdraw = async () => {
             ) : null}
           </div>
         ) : null}
+        {canApproveEscrow ? (
+          <div className="card" style={{ marginTop: 12 }}>
+            <strong>Accept and sign</strong>
+            <p className="muted" style={{ marginTop: 8, marginBottom: 12 }}>
+              Sign only after reviewing the agreement and deciding no changes are needed.
+            </p>
+            <div style={{ marginBottom: 12 }}>
+              <div className="muted" style={{ marginBottom: 6 }}>You are signing as</div>
+              <div className="role-toggle">
+                {(["individual", "business"] as const).map((partyType) => (
+                  <label key={partyType} className={`role-option ${approvalPartyType === partyType ? "active" : ""}`} onClick={() => {
+                    setApprovalPartyType(partyType);
+                    if (partyType === "business" && businessProfileQuery.data?.businessProfile && !Object.values(approvalBusiness).some((value) => value.trim())) {
+                      setApprovalBusiness(businessProfileQuery.data.businessProfile);
+                    }
+                  }}>
+                    <input type="radio" name="approval-party-type" checked={approvalPartyType === partyType} readOnly />
+                    <span className="role-copy">{partyType === "individual" ? "Myself" : "A business"}</span>
+                  </label>
+                ))}
+              </div>
+              {approvalPartyType === "business" ? (
+                <div className="business-identity-fields" style={{ marginBottom: 12 }}>
+                  <div className="form-field">
+                    <label className="muted">Business Name</label>
+                    <input value={approvalBusiness.legalName} onChange={(event) => setApprovalBusiness((current) => ({ ...current, legalName: event.target.value }))} />
+                  </div>
+                  <div className="form-field">
+                    <label className="muted">Your Title</label>
+                    <input value={approvalBusiness.representativeTitle} onChange={(event) => setApprovalBusiness((current) => ({ ...current, representativeTitle: event.target.value }))} />
+                  </div>
+                </div>
+              ) : null}
+              <div className="sig-wrap">
+                <div className="muted" style={{ marginBottom: 6 }}>
+                  Your signature
+                </div>
+                <div className="signature-pad">
+                  <SignaturePad
+                    ref={approvalSignaturePadRef}
+                    resetVersion={approvalSignatureVersion}
+                    onSignedChange={setApprovalSignatureCaptured}
+                  />
+                </div>
+                <div style={{ display: "flex", gap: 8, marginTop: 10, alignItems: "center" }}>
+                  <button
+                    className="ghost"
+                    onClick={() => {
+                      approvalSignaturePadRef.current?.clear();
+                      setApprovalSignatureCaptured(false);
+                    }}
+                  >
+                    Clear
+                  </button>
+                  <div className="muted" style={{ marginLeft: "auto" }}>
+                    Sign to approve these terms
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button
+                className="btn"
+                onClick={() => handleApproveEscrow(tx)}
+                disabled={approveEscrowMutation.isPending || !approvalSignatureCaptured}
+              >
+                {approveEscrowMutation.isPending ? "Approving..." : "Approve escrow"}
+              </button>
+              <button
+                className="ghost"
+                onClick={() => handleRejectEscrow(tx)}
+                disabled={rejectEscrowMutation.isPending}
+              >
+                {rejectEscrowMutation.isPending ? "Rejecting..." : "Reject escrow"}
+              </button>
+            </div>
+          </div>
+        ) : null}
         {tx.isOwner && isChangesRequested && hasAgreementChangeRequest ? (
           <div className="card agreement-change-card" style={{ marginTop: 12 }}>
             <div className="agreement-change-card__heading">
@@ -3607,7 +3641,7 @@ const handleWalletWithdraw = async () => {
             </div>
           </div>
         ) : null}
-        {tx.milestones.length ? (
+        {tx.milestones.length && !isAwaitingApproval && !isChangesRequested ? (
           <div className="card" style={{ marginTop: 12 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <strong>Milestones</strong>
