@@ -27,7 +27,7 @@ export function apiFetch(input: string, init?: RequestInit) {
   const shouldUseMocks = isInternalApiRoute && mocksEnabled && !isTestEnv;
   const requestInit = applyAuthHeaders(init);
 
-  if (!baseUrl || isAbsoluteUrl || shouldUseMocks) {
+  if (!baseUrl || isAbsoluteUrl || shouldUseMocks || (isInternalApiRoute && !isTestEnv)) {
     return fetch(input, requestInit);
   }
 
