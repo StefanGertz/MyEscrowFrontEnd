@@ -1039,6 +1039,21 @@ body {
   margin-bottom: 10px;
 }
 
+.agreement-change-row__remaining {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.agreement-change-row__remaining[data-overdrawn="true"] {
+  color: #b42318;
+}
+
+.agreement-change-row__remaining[data-complete="true"] {
+  color: #0f766e;
+}
+
 .agreement-toggle {
   flex: 0 1 320px;
   margin: 0;
