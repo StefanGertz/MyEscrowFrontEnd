@@ -43,4 +43,10 @@ describe("mobile header menu", () => {
     rerender(<Header activeScreen="wallet" />);
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
+
+  it("can hide the alerts badge while alerts still exist", () => {
+    render(<Header notificationCount={3} hasUnreadNotifications={false} />);
+
+    expect(screen.getByRole("button", { name: "Open alerts" })).toHaveAttribute("data-has-notif", "false");
+  });
 });

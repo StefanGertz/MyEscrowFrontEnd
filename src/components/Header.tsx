@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 type HeaderProps = {
   activeScreen?: string;
   notificationCount?: number;
+  hasUnreadNotifications?: boolean;
   primaryLabel?: string;
   primaryDisabled?: boolean;
   onPrimaryClick?: () => void;
@@ -17,6 +18,7 @@ type HeaderProps = {
 export function Header({
   activeScreen,
   notificationCount = 0,
+  hasUnreadNotifications,
   primaryLabel = "New Escrow",
   primaryDisabled = false,
   onPrimaryClick,
@@ -27,6 +29,7 @@ export function Header({
 }: HeaderProps) {
   const menuScope = activeScreen ?? "default";
   const [menuOpen, setMenuOpen] = useState(false);
+  const showNotificationBadge = hasUnreadNotifications ?? notificationCount > 0;
 
   useEffect(() => {
     setMenuOpen(false);
@@ -59,7 +62,7 @@ export function Header({
         <button
           className="icon-btn"
           type="button"
-          data-has-notif={notificationCount > 0}
+          data-has-notif={showNotificationBadge}
           onClick={() => runMenuAction(onAlertsClick)}
         >
           <BellIcon />
@@ -80,7 +83,7 @@ export function Header({
           className="icon-btn mobile-alerts-btn"
           type="button"
           aria-label="Open alerts"
-          data-has-notif={notificationCount > 0}
+          data-has-notif={showNotificationBadge}
           onClick={() => runMenuAction(onAlertsClick)}
         >
           <BellIcon />

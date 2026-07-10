@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useRef, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { Header } from "@/components/Header";
@@ -15,6 +15,7 @@ import {
   useNotifications,
 } from "@/hooks/useDashboardData";
 import { orderNotifications } from "@/lib/notificationOrdering";
+import { latestNotificationSeenToken, notificationSeenStorageKey } from "@/lib/notificationSeen";
 
 type EscrowFormState = {
   title: string;
@@ -44,13 +45,17 @@ export function LiveDashboard() {
     description: "",
   });
   const [formError, setFormError] = useState<string | null>(null);
+  const [seenNotificationToken, setSeenNotificationToken] = useState("");
 
   const notificationCount = notificationsQuery.data?.notifications.length ?? 0;
   const displayName = user?.name?.trim() || user?.email || "Your account";
+  const notificationUserId = user?.id ?? user?.email ?? "anonymous";
 
   const summaryMetrics = overviewQuery.data?.summaryMetrics ?? [];
   const disputes = disputesQuery.data?.disputes ?? [];
   const notifications = orderNotifications(notificationsQuery.data?.notifications ?? []);
+  const latestAlertToken = latestNotificationSeenToken(notifications);
+  const hasUnreadNotifications = Boolean(latestAlertToken && seenNotificationToken !== latestAlertToken);
   const escrows = escrowsQuery.data?.escrows ?? [];
 
   const totalHeld = summaryMetrics.find((metric) => metric.id === "held")?.value ?? "$0";
@@ -58,6 +63,16 @@ export function LiveDashboard() {
   const scrollToForm = () => {
     createFormRef.current?.scrollIntoView({ behavior: "smooth" });
   };
+
+  const markAlertsSeen = () => {
+    if (!latestAlertToken) return;
+    setSeenNotificationToken(latestAlertToken);
+    window.localStorage.setItem(notificationSeenStorageKey(notificationUserId), latestAlertToken);
+  };
+
+  useEffect(() => {
+    setSeenNotificationToken(window.localStorage.getItem(notificationSeenStorageKey(notificationUserId)) ?? "");
+  }, [notificationUserId]);
 
   const handleEscrowSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -121,12 +136,14 @@ export function LiveDashboard() {
     <AppShell screenId="live">
       <Header
         notificationCount={notificationCount}
+        hasUnreadNotifications={hasUnreadNotifications}
         primaryLabel="New escrow"
         primaryDisabled={createEscrow.isPending}
         onPrimaryClick={scrollToForm}
         onLogoutClick={logout}
         onSettingsClick={scrollToForm}
         onAlertsClick={() => {
+          markAlertsSeen();
           const notificationsSection = document.getElementById("live-notifications");
           notificationsSection?.scrollIntoView({ behavior: "smooth" });
         }}

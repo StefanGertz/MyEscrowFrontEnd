@@ -33,6 +33,7 @@ import { useToast } from "@/components/ToastProvider";
 import { useAuth } from "@/components/AuthProvider";
 import { moveItem, sortByDeadline } from "@/lib/milestoneOrdering";
 import { orderNotifications } from "@/lib/notificationOrdering";
+import { latestNotificationSeenToken, notificationSeenStorageKey } from "@/lib/notificationSeen";
 import {
   formatCurrencyInput,
   formatCurrencyValue as formatCurrency,
@@ -906,6 +907,7 @@ function MockExperienceHome({ searchParams }: HomeProps) {
   const [modalContent, setModalContent] = useState<ModalContent | null>(null);
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const [notificationsPanelOpen, setNotificationsPanelOpen] = useState(false);
+  const [seenNotificationToken, setSeenNotificationToken] = useState("");
 
   const createEscrowMutation = useCreateEscrow();
   const businessProfileQuery = useBusinessProfile();
@@ -1085,6 +1087,8 @@ function MockExperienceHome({ searchParams }: HomeProps) {
     return false;
   };
   const orderedNotifications = orderNotifications(notificationsToRender, requiresCurrentUserAction);
+  const latestAlertToken = latestNotificationSeenToken(orderedNotifications);
+  const hasUnreadNotifications = Boolean(latestAlertToken && seenNotificationToken !== latestAlertToken);
 
   const handleDismissNotification = (notificationId: string) => {
     void dismissNotificationMutation.mutateAsync(notificationId).catch((error) => {
@@ -1095,6 +1099,12 @@ function MockExperienceHome({ searchParams }: HomeProps) {
     });
   };
   const openNotifications = orderedNotifications.length;
+
+  const markAlertsSeen = () => {
+    if (!latestAlertToken) return;
+    setSeenNotificationToken(latestAlertToken);
+    window.localStorage.setItem(notificationSeenStorageKey(profileIdentity.id), latestAlertToken);
+  };
 
 useEffect(() => {
   const timeoutId = window.setTimeout(() => setSplashVisible(false), 1400);
@@ -1109,6 +1119,16 @@ useEffect(() => {
     });
   }
 }, [notificationsQuery.isError, pushToast]);
+
+useEffect(() => {
+  setSeenNotificationToken(window.localStorage.getItem(notificationSeenStorageKey(profileIdentity.id)) ?? "");
+}, [profileIdentity.id]);
+
+useEffect(() => {
+  if (notificationsPanelOpen) {
+    markAlertsSeen();
+  }
+}, [notificationsPanelOpen, latestAlertToken]);
 
 useEffect(() => {
   if (!isHydrating && !isAuthenticated) {
@@ -1884,6 +1904,7 @@ const handleWalletWithdraw = async () => {
     setNotificationsPanelOpen((prev) => {
       const next = !prev;
       if (!prev) {
+        markAlertsSeen();
         void notificationsQuery.refetch();
       }
       return next;
@@ -1892,6 +1913,7 @@ const handleWalletWithdraw = async () => {
 
   const showAlertsPanel = () => {
     if (!notificationsPanelOpen) {
+      markAlertsSeen();
       void notificationsQuery.refetch();
     }
     setNotificationsPanelOpen(true);
@@ -3319,6 +3341,7 @@ const handleWalletWithdraw = async () => {
       <Header
         activeScreen={activeScreen}
         notificationCount={openNotifications}
+        hasUnreadNotifications={hasUnreadNotifications}
         primaryLabel="New escrow"
         onPrimaryClick={() => navigate("create")}
         onBrandClick={() => navigate("welcome")}
