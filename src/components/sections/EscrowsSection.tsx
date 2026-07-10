@@ -40,7 +40,7 @@ export function EscrowsSection() {
   if (isError || !data) {
     return (
       <div className="glass-card">
-        <p className="text-sm font-semibold text-[#1f1b42]">
+        <p className="text-sm font-semibold text-[var(--brand-600)]">
           Unable to load escrow tasks.
         </p>
         <p className="text-sm text-slate-500">
@@ -55,7 +55,7 @@ export function EscrowsSection() {
   return (
     <section className="glass-card">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="text-lg font-semibold text-[#1f1b42]">
+        <h3 className="text-lg font-semibold text-[var(--brand-600)]">
           Escrows requiring review
         </h3>
         <span className="pill pill--warning">
@@ -85,7 +85,7 @@ export function EscrowsSection() {
               key={`${escrow.id}-review`}
               className="escrow-row min-w-[660px] rounded-xl bg-white/90 p-3 shadow-sm"
             >
-              <div className="font-semibold text-[#1f1b42]">{escrow.id}</div>
+              <div className="font-semibold text-[var(--brand-600)]">{escrow.id}</div>
               <div>{escrow.counterpart}</div>
               <div className="font-semibold">{escrow.amount}</div>
               <div>{escrow.stage}</div>

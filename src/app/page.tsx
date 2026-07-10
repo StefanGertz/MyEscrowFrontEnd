@@ -830,6 +830,7 @@ function MockExperienceHome({ searchParams }: HomeProps) {
   const initialTxToken = initialTxQuery ?? undefined;
   const router = useRouter();
   const { user, isAuthenticated, isHydrating, logout } = useAuth();
+  const [splashVisible, setSplashVisible] = useState(true);
   const [activeScreen, setActiveScreen] = useState<ScreenId>(initialScreen);
   const mainContentRef = useRef<HTMLElement | null>(null);
   const [walletBalanceOverride, setWalletBalanceOverride] = useState<{
@@ -1094,6 +1095,11 @@ function MockExperienceHome({ searchParams }: HomeProps) {
     });
   };
   const openNotifications = orderedNotifications.length;
+
+useEffect(() => {
+  const timeoutId = window.setTimeout(() => setSplashVisible(false), 1400);
+  return () => window.clearTimeout(timeoutId);
+}, []);
 
 useEffect(() => {
   if (notificationsQuery.isError) {
@@ -1957,47 +1963,21 @@ const handleWalletWithdraw = async () => {
 
   const renderWelcome = () => (
     <section className="screen active">
-      <h2 className="page-title">
-        Welcome back,
-        <span style={{ fontWeight: 700, marginLeft: 6 }}>{greetingName}</span>
-      </h2>
-      <div className="tiles">
-        <div className="tile">
-          <div className="t-title">Wallet</div>
-          <div className="muted">Balance</div>
-          <div style={{ fontWeight: 800, fontSize: 18 }}>{formatCurrency(walletBalanceDisplay)}</div>
-          <button className="ghost" onClick={() => navigate("wallet")}>
-            Manage
+      <div className="home-hero card">
+        <p className="auth-eyebrow">MyEscrow</p>
+        <h2 className="page-title">
+          Welcome back,
+          <span style={{ fontWeight: 700, marginLeft: 6 }}>{greetingName}</span>
+        </h2>
+        <p className="lead">
+          Start a new escrow or jump back into the work that needs your attention.
+        </p>
+        <div className="home-actions">
+          <button className="btn" onClick={() => navigate("create")}>
+            Create escrow
           </button>
-        </div>
-        <div className="tile">
-          <div className="t-title">Recent</div>
-          <div className="muted">Last activity</div>
-          {displayTransactions.length ? (
-            <button
-              className="ghost"
-              style={{ width: "100%", justifyContent: "space-between" }}
-              onClick={() => viewTransaction(displayTransactions[0])}
-            >
-              <span>{displayTransactions[0].title}</span>{" "}
-              <span>{formatCurrency(displayTransactions[0].amount)}</span>
-            </button>
-          ) : (
-            <div className="muted">No activity</div>
-          )}
-        </div>
-        <div className="tile">
-          <div className="t-title">Active</div>
-          <div className="muted">Ongoing escrows</div>
           <button className="ghost" onClick={() => navigate("dashboard")}>
-            View
-          </button>
-        </div>
-        <div className="tile">
-          <div className="t-title">Escrow history</div>
-          <div className="muted">Past escrows</div>
-          <button className="ghost" onClick={() => navigate("history")}>
-            View history
+            Open dashboard
           </button>
         </div>
       </div>
@@ -2026,34 +2006,17 @@ const handleWalletWithdraw = async () => {
               ))}
             </div>
           </div>
-        ) : null}
-        <div className="card">
-          <h3 style={{ marginBottom: 8 }}>Recent transactions</h3>
-          <div className="tx-list">
-            {displayTransactions.map((tx) => (
-              <button key={tx.id} className="tx-item tx-item-button" type="button" onClick={() => viewTransaction(tx)}>
-                <div>
-                  <div style={{ fontWeight: 700 }}>{tx.title}</div>
-                  <div className="muted">{tx.counterpart}</div>
-                </div>
-                <div style={{ textAlign: "right" }}>
-                  <div>{formatCurrency(tx.amount)}</div>
-                  <span
-                    className={`status-badge ${
-                      tx.status === "Complete"
-                        ? "status-released"
-                        : tx.status === "Active"
-                          ? "status-active"
-                          : "status-pending"
-                    }`}
-                  >
-                    {tx.status}
-                  </span>
-                </div>
-              </button>
-            ))}
+        ) : (
+          <div className="card home-empty-state">
+            <strong>No urgent actions</strong>
+            <p className="muted">
+              Your dashboard has the full transaction list, alert history, and account details when you need them.
+            </p>
+            <button className="ghost" onClick={() => navigate("dashboard")}>
+              View dashboard
+            </button>
           </div>
-        </div>
+        )}
       </div>
     </section>
   );
@@ -3353,17 +3316,12 @@ const handleWalletWithdraw = async () => {
   };
 
   if (isHydrating || !isAuthenticated) {
-    return (
-      <main className="auth-page">
-        <div className="auth-card">
-          <p className="auth-eyebrow">Loading account…</p>
-        </div>
-      </main>
-    );
+    return <SplashScreen />;
   }
 
   return (
     <AppShell screenId={activeScreen}>
+      {splashVisible ? <SplashScreen /> : null}
       <Header
         activeScreen={activeScreen}
         notificationCount={openNotifications}
@@ -3486,6 +3444,16 @@ const handleWalletWithdraw = async () => {
         <ChangePasswordModal onClose={() => setChangePasswordOpen(false)} />
       ) : null}
     </AppShell>
+  );
+}
+
+function SplashScreen() {
+  return (
+    <main className="splash-screen" aria-label="Loading MyEscrow">
+      <div className="splash-logo-wrap">
+        <img className="splash-logo" src="/myescrow-logo.png" alt="MyEscrow" />
+      </div>
+    </main>
   );
 }
 

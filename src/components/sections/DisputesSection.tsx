@@ -50,7 +50,7 @@ export function DisputesSection() {
   if (isError || !data) {
     return (
       <div className="glass-card">
-        <p className="text-sm font-semibold text-[#1f1b42]">
+        <p className="text-sm font-semibold text-[var(--brand-600)]">
           Unable to load disputes.
         </p>
         <p className="text-sm text-slate-500">
@@ -66,7 +66,7 @@ export function DisputesSection() {
     <div className="grid gap-4 lg:grid-cols-[1.5fr,1fr]">
       <section className="glass-card">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h3 className="text-lg font-semibold text-[#1f1b42]">
+          <h3 className="text-lg font-semibold text-[var(--brand-600)]">
             Open disputes
           </h3>
           <span className="pill pill--warning">{disputeTickets.length} active</span>
@@ -94,10 +94,10 @@ export function DisputesSection() {
               >
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <p className="text-sm font-semibold text-[#5a31ff]">
+                    <p className="text-sm font-semibold text-[var(--accent-cyan)]">
                       {ticket.id}
                     </p>
-                    <p className="text-base font-semibold text-[#1f1b42]">
+                    <p className="text-base font-semibold text-[var(--brand-600)]">
                       {ticket.title}
                     </p>
                   </div>
@@ -146,7 +146,7 @@ export function DisputesSection() {
       </section>
 
       <section className="glass-card">
-        <h3 className="text-lg font-semibold text-[#1f1b42]">
+        <h3 className="text-lg font-semibold text-[var(--brand-600)]">
           Response playbook
         </h3>
         <p className="mt-2 text-sm text-slate-500">

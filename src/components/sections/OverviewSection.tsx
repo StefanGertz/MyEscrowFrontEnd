@@ -43,7 +43,7 @@ export function OverviewSection() {
   if (isError || !data) {
     return (
       <div className="glass-card">
-        <p className="text-sm font-semibold text-[#1f1b42]">
+        <p className="text-sm font-semibold text-[var(--brand-600)]">
           Unable to load dashboard overview.
         </p>
         <p className="text-sm text-slate-500">
@@ -70,7 +70,7 @@ export function OverviewSection() {
       <div className="grid gap-4 lg:grid-cols-[2fr,1fr]">
         <section className="glass-card">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h3 className="text-lg font-semibold text-[#1f1b42]">
+            <h3 className="text-lg font-semibold text-[var(--brand-600)]">
               Active escrows
             </h3>
             <span className="pill pill--success">All reconciled</span>
@@ -91,7 +91,7 @@ export function OverviewSection() {
                 className="escrow-row min-w-[640px] rounded-xl bg-white/80 p-3 shadow-sm"
                 key={escrow.id}
               >
-                <div className="font-semibold text-[#1f1b42]">{escrow.id}</div>
+                <div className="font-semibold text-[var(--brand-600)]">{escrow.id}</div>
                 <div>{escrow.counterpart}</div>
                 <div className="font-semibold">{escrow.amount}</div>
                 <div>
@@ -111,7 +111,7 @@ export function OverviewSection() {
         </section>
 
         <section className="glass-card">
-          <h3 className="text-lg font-semibold text-[#1f1b42]">
+          <h3 className="text-lg font-semibold text-[var(--brand-600)]">
             Milestone timeline
           </h3>
           <div className="timeline mt-4">
