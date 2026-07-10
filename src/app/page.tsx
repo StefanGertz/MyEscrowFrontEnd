@@ -18,6 +18,7 @@ import {
   useRejectMilestone,
   useRequestAgreementChanges,
   useResubmitMilestone,
+  useUpdateDraftEscrow,
   useEscrowSummary,
   useEscrows,
   useNotificationHistory,
@@ -163,6 +164,22 @@ type AgreementChangeDraft = {
   note: string;
 };
 
+type DraftEscrowEditMilestone = {
+  id: string;
+  title: string;
+  description: string;
+  amount: string;
+  deadline: string;
+};
+
+type DraftEscrowEditDraft = {
+  title: string;
+  counterpartyEmail: string;
+  amount: string;
+  description: string;
+  milestones: DraftEscrowEditMilestone[];
+};
+
 type MilestoneReviewDraft = {
   title: string;
   description: string;
@@ -175,6 +192,30 @@ const buildMilestoneReviewDraft = (milestone: TxMilestone): MilestoneReviewDraft
   description: milestone.requestedDescription ?? milestone.description ?? "",
   amount: (milestone.requestedAmount ?? milestone.amount).toString(),
   deadline: (milestone.requestedDeadline ?? milestone.deadline ?? "").slice(0, 10),
+});
+
+const buildDraftEscrowEditDraft = (tx: Transaction): DraftEscrowEditDraft => ({
+  title: tx.title,
+  counterpartyEmail: tx.creatorRole === "seller" ? tx.buyerEmail : tx.sellerEmail,
+  amount: tx.amount.toString(),
+  description: tx.description ?? "",
+  milestones: tx.milestones.length
+    ? tx.milestones.map((milestone) => ({
+        id: randomId(),
+        title: milestone.title,
+        description: milestone.description ?? "",
+        amount: milestone.amount.toString(),
+        deadline: (milestone.deadline ?? "").slice(0, 10),
+      }))
+    : [
+        {
+          id: randomId(),
+          title: tx.title,
+          description: tx.description ?? "",
+          amount: tx.amount.toString(),
+          deadline: "",
+        },
+      ],
 });
 
 type WalletHistoryEntry = {
@@ -878,6 +919,7 @@ function MockExperienceHome({ searchParams }: HomeProps) {
   const [milestoneWarning, setMilestoneWarning] = useState<string | null>(null);
   const [milestoneReviewDrafts, setMilestoneReviewDrafts] = useState<Record<string, MilestoneReviewDraft>>({});
   const [agreementChangeDraft, setAgreementChangeDraft] = useState<AgreementChangeDraft | null>(null);
+  const [draftEscrowEdit, setDraftEscrowEdit] = useState<DraftEscrowEditDraft | null>(null);
   const [agreementReviewMode, setAgreementReviewMode] = useState<"original" | "proposed">("proposed");
   const [agreementAccepted, setAgreementAccepted] = useState(false);
   const [signatureCaptured, setSignatureCaptured] = useState(false);
@@ -925,6 +967,7 @@ function MockExperienceHome({ searchParams }: HomeProps) {
   const rejectMilestoneMutation = useRejectMilestone();
   const requestAgreementChangesMutation = useRequestAgreementChanges();
   const applyAgreementChangesMutation = useApplyAgreementChanges();
+  const updateDraftEscrowMutation = useUpdateDraftEscrow();
   const resubmitMilestoneMutation = useResubmitMilestone();
   const cancelEscrowMutation = useCancelEscrow();
   const fundEscrowMutation = useFundEscrow();
@@ -1713,6 +1756,98 @@ const findTransactionById = (id: number) => {
 
   const agreementDraftTotal = (draft: AgreementChangeDraft) =>
     draft.milestones.reduce((total, milestone) => total + (Number(milestone.amount) || 0), 0);
+
+  const draftEscrowEditTotal = (draft: DraftEscrowEditDraft) =>
+    draft.milestones.reduce((total, milestone) => total + (Number(milestone.amount) || 0), 0);
+
+  const beginDraftEscrowEdit = (tx: Transaction) => {
+    setDraftEscrowEdit(buildDraftEscrowEditDraft(tx));
+  };
+
+  const updateDraftEscrowEdit = (updates: Partial<DraftEscrowEditDraft>) => {
+    setDraftEscrowEdit((current) => (current ? { ...current, ...updates } : current));
+  };
+
+  const updateDraftEscrowMilestone = (
+    draftId: string,
+    updates: Partial<DraftEscrowEditMilestone>,
+  ) => {
+    setDraftEscrowEdit((current) =>
+      current
+        ? {
+            ...current,
+            milestones: current.milestones.map((milestone) =>
+              milestone.id === draftId ? { ...milestone, ...updates } : milestone,
+            ),
+          }
+        : current,
+    );
+  };
+
+  const addDraftEscrowMilestone = () => {
+    setDraftEscrowEdit((current) =>
+      current
+        ? {
+            ...current,
+            milestones: [
+              ...current.milestones,
+              { id: randomId(), title: "", description: "", amount: "", deadline: "" },
+            ],
+          }
+        : current,
+    );
+  };
+
+  const removeDraftEscrowMilestone = (draftId: string) => {
+    setDraftEscrowEdit((current) =>
+      current
+        ? { ...current, milestones: current.milestones.filter((milestone) => milestone.id !== draftId) }
+        : current,
+    );
+  };
+
+  const handleUpdateDraftEscrow = async (tx: Transaction) => {
+    if (!draftEscrowEdit) return;
+    const amount = Number(draftEscrowEdit.amount);
+    if (!draftEscrowEdit.title.trim() || !draftEscrowEdit.counterpartyEmail.trim() || !Number.isFinite(amount) || amount <= 0) {
+      setMessage("Title, counterparty email, and amount are required.");
+      return;
+    }
+    const invalidMilestone = draftEscrowEdit.milestones.find(
+      (milestone) => !milestone.title.trim() || !Number.isFinite(Number(milestone.amount)) || Number(milestone.amount) <= 0,
+    );
+    if (invalidMilestone) {
+      setMessage("Every milestone needs a title and valid amount.");
+      return;
+    }
+    const total = draftEscrowEditTotal(draftEscrowEdit);
+    if (Math.round(total * 100) !== Math.round(amount * 100)) {
+      setMessage(`Milestone amounts must add up to the escrow amount of ${formatCurrency(amount)}.`);
+      return;
+    }
+    const escrowId = tx.reference ?? `PO-${tx.id}`;
+    try {
+      await updateDraftEscrowMutation.mutateAsync({
+        escrowId,
+        title: draftEscrowEdit.title.trim(),
+        counterpartyEmail: draftEscrowEdit.counterpartyEmail.trim(),
+        amount,
+        description: draftEscrowEdit.description.trim() || undefined,
+        milestones: draftEscrowEdit.milestones.map((milestone) => ({
+          title: milestone.title.trim(),
+          description: milestone.description.trim() || undefined,
+          amount: Number(milestone.amount),
+          deadline: milestone.deadline
+            ? new Date(`${milestone.deadline}T00:00:00.000Z`).toISOString()
+            : undefined,
+        })),
+      });
+      setDraftEscrowEdit(null);
+      setMessage("Draft escrow updated.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to update the draft escrow.");
+    }
+  };
 
   const buildAgreementChangeDraft = (tx: Transaction): AgreementChangeDraft => ({
     milestones: tx.milestones
@@ -2913,6 +3048,9 @@ const handleWalletWithdraw = async () => {
       tx.status !== "Cancelled" &&
       tx.status !== "Complete" &&
       (isAwaitingSignup || isAwaitingApproval || isChangesRequested);
+    const canEditDraftEscrow = Boolean(tx.isOwner) && isAwaitingSignup;
+    const draftEditTotal = draftEscrowEdit ? draftEscrowEditTotal(draftEscrowEdit) : 0;
+    const draftEditAmount = draftEscrowEdit ? Number(draftEscrowEdit.amount) || 0 : 0;
     return (
       <section className="screen active">
         <h2 className="page-title">Transaction</h2>
@@ -2990,7 +3128,7 @@ const handleWalletWithdraw = async () => {
             </button>
           </div>
         </div>
-        {(canApproveEscrow || canFundEscrow || canCancelEscrow || (tx.isOwner && isChangesRequested)) ? (
+        {(canApproveEscrow || canFundEscrow || canCancelEscrow || canEditDraftEscrow || (tx.isOwner && isChangesRequested)) ? (
           <div className="card" style={{ marginTop: 12 }}>
             <strong>Next step</strong>
             <p className="muted" style={{ marginTop: 8, marginBottom: 12 }}>
@@ -3107,7 +3245,136 @@ const handleWalletWithdraw = async () => {
                   {cancelEscrowMutation.isPending ? "Cancelling..." : "Cancel draft"}
                 </button>
               ) : null}
+              {canEditDraftEscrow && !draftEscrowEdit ? (
+                <button className="ghost" onClick={() => beginDraftEscrowEdit(tx)}>
+                  Edit draft
+                </button>
+              ) : null}
             </div>
+            {canEditDraftEscrow && draftEscrowEdit ? (
+              <div className="agreement-change-card" style={{ marginTop: 14 }}>
+                <div className="agreement-change-card__heading">
+                  <div>
+                    <strong>Edit draft escrow</strong>
+                    <p className="muted" style={{ margin: "4px 0 0" }}>
+                      Update this agreement before the counterparty joins.
+                    </p>
+                  </div>
+                </div>
+                <div className="form-grid" style={{ marginTop: 12 }}>
+                  <div className="form-field">
+                    <label className="muted">Title</label>
+                    <input
+                      value={draftEscrowEdit.title}
+                      onChange={(event) => updateDraftEscrowEdit({ title: event.target.value })}
+                    />
+                  </div>
+                  <div className="form-field">
+                    <label className="muted">Counterparty email</label>
+                    <input
+                      type="email"
+                      value={draftEscrowEdit.counterpartyEmail}
+                      onChange={(event) => updateDraftEscrowEdit({ counterpartyEmail: event.target.value })}
+                    />
+                  </div>
+                  <div className="form-field">
+                    <label className="muted">Amount</label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={formatCurrencyInput(draftEscrowEdit.amount)}
+                      placeholder="$0.00"
+                      onChange={(event) => updateDraftEscrowEdit({ amount: normalizeCurrencyInput(event.target.value) })}
+                    />
+                  </div>
+                </div>
+                <div className="form-field" style={{ marginTop: 10 }}>
+                  <label className="muted">Description</label>
+                  <textarea
+                    rows={3}
+                    value={draftEscrowEdit.description}
+                    onChange={(event) => updateDraftEscrowEdit({ description: event.target.value })}
+                  />
+                </div>
+                <div className="milestone-target" style={{ marginTop: 12 }}>
+                  <div>
+                    <div className="milestone-target__label">Escrow amount</div>
+                    <div className="milestone-target__sub">Milestone totals must match this amount.</div>
+                  </div>
+                  <div className="milestone-target__totals">
+                    <div className="milestone-target__value">{formatCurrency(draftEditAmount)}</div>
+                    <div
+                      className="milestone-target__remaining"
+                      data-overdrawn={Math.round(draftEditTotal * 100) !== Math.round(draftEditAmount * 100)}
+                      data-complete={Math.round(draftEditTotal * 100) === Math.round(draftEditAmount * 100)}
+                    >
+                      <span>Milestone total</span>
+                      <strong>{formatCurrency(draftEditTotal)}</strong>
+                    </div>
+                  </div>
+                </div>
+                <div className="agreement-change-list">
+                  {draftEscrowEdit.milestones.map((milestone, index) => (
+                    <div key={milestone.id} className="agreement-change-row">
+                      <div className="agreement-change-row__title">
+                        <strong>Milestone {index + 1}</strong>
+                        {draftEscrowEdit.milestones.length > 1 ? (
+                          <button className="ghost" onClick={() => removeDraftEscrowMilestone(milestone.id)}>
+                            Remove
+                          </button>
+                        ) : null}
+                      </div>
+                      <div className="form-grid">
+                        <div className="form-field">
+                          <label className="muted">Title</label>
+                          <input
+                            value={milestone.title}
+                            onChange={(event) => updateDraftEscrowMilestone(milestone.id, { title: event.target.value })}
+                          />
+                        </div>
+                        <div className="form-field">
+                          <label className="muted">Amount</label>
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={formatCurrencyInput(milestone.amount)}
+                            placeholder="$0.00"
+                            onChange={(event) => updateDraftEscrowMilestone(milestone.id, { amount: normalizeCurrencyInput(event.target.value) })}
+                          />
+                        </div>
+                        <div className="form-field">
+                          <label className="muted">Deadline</label>
+                          <input
+                            type="date"
+                            value={milestone.deadline}
+                            onChange={(event) => updateDraftEscrowMilestone(milestone.id, { deadline: event.target.value })}
+                          />
+                        </div>
+                      </div>
+                      <div className="form-field" style={{ marginTop: 8 }}>
+                        <label className="muted">Description</label>
+                        <textarea
+                          rows={3}
+                          value={milestone.description}
+                          onChange={(event) => updateDraftEscrowMilestone(milestone.id, { description: event.target.value })}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <button className="ghost" style={{ marginTop: 10 }} onClick={addDraftEscrowMilestone}>
+                  Add milestone
+                </button>
+                <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+                  <button className="btn" onClick={() => handleUpdateDraftEscrow(tx)} disabled={updateDraftEscrowMutation.isPending}>
+                    {updateDraftEscrowMutation.isPending ? "Saving..." : "Save draft"}
+                  </button>
+                  <button className="ghost" onClick={() => setDraftEscrowEdit(null)}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </div>
         ) : null}
         {canRequestMilestoneChanges ? (

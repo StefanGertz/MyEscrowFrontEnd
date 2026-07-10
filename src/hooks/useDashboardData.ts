@@ -77,6 +77,20 @@ type WalletTransactionsResponse = {
   transactions: WalletTransaction[];
 };
 
+type DraftEscrowUpdatePayload = {
+  escrowId: string;
+  title: string;
+  counterpartyEmail: string;
+  amount: number;
+  description?: string;
+  milestones?: Array<{
+    title: string;
+    amount: number;
+    description?: string;
+    deadline?: string;
+  }>;
+};
+
 export function useEscrowSummary() {
   return useQuery({
     queryKey: ["dashboard", "overview"],
@@ -288,6 +302,26 @@ export const useApproveEscrow = buildEscrowAction("approve");
 export const useRejectEscrow = buildEscrowAction("reject");
 export const useCancelEscrow = buildEscrowAction("cancel");
 export const useFundEscrow = buildEscrowAction("fund");
+
+export function useUpdateDraftEscrow() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ escrowId, ...payload }: DraftEscrowUpdatePayload) =>
+      fetchJSON<{ escrowId: string; reference: string }>(
+        `/api/dashboard/escrows/${escrowId}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        },
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "escrows"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "overview"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "notifications"] });
+    },
+  });
+}
 
 const buildMilestoneAction =
   (path: string) =>
