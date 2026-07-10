@@ -14,13 +14,21 @@ export async function POST(request: Request) {
   if (!isMockApiEnabled) {
     return proxyApiRequest(request, "/api/auth/signup");
   }
-  const { name, email, password } = (await request.json()) as {
+  const { name, email, password, partyType, business } = (await request.json()) as {
     name?: string;
     email?: string;
     password?: string;
+    partyType?: "individual" | "business";
+    business?: {
+      legalName?: string;
+      representativeTitle?: string;
+    };
   };
   if (!name || !email || !password) {
     return NextResponse.json({ error: "Name, email, and password are required." }, { status: 400 });
+  }
+  if (partyType === "business" && (!business?.legalName || !business?.representativeTitle)) {
+    return NextResponse.json({ error: "Business name and title are required." }, { status: 400 });
   }
   return NextResponse.json({
     token: "mock-token",

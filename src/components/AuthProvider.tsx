@@ -27,7 +27,13 @@ type AuthContextValue = {
   isAuthenticated: boolean;
   login: (payload: { email: string; password: string }) => Promise<void>;
   signup: (
-    payload: { name: string; email: string; password: string },
+    payload: {
+      name: string;
+      email: string;
+      password: string;
+      partyType?: "individual" | "business";
+      business?: { legalName: string; representativeTitle: string };
+    },
   ) => Promise<SignupResult>;
   logout: () => void;
   completeAuth: (response: AuthResponse) => void;
@@ -152,7 +158,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
   );
 
   const signup = useCallback(
-    async (payload: { name: string; email: string; password: string }) => {
+    async (payload: {
+      name: string;
+      email: string;
+      password: string;
+      partyType?: "individual" | "business";
+      business?: { legalName: string; representativeTitle: string };
+    }) => {
       const response = await signupMutation.mutateAsync(payload);
       if ("token" in response) {
         adoptSession(response);

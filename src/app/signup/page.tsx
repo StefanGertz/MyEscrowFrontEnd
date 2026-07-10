@@ -32,7 +32,17 @@ function SignupContent() {
   const inviteReference = searchParams.get("invite") ?? "";
   const { signup, isAuthenticated, isHydrating } = useAuth();
   const { pushToast } = useToast();
-  const [form, setForm] = useState({ name: "", email: invitedEmail, password: "", confirmPassword: "" });
+  const [form, setForm] = useState({
+    name: "",
+    email: invitedEmail,
+    password: "",
+    confirmPassword: "",
+    partyType: "individual" as "individual" | "business",
+    business: {
+      legalName: "",
+      representativeTitle: "",
+    },
+  });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -75,12 +85,31 @@ function SignupContent() {
       setError("Passwords do not match.");
       return;
     }
+    if (inviteReference && form.partyType === "business") {
+      if (!form.business.legalName.trim() || !form.business.representativeTitle.trim()) {
+        setError("Enter the business name and your title.");
+        return;
+      }
+    }
     setSubmitting(true);
     try {
       const result = await signup({
         name: form.name,
         email: form.email,
         password: form.password,
+        ...(inviteReference
+          ? {
+              partyType: form.partyType,
+              ...(form.partyType === "business"
+                ? {
+                    business: {
+                      legalName: form.business.legalName.trim(),
+                      representativeTitle: form.business.representativeTitle.trim(),
+                    },
+                  }
+                : {}),
+            }
+          : {}),
       });
       if (result.status === "session") {
         pushToast({
@@ -173,6 +202,63 @@ function SignupContent() {
             }
             autoComplete="email"
           />
+          {inviteReference ? (
+            <div className="create-form-section">
+              <div className="muted create-form-label">You are joining this escrow as</div>
+              <div className="role-toggle create-form-role">
+                {(["individual", "business"] as const).map((partyType) => (
+                  <label
+                    key={partyType}
+                    className={`role-option ${form.partyType === partyType ? "active" : ""}`}
+                    onClick={() => setForm((prev) => ({ ...prev, partyType }))}
+                  >
+                    <input type="radio" name="signup-party-type" checked={form.partyType === partyType} readOnly />
+                    <span className="role-copy">{partyType === "individual" ? "Myself" : "A business"}</span>
+                  </label>
+                ))}
+              </div>
+              {form.partyType === "business" ? (
+                <div className="business-identity-fields">
+                  <div className="form-field">
+                    <label className="muted" htmlFor="signup-business-name">
+                      Business Name
+                    </label>
+                    <input
+                      id="signup-business-name"
+                      type="text"
+                      value={form.business.legalName}
+                      placeholder="Business legal name"
+                      onChange={(event) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          business: { ...prev.business, legalName: event.target.value },
+                        }))
+                      }
+                      autoComplete="organization"
+                    />
+                  </div>
+                  <div className="form-field">
+                    <label className="muted" htmlFor="signup-business-title">
+                      Your Title
+                    </label>
+                    <input
+                      id="signup-business-title"
+                      type="text"
+                      value={form.business.representativeTitle}
+                      placeholder="Director, owner, officer"
+                      onChange={(event) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          business: { ...prev.business, representativeTitle: event.target.value },
+                        }))
+                      }
+                      autoComplete="organization-title"
+                    />
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           <label className="muted" htmlFor="signup-password">
             Password
           </label>

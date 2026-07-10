@@ -28,6 +28,11 @@ type SignupPayload = {
   name: string;
   email: string;
   password: string;
+  partyType?: "individual" | "business";
+  business?: {
+    legalName: string;
+    representativeTitle: string;
+  };
 };
 
 type VerificationPayload = {
