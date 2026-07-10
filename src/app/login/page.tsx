@@ -62,7 +62,7 @@ function LoginContent() {
         variant: "success",
         title: inviteReference
           ? `Welcome back. Invitation ${inviteReference} is ready to review.`
-          : "Welcome back! Redirecting to your dashboard.",
+          : "Welcome back!",
       });
       router.replace(inviteReference ? "/?screen=dashboard" : "/");
     } catch (err) {

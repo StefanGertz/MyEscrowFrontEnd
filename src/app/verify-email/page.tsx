@@ -158,16 +158,16 @@ function VerifyEmailContent() {
           <button className="btn" type="submit" disabled={verifyMutation.isPending}>
             {verifyMutation.isPending ? "Verifying..." : "Verify email"}
           </button>
-          <div className="auth-footer" style={{ flexDirection: "column", gap: 8 }}>
+          <div className="auth-footer verify-email-actions">
             <button
               type="button"
-              className="ghost"
+              className="ghost verify-email-actions__resend"
               onClick={handleResend}
               disabled={resendMutation.isPending || !form.email}
             >
               {resendMutation.isPending ? "Sending..." : "Resend code"}
             </button>
-            <span>
+            <span className="verify-email-actions__wrong-email">
               Entered the wrong email?{" "}
               <Link
                 href={`/signup${

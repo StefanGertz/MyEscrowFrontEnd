@@ -221,6 +221,26 @@ type MilestoneChangeReviewPayload = MilestoneActionPayload & {
   deadline?: string | null;
 };
 
+type AgreementMilestoneChangePayload = {
+  milestoneId?: string;
+  title: string;
+  description?: string;
+  amount: number;
+  deadline?: string;
+};
+
+type AgreementChangeRequestPayload = {
+  escrowId: string;
+  milestones: AgreementMilestoneChangePayload[];
+  note?: string;
+};
+
+type AgreementChangeReviewPayload = {
+  escrowId: string;
+  decision: "accept" | "reject";
+  milestones?: AgreementMilestoneChangePayload[];
+};
+
 export function useReleaseEscrow() {
   const queryClient = useQueryClient();
 
@@ -312,6 +332,31 @@ export function useRequestMilestoneChanges() {
   });
 }
 
+export function useRequestAgreementChanges() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ escrowId, ...payload }: AgreementChangeRequestPayload) =>
+      fetchJSON<{ escrowId: string }>(
+        `/api/dashboard/escrows/${escrowId}/request-changes`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...payload,
+            milestones: payload.milestones.map((milestone) => ({
+              ...milestone,
+              milestoneId: milestone.milestoneId ? Number(milestone.milestoneId) : undefined,
+            })),
+          }),
+        },
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "escrows"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "notifications"] });
+    },
+  });
+}
+
 export function useApplyMilestoneChanges() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -322,6 +367,31 @@ export function useApplyMilestoneChanges() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
+        },
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "escrows"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "notifications"] });
+    },
+  });
+}
+
+export function useApplyAgreementChanges() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ escrowId, ...payload }: AgreementChangeReviewPayload) =>
+      fetchJSON<{ escrowId: string }>(
+        `/api/dashboard/escrows/${escrowId}/apply-changes`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...payload,
+            milestones: payload.milestones?.map((milestone) => ({
+              ...milestone,
+              milestoneId: milestone.milestoneId ? Number(milestone.milestoneId) : undefined,
+            })),
+          }),
         },
       ),
     onSuccess: () => {

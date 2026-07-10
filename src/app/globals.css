@@ -1012,6 +1012,38 @@ body {
   margin-top: 12px;
 }
 
+.agreement-change-card__heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.agreement-change-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.agreement-change-row {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(10, 166, 154, 0.14);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.agreement-change-row__title {
+  margin-bottom: 10px;
+}
+
+.agreement-toggle {
+  flex: 0 1 320px;
+  margin: 0;
+}
+
 @media (max-width: 680px) {
   .milestone-review__comparison,
   .milestone-review__fields {
@@ -1452,6 +1484,26 @@ select:focus {
   color: var(--muted);
 }
 
+.verify-email-actions {
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.verify-email-actions__resend {
+  white-space: nowrap;
+}
+
+.verify-email-actions__wrong-email {
+  min-width: 0;
+  line-height: 1.45;
+}
+
+.verify-email-actions__wrong-email a {
+  white-space: nowrap;
+}
+
 .auth-eyebrow {
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -1597,8 +1649,9 @@ select:focus {
   border-radius: 12px;
   font-weight: 600;
   font-size: 14px;
-  box-shadow: 0 18px 32px rgba(8, 52, 84, 0.14);
-  background: #fff;
+  box-shadow: 0 18px 36px rgba(8, 52, 84, 0.22);
+  background-color: #fff;
+  background-image: none;
   border: 1px solid rgba(10, 166, 154, 0.12);
   color: #0f172a;
   pointer-events: auto;
@@ -1617,19 +1670,19 @@ select:focus {
 
 .toast--success {
   border-color: rgba(34, 197, 94, 0.35);
-  background: linear-gradient(135deg, rgba(34, 197, 94, 0.15), #fff);
+  background-color: #f0fdf4;
   color: #166534;
 }
 
 .toast--error {
   border-color: rgba(239, 68, 68, 0.35);
-  background: linear-gradient(135deg, rgba(239, 68, 68, 0.14), #fff);
+  background-color: #fef2f2;
   color: #b91c1c;
 }
 
 .toast--info {
   border-color: rgba(10, 166, 154, 0.26);
-  background: linear-gradient(135deg, rgba(10, 166, 154, 0.1), #fff);
+  background-color: #effdfa;
   color: var(--brand-500);
 }
 
@@ -1823,6 +1876,14 @@ select:focus {
   .toast {
     width: 100%;
     text-align: center;
+  }
+
+  .verify-email-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .verify-email-actions__resend {
+    width: 100%;
   }
 
   .app-main {
