@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type HeaderProps = {
   activeScreen?: string;
@@ -26,11 +26,14 @@ export function Header({
   onSettingsClick,
 }: HeaderProps) {
   const menuScope = activeScreen ?? "default";
-  const [openMenuScope, setOpenMenuScope] = useState<string | null>(null);
-  const menuOpen = openMenuScope === menuScope;
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [menuScope]);
 
   const runMenuAction = (action?: () => void) => {
-    setOpenMenuScope(null);
+    setMenuOpen(false);
     action?.();
   };
 
@@ -91,7 +94,7 @@ export function Header({
             aria-expanded={menuOpen}
             aria-controls="account-menu"
             onClick={() => {
-              setOpenMenuScope((current) => (current === menuScope ? null : menuScope));
+              setMenuOpen((current) => !current);
             }}
           >
             <MenuIcon />

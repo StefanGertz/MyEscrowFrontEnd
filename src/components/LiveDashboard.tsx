@@ -14,6 +14,7 @@ import {
   useEscrows,
   useNotifications,
 } from "@/hooks/useDashboardData";
+import { orderNotifications } from "@/lib/notificationOrdering";
 
 type EscrowFormState = {
   title: string;
@@ -49,7 +50,7 @@ export function LiveDashboard() {
 
   const summaryMetrics = overviewQuery.data?.summaryMetrics ?? [];
   const disputes = disputesQuery.data?.disputes ?? [];
-  const notifications = notificationsQuery.data?.notifications ?? [];
+  const notifications = orderNotifications(notificationsQuery.data?.notifications ?? []);
   const escrows = escrowsQuery.data?.escrows ?? [];
 
   const totalHeld = summaryMetrics.find((metric) => metric.id === "held")?.value ?? "$0";

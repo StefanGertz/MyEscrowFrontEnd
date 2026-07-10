@@ -32,6 +32,7 @@ import {
 import { useToast } from "@/components/ToastProvider";
 import { useAuth } from "@/components/AuthProvider";
 import { moveItem, sortByDeadline } from "@/lib/milestoneOrdering";
+import { orderNotifications } from "@/lib/notificationOrdering";
 import {
   formatCurrencyInput,
   formatCurrencyValue as formatCurrency,
@@ -1083,8 +1084,7 @@ function MockExperienceHome({ searchParams }: HomeProps) {
     }
     return false;
   };
-  const orderedNotifications = [...notificationsToRender]
-    .sort((a, b) => Number(requiresCurrentUserAction(b)) - Number(requiresCurrentUserAction(a)));
+  const orderedNotifications = orderNotifications(notificationsToRender, requiresCurrentUserAction);
 
   const handleDismissNotification = (notificationId: string) => {
     void dismissNotificationMutation.mutateAsync(notificationId).catch((error) => {
@@ -2026,19 +2026,50 @@ const handleWalletWithdraw = async () => {
       <h2 className="page-title">Dashboard</h2>
       <p className="lead">Overview of your transactions and quick actions.</p>
       <div className="tiles">
-        <button
-          className="tile tile-button"
-          type="button"
-          onClick={showAlertsPanel}
-          style={{ textAlign: "left" }}
-        >
+        <div className="tile alerts-tile">
           <div className="t-title">Alerts</div>
           <div className="muted">Open items</div>
           <div style={{ fontSize: 26, fontWeight: 800 }}>{openNotifications}</div>
-          <div className="muted" style={{ marginTop: 8 }}>
-            Tap to view details
-          </div>
-        </button>
+          <button className="ghost alerts-tile__details-button" type="button" onClick={showAlertsPanel}>
+            View details
+          </button>
+          <details className="alerts-history">
+            <summary>
+              <span>Alert history</span>
+              <span className="muted">{timelineEntries.length}</span>
+            </summary>
+            <div className="alerts-history__list">
+              {timelineEntries.length === 0 ? (
+                <div className="muted">No alert history yet for this account.</div>
+              ) : (
+                timelineEntries.map((event) => (
+                  <button
+                    key={event.id}
+                    className="alerts-history__item"
+                    type="button"
+                    onClick={() => {
+                      const targetTx =
+                        (event.txId ? displayTransactions.find((tx) => tx.id === event.txId) : undefined) ??
+                        displayTransactions.find((tx) => tx.title === event.label || tx.counterpart === event.label) ??
+                        displayTransactions[0];
+                      if (targetTx) {
+                        viewTransaction(targetTx);
+                      }
+                    }}
+                  >
+                    <span className="alerts-history__label">{event.label}</span>
+                    <span className="muted">{event.detail}</span>
+                    {"createdAt" in event && event.createdAt ? (
+                      <span className="muted">
+                        <NotificationTimestamp createdAt={event.createdAt} />
+                      </span>
+                    ) : null}
+                  </button>
+                ))
+              )}
+            </div>
+          </details>
+        </div>
         <button
           className="tile tile-button"
           type="button"
@@ -2081,43 +2112,6 @@ const handleWalletWithdraw = async () => {
               </div>
             </div>
           ))}
-        </div>
-      </div>
-      <div className="card">
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <strong>Alert history</strong>
-          <span className="muted" style={{ fontSize: 13 }}>All account alerts</span>
-        </div>
-        <div className="tx-list" style={{ marginTop: 12 }}>
-          {timelineEntries.length === 0 ? (
-            <div className="muted">No alert history yet for this account.</div>
-          ) : (
-            timelineEntries.map((event) => (
-              <button
-                key={event.id}
-                className="tx-item timeline-entry-card tx-item--interactive"
-                onClick={() => {
-                  const targetTx =
-                    (event.txId ? displayTransactions.find((tx) => tx.id === event.txId) : undefined) ??
-                    displayTransactions.find((tx) => tx.title === event.label || tx.counterpart === event.label) ??
-                    displayTransactions[0];
-                  if (targetTx) {
-                    viewTransaction(targetTx);
-                  }
-                }}
-              >
-                <div>
-                  <div style={{ fontWeight: 700 }}>{event.label}</div>
-                  <div className="muted">{event.detail}</div>
-                  {"createdAt" in event && event.createdAt ? (
-                    <div className="muted" style={{ marginTop: 4, fontSize: 13 }}>
-                      <NotificationTimestamp createdAt={event.createdAt} />
-                    </div>
-                  ) : null}
-                </div>
-              </button>
-            ))
-          )}
         </div>
       </div>
     </section>
@@ -2541,7 +2535,7 @@ const handleWalletWithdraw = async () => {
       <div className="card" style={{ marginBottom: 12 }}>
         <div className="form-field">
           <label className="muted">Agreement preview</label>
-          <textarea value={agreementPreview} rows={8} readOnly />
+          <div className="agreement-preview-text">{agreementPreview}</div>
         </div>
         <div style={{ marginTop: 12 }}>
           <div className="muted">Milestones</div>
