@@ -3375,18 +3375,6 @@ const handleWalletWithdraw = async () => {
                   </div>
                   <div className="milestone-target__totals">
                     <div className="milestone-target__value">{formatCurrency(tx.amount)}</div>
-                    <div
-                      className="milestone-target__remaining"
-                      data-overdrawn={draftAgreementRemaining < 0}
-                      data-complete={Math.round(draftAgreementRemaining * 100) === 0}
-                    >
-                      <span>Remaining amount</span>
-                      <strong>
-                        {formatCurrency(draftAgreementRemaining)}
-                        {Math.round(draftAgreementRemaining * 100) === 0 ? <span aria-hidden="true"> ✓</span> : null}
-                      </strong>
-                      <span>Draft total: {formatCurrency(draftAgreementTotal)}</span>
-                    </div>
                   </div>
                 </div>
                 <div className="agreement-change-list">
@@ -3423,6 +3411,11 @@ const handleWalletWithdraw = async () => {
                               data-complete={Math.round(draftAgreementRemaining * 100) === 0}
                             >
                               Remaining amount: {formatCurrency(rowRemaining)}
+                              {draftAgreementRemaining < 0 ? (
+                                <span className="agreement-change-row__remaining-help">
+                                  Modify other milestone amounts to free up funds for this one.
+                                </span>
+                              ) : null}
                             </div>
                           ) : null}
                         </div>

@@ -553,10 +553,10 @@ body {
 
 .alert-counterparty-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  margin-top: 8px;
+  margin-top: 4px;
 }
 
 .alert-counterparty-row .muted {
@@ -1052,6 +1052,12 @@ body {
 
 .agreement-change-row__remaining[data-complete="true"] {
   color: #0f766e;
+}
+
+.agreement-change-row__remaining-help {
+  display: block;
+  margin-top: 3px;
+  font-weight: 600;
 }
 
 .agreement-toggle {
