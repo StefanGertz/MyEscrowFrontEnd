@@ -1916,7 +1916,12 @@ const findTransactionById = (id: number) => {
     }
     const total = agreementDraftTotal(agreementChangeDraft);
     if (Math.round(total * 100) !== Math.round(tx.amount * 100)) {
-      setMessage(`Milestone amounts must add up to the escrow amount of ${formatCurrency(tx.amount)}.`);
+      const difference = total - tx.amount;
+      setMessage(
+        difference > 0
+          ? `Milestone amounts exceed the escrow amount by ${formatCurrency(difference)}. Reduce one or more milestone amounts so the total equals ${formatCurrency(tx.amount)}.`
+          : `Milestone amounts are short by ${formatCurrency(Math.abs(difference))}. Increase one or more milestone amounts so the total equals ${formatCurrency(tx.amount)}.`,
+      );
       return;
     }
     const escrowId = tx.reference ?? `PO-${tx.id}`;
@@ -3043,6 +3048,7 @@ const handleWalletWithdraw = async () => {
       0,
     );
     const draftAgreementTotal = agreementChangeDraft ? agreementDraftTotal(agreementChangeDraft) : 0;
+    const draftAgreementRemaining = tx.amount - draftAgreementTotal;
     const hasNewAgreementMilestone = Boolean(agreementChangeDraft?.milestones.some((milestone) => milestone.isNew));
     const agreementDraftReady = Boolean(
       agreementChangeDraft &&
@@ -3415,11 +3421,15 @@ const handleWalletWithdraw = async () => {
                     <div className="milestone-target__value">{formatCurrency(tx.amount)}</div>
                     <div
                       className="milestone-target__remaining"
-                      data-overdrawn={Math.round(draftAgreementTotal * 100) !== Math.round(tx.amount * 100)}
-                      data-complete={Math.round(draftAgreementTotal * 100) === Math.round(tx.amount * 100)}
+                      data-overdrawn={draftAgreementRemaining < 0}
+                      data-complete={Math.round(draftAgreementRemaining * 100) === 0}
                     >
-                      <span>Draft total</span>
-                      <strong>{formatCurrency(draftAgreementTotal)}</strong>
+                      <span>Remaining amount</span>
+                      <strong>
+                        {formatCurrency(draftAgreementRemaining)}
+                        {Math.round(draftAgreementRemaining * 100) === 0 ? <span aria-hidden="true"> ✓</span> : null}
+                      </strong>
+                      <span>Draft total: {formatCurrency(draftAgreementTotal)}</span>
                     </div>
                   </div>
                 </div>
