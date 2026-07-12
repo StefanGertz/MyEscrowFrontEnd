@@ -8,7 +8,9 @@ export async function POST(
 ) {
   const { id } = await context.params;
   if (!isMockApiEnabled) {
-    return proxyApiRequest(request, `/api/dashboard/escrows/${id}/request-changes`);
+    return proxyApiRequest(request, `/api/dashboard/escrows/${id}/request-changes`, {
+      fallbackPaths: [`/api/dashboard/escrows/${id}/agreement-changes`],
+    });
   }
   return NextResponse.json({ success: true, escrowId: id });
 }

@@ -18,9 +18,26 @@ function resolveTarget(path: string) {
   return `${trimmedBase}${normalizedPath}`;
 }
 
-export async function proxyApiRequest(request: Request, path: string) {
-  const targetUrl = resolveTarget(path);
-  if (!targetUrl) {
+type ProxyOptions = {
+  fallbackPaths?: string[];
+};
+
+const isRouteNotFoundResponse = (status: number, body: ArrayBuffer) => {
+  if (status !== 404) {
+    return false;
+  }
+  try {
+    const text = new TextDecoder().decode(body);
+    return /Route\s+\w+:\/api\/.+\s+not found/.test(text);
+  } catch {
+    return false;
+  }
+};
+
+export async function proxyApiRequest(request: Request, path: string, options: ProxyOptions = {}) {
+  const paths = [path, ...(options.fallbackPaths ?? [])];
+  const targetUrls = paths.map(resolveTarget);
+  if (targetUrls.some((targetUrl) => !targetUrl)) {
     return proxyErrorResponse;
   }
 
@@ -33,18 +50,29 @@ export async function proxyApiRequest(request: Request, path: string) {
     body = await request.text();
   }
 
-  const upstream = await fetch(targetUrl, {
-    method: request.method,
-    headers,
-    body,
-    cache: "no-store",
-  });
+  let latestResponse: NextResponse | null = null;
+  for (const targetUrl of targetUrls) {
+    if (!targetUrl) {
+      continue;
+    }
+    const upstream = await fetch(targetUrl, {
+      method: request.method,
+      headers,
+      body,
+      cache: "no-store",
+    });
 
-  const responseBody = await upstream.arrayBuffer();
-  const responseHeaders = new Headers(upstream.headers);
-  return new NextResponse(responseBody, {
-    status: upstream.status,
-    statusText: upstream.statusText,
-    headers: responseHeaders,
-  });
+    const responseBody = await upstream.arrayBuffer();
+    const responseHeaders = new Headers(upstream.headers);
+    latestResponse = new NextResponse(responseBody, {
+      status: upstream.status,
+      statusText: upstream.statusText,
+      headers: responseHeaders,
+    });
+    if (!isRouteNotFoundResponse(upstream.status, responseBody)) {
+      return latestResponse;
+    }
+  }
+
+  return latestResponse ?? proxyErrorResponse;
 }
