@@ -117,6 +117,9 @@ export const handlers = [
   http.post(`${baseUrl}/api/dashboard/escrows/:id/agreement-changes`, ({ params }) => {
     return HttpResponse.json({ success: true, escrowId: params.id });
   }),
+  http.post(`${baseUrl}/api/dashboard/escrows/:id/request-changes`, ({ params }) => {
+    return HttpResponse.json({ success: true, escrowId: params.id });
+  }),
   http.post(`${baseUrl}/api/dashboard/escrows/:id/milestones/:milestoneId/apply-changes`, ({ params }) => {
     return HttpResponse.json({ success: true, escrowId: params.id, milestoneId: Number(params.milestoneId) });
   }),
