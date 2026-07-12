@@ -3383,10 +3383,6 @@ const handleWalletWithdraw = async () => {
                       <div className="agreement-change-row__title">
                         <strong>{milestone.isNew ? "New milestone" : `Milestone ${index + 1}`}</strong>
                       </div>
-                      {(() => {
-                        const currentAmount = Number(milestone.amount) || 0;
-                        const rowRemaining = draftAgreementRemaining + currentAmount;
-                        return (
                       <div className="form-grid">
                         <div className="form-field">
                           <label className="muted">Title</label>
@@ -3410,7 +3406,7 @@ const handleWalletWithdraw = async () => {
                               data-overdrawn={draftAgreementRemaining < 0}
                               data-complete={Math.round(draftAgreementRemaining * 100) === 0}
                             >
-                              Remaining amount: {formatCurrency(rowRemaining)}
+                              Remaining amount: {formatCurrency(draftAgreementRemaining)}
                               {draftAgreementRemaining < 0 ? (
                                 <span className="agreement-change-row__remaining-help">
                                   Modify other milestone amounts to free up funds for this one.
@@ -3428,8 +3424,6 @@ const handleWalletWithdraw = async () => {
                           />
                         </div>
                       </div>
-                        );
-                      })()}
                       <div className="form-field" style={{ marginTop: 8 }}>
                         <label className="muted">Description</label>
                         <textarea
