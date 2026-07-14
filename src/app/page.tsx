@@ -305,15 +305,15 @@ const milestoneReleaseSteps = [
 const createGuideSteps = [
   {
     title: "Invite the counterparty",
-    detail: "We email your buyer or seller to accept the escrow and verify identity.",
+    detail: "Send an invitation for the other party to review and approve the agreement terms.",
   },
   {
-    title: "Define payouts",
-    detail: "Break the work into milestones so funds can release as soon as each stage completes.",
+    title: "Agree on milestones",
+    detail: "Both parties finalize the milestone definitions and amounts through the negotiation process.",
   },
   {
-    title: "Sign and fund",
-    detail: "Preview the agreement, capture signatures, and send the deposit from your wallet.",
+    title: "Fund and execute",
+    detail: "Once approved, the buyer funds the escrow and work can begin with milestone approvals.",
   },
 ] as const;
 
