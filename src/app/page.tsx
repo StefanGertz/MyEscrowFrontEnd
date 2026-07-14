@@ -304,16 +304,16 @@ const milestoneReleaseSteps = [
 
 const createGuideSteps = [
   {
-    title: "Invite the counterparty",
-    detail: "Send an invitation for the other party to review and approve the agreement terms.",
+    title: "Build and sign",
+    detail: "Add the transaction details and milestones, then review and sign the agreement.",
   },
   {
-    title: "Agree on milestones",
-    detail: "Both parties finalize the milestone definitions and amounts through the negotiation process.",
+    title: "Counterparty review",
+    detail: "After you submit, we invite the other party to approve and sign or request changes.",
   },
   {
-    title: "Fund and execute",
-    detail: "Once approved, the buyer funds the escrow and work can begin with milestone approvals.",
+    title: "Buyer funds the escrow",
+    detail: "Once both parties have signed, the buyer funds the escrow and milestone work can begin.",
   },
 ] as const;
 
@@ -2360,11 +2360,13 @@ const handleWalletWithdraw = async () => {
           <h2 className="page-title create-flow__title">Create a new transaction</h2>
           <div className="lead create-flow__lead">
             <ol className="create-flow__intro-steps">
-              <li>Invite your counterparty.</li>
-              <li>Set the amount.</li>
+              <li>Enter the transaction details.</li>
+              <li>Add the payout milestones.</li>
+              <li>Review and sign the agreement.</li>
             </ol>
             <p style={{ margin: 0 }}>
-              We&apos;ll guide both sides through milestones, signatures, and funding once both sides approve.
+              After you submit, we&apos;ll invite the counterparty to review and sign. Once both parties have
+              signed, the buyer funds the escrow.
             </p>
           </div>
         </div>
