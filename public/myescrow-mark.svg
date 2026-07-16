@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="MyEscrow">
+  <defs>
+    <linearGradient id="shield" x1="8" y1="7" x2="57" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#062a45"/>
+      <stop offset="0.48" stop-color="#083f61"/>
+      <stop offset="1" stop-color="#0aa69a"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#shield)" d="M32 3.5 57 13v18.7C57 47.2 47.7 57 32 61 16.3 57 7 47.2 7 31.7V13l25-9.5Z"/>
+  <path fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="4" d="M22.5 30v-5.3a9.5 9.5 0 0 1 19 0V30"/>
+  <rect width="27" height="19" x="18.5" y="28.5" fill="#fff" rx="5"/>
+  <circle cx="32" cy="37" r="3" fill="#087c78"/>
+  <path fill="none" stroke="#087c78" stroke-linecap="round" stroke-width="3" d="M32 39.5v3"/>
+</svg>

@@ -92,7 +92,7 @@ function LoginContent() {
     <main className="auth-page auth-page--login">
       <section className="login-showcase" aria-label="MyEscrow">
         <Link className="login-brand" href="/login" aria-label="MyEscrow sign in">
-          <Image src="/myescrow-logo.png" alt="" width={48} height={48} priority />
+          <Image src="/myescrow-mark.svg" alt="" width={48} height={48} priority />
           <span>MyEscrow</span>
         </Link>
 

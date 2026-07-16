@@ -43,7 +43,7 @@ export function Header({
   return (
     <header className="app-header">
       <button className="brand" type="button" onClick={() => runMenuAction(onBrandClick)}>
-        <img className="logo-mark" src="/myescrow-logo.png" alt="" aria-hidden="true" />
+        <img className="logo-mark" src="/myescrow-mark.svg" alt="" aria-hidden="true" />
         <div className="brand-copy">
           <span>MyEscrow</span>
         </div>

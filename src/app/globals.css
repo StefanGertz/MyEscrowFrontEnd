@@ -124,8 +124,8 @@ body {
   height: 42px;
   border-radius: 12px;
   object-fit: contain;
-  background: #fff;
-  padding: 2px;
+  background: transparent;
+  padding: 0;
   box-shadow: 0 6px 14px rgba(8, 52, 84, 0.12);
   display: block;
 }
@@ -1873,7 +1873,7 @@ select:focus {
   width: 46px;
   height: 46px;
   border-radius: 13px;
-  background: #fff;
+  background: transparent;
   object-fit: contain;
   box-shadow: 0 10px 25px rgba(0,0,0,.18);
 }
