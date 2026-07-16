@@ -221,26 +221,18 @@ body {
 }
 
 .primary-btn {
-  background: var(--button-background);
-  color: #fff;
+  border-color: var(--highlight-button-background);
+  background: var(--highlight-button-background);
+  color: var(--highlight-button-foreground);
   padding: 8px 12px;
   box-shadow: 0 8px 18px rgba(10, 166, 154, 0.18);
 }
 
 .primary-btn:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 10px 22px rgba(10, 166, 154, 0.2);
-}
-
-.header-primary-btn {
-  border-color: var(--highlight-button-background);
-  background: var(--highlight-button-background);
-  color: var(--highlight-button-foreground);
-}
-
-.header-primary-btn:hover:not(:disabled) {
   border-color: var(--highlight-button-background-hover);
   background: var(--highlight-button-background-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(10, 166, 154, 0.2);
 }
 
 .primary-btn:disabled {
@@ -252,9 +244,9 @@ body {
 
 .btn,
 .ghost {
-  background: var(--button-background);
-  color: #fff;
-  border: 1px solid var(--accent-cyan);
+  background: var(--highlight-button-background);
+  color: var(--highlight-button-foreground);
+  border: 1px solid var(--highlight-button-background);
   padding: 10px 14px;
   border-radius: 12px;
   font-weight: 600;
@@ -270,10 +262,9 @@ body {
   box-shadow: 0 6px 14px rgba(8, 52, 84, 0.07);
 }
 
-.btn:hover,
 .btn:hover {
-  background: var(--button-background-hover);
-  border-color: var(--button-background-hover);
+  background: var(--highlight-button-background-hover);
+  border-color: var(--highlight-button-background-hover);
   transform: translateY(-1px);
   box-shadow: 0 12px 24px rgba(10, 166, 154, 0.22);
 }
