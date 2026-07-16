@@ -2392,7 +2392,12 @@ const handleWalletWithdraw = async () => {
           <div><span>Portfolio</span><strong>Transactions</strong></div>
           <span>{displayTransactions.length} total</span>
         </div>
-        <div className="tx-list" style={{ marginTop: 12 }}>
+        <div
+          className="tx-list dashboard-transactions__list"
+          role="region"
+          aria-label="Transactions list"
+          tabIndex={0}
+        >
           {displayTransactions.map((tx) => (
             <div
               key={tx.id}
