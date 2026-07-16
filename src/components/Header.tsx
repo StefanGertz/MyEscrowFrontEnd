@@ -51,7 +51,7 @@ export function Header({
 
       <div className="header-actions">
         <button
-          className="primary-btn"
+          className="primary-btn header-primary-btn"
           type="button"
           disabled={primaryDisabled}
           onClick={() => runMenuAction(onPrimaryClick)}
