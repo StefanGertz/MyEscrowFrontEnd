@@ -2910,7 +2910,8 @@ select:focus {
 .settings-stack > .card { padding: 22px; border-color: var(--section-border); box-shadow: var(--section-shadow); }
 .settings-stack > .setting-card:first-child { grid-column: 1 / -1; border-top: 4px solid #0aa69a; }
 .settings-stack > .card:not(:first-child) { position: relative; padding-top: 58px; }
-.settings-stack > .card:not(:first-child)::before { content: "✓"; position: absolute; top: 20px; left: 22px; display: grid; place-items: center; width: 27px; height: 27px; border-radius: 9px; background: rgba(10,166,154,.12); color: #087c78; font-weight: 800; }
+.settings-card__icon { position: absolute; top: 20px; left: 22px; display: grid; place-items: center; width: 27px; height: 27px; border-radius: 9px; background: rgba(10,166,154,.12); color: #087c78; font-weight: 800; }
+.settings-card__icon svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
 /* Remaining authentication screens */
 .auth-page:not(.auth-page--login) {

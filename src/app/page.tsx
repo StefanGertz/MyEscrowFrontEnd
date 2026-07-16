@@ -2218,7 +2218,7 @@ const handleWalletWithdraw = async () => {
   const openBankModal = () =>
     setModalContent({
       title: "Add bank account",
-      body: "Provide your routing and account number to connect a bank in the full experience.",
+      body: "Link a bank account to deposit funds into and withdraw funds from your MyEscrow wallet.",
     });
 
   const closeModal = () => setModalContent(null);
@@ -3061,6 +3061,7 @@ const handleWalletWithdraw = async () => {
           </div>
         </div>
         <div className="card">
+          <span className="settings-card__icon" aria-hidden="true">✓</span>
           <h3 style={{ marginTop: 0, marginBottom: 6 }}>Security</h3>
           <p className="muted" style={{ marginTop: 0, marginBottom: 12 }}>
             Update your password to keep your account protected.
@@ -3070,9 +3071,15 @@ const handleWalletWithdraw = async () => {
           </button>
         </div>
         <div className="card">
+          <span className="settings-card__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="presentation">
+              <path d="M3 9h18L12 3 3 9Z" />
+              <path d="M5 10v7M9.5 10v7M14.5 10v7M19 10v7M3 21h18M3 17h18" />
+            </svg>
+          </span>
           <h3 style={{ marginTop: 0, marginBottom: 6 }}>Bank accounts</h3>
           <p className="muted" style={{ marginTop: 0, marginBottom: 12 }}>
-            Add a payout account to receive escrow releases.
+            Link a bank account to deposit funds into and withdraw funds from your wallet.
           </p>
           <button className="ghost" onClick={openBankModal}>
             Add bank account
