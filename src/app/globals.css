@@ -2883,11 +2883,12 @@ select:focus {
 .auth-page:not(.auth-page--login) .auth-card::after { content: "Secure by design"; align-self: center; margin-top: 3px; color: #788896; font-size: 11px; font-weight: 700; letter-spacing: .04em; }
 
 /* Notifications */
-.notifications-backdrop { background: rgba(3,23,35,.12); backdrop-filter: blur(2px); }
-.notifications-panel { padding: 0; overflow: hidden; border: 1px solid rgba(10,166,154,.18); border-radius: 20px; box-shadow: 0 30px 70px rgba(3,29,44,.25); }
-.notifications-panel-head { padding: 19px 20px; color: #fff; background: linear-gradient(125deg, #062a45, #087c78); }
-.notifications-panel-head .muted { color: rgba(255,255,255,.65); }
-.notifications-panel-head .icon-btn { border-color: rgba(255,255,255,.22); background: rgba(255,255,255,.1); color: #fff; }
+.notifications-backdrop { background: rgba(3,23,35,.07); backdrop-filter: blur(1px); }
+.notifications-panel { padding: 0; overflow: hidden; border: 1px solid rgba(10,166,154,.2); border-top: 4px solid #0aa69a; border-radius: 20px; box-shadow: 0 24px 58px rgba(3,29,44,.18); }
+.notifications-panel-head { padding: 17px 20px 16px; color: var(--brand-600); background: linear-gradient(135deg, #fff, #f1fbf9); border-bottom: 1px solid rgba(10,166,154,.13); }
+.notifications-panel-head .muted { color: var(--muted); }
+.notifications-panel-head .icon-btn { border-color: rgba(10,166,154,.22); background: #fff; color: var(--brand-600); box-shadow: 0 5px 12px rgba(8,52,84,.06); }
+.notifications-panel-head .icon-btn:hover { background: rgba(10,166,154,.08); }
 .notifications-panel .notif-list { margin: 0; padding: 12px; background: #f6fbfa; }
 .notifications-panel .notif-item { padding: 13px; border-color: transparent; background: #fff; box-shadow: 0 6px 16px rgba(8,52,84,.05); }
 .notifications-panel .notif-item:hover { border-color: rgba(10,166,154,.25); }
