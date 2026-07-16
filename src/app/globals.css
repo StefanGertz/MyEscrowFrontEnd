@@ -2581,15 +2581,17 @@ select:focus {
   }
 
   .header-menu-popover .header-menu-primary {
-    border-color: var(--accent-cyan);
-    background: var(--button-background);
-    color: #fff;
-    box-shadow: 0 7px 16px rgba(10, 166, 154, .16);
+    border-color: #67e8d5;
+    background: #67e8d5;
+    color: #073b4c;
+    box-shadow: 0 7px 16px rgba(10, 166, 154, .14);
   }
 
   .header-menu-popover .header-menu-primary:hover,
   .header-menu-popover .header-menu-primary:focus-visible {
-    background: var(--button-background-hover);
+    border-color: #8bf3e4;
+    background: #8bf3e4;
+    color: #073b4c;
     outline: none;
   }
 
