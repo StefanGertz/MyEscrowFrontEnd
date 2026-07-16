@@ -545,15 +545,15 @@ body {
 .home-primary-action {
   min-height: 48px;
   padding: 12px 18px;
-  border-color: var(--button-background);
-  background: var(--button-background);
-  color: #fff;
+  border-color: #67e8d5;
+  background: #67e8d5;
+  color: #073b4c;
   box-shadow: 0 14px 30px rgba(1, 20, 31, .24);
 }
 
 .home-primary-action:hover {
-  border-color: var(--button-background-hover);
-  background: var(--button-background-hover);
+  border-color: #8bf3e4;
+  background: #8bf3e4;
 }
 
 .home-text-action {
@@ -1102,6 +1102,13 @@ body {
 
 .create-flow__lead {
   max-width: 520px;
+}
+
+.create-flow__intro-steps {
+  margin: 0 0 8px;
+  padding-left: 22px;
+  list-style: decimal;
+  list-style-position: outside;
 }
 
 .create-flow__grid {

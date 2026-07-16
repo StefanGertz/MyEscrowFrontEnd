@@ -2436,6 +2436,11 @@ const handleWalletWithdraw = async () => {
         <EscrowWizardHeader currentStep={1} title="Create a new transaction" description="Set the foundation for a secure agreement." />
         <div className="create-flow__hero create-flow__intro">
           <div className="lead create-flow__lead">
+            <ol className="create-flow__intro-steps">
+              <li>Enter the transaction details.</li>
+              <li>Add the payout milestones.</li>
+              <li>Review and sign the agreement.</li>
+            </ol>
             <p style={{ margin: 0 }}>
               After you submit, we&apos;ll invite the counterparty to review and sign. Once both parties have
               signed, the buyer funds the escrow.
