@@ -406,6 +406,25 @@ body {
   flex-direction: column;
   gap: 8px;
   margin-top: 10px;
+  max-height: min(540px, 60vh);
+  padding-right: 4px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: rgba(10, 166, 154, 0.38) transparent;
+  scrollbar-width: thin;
+}
+
+.alerts-history__list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.alerts-history__list::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(10, 166, 154, 0.32);
+}
+
+.alerts-history__list::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .alerts-history__item {
