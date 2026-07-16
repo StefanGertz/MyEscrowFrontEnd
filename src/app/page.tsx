@@ -244,6 +244,35 @@ type HomeProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
+function EscrowWizardHeader({ currentStep, title, description }: {
+  currentStep: 1 | 2 | 3;
+  title: string;
+  description: string;
+}) {
+  const steps = ["Details", "Milestones", "Agreement"];
+  return (
+    <div className="wizard-header">
+      <div className="wizard-header__copy">
+        <span className="wizard-header__eyebrow">Create escrow</span>
+        <h2>{title}</h2>
+        <p>{description}</p>
+      </div>
+      <ol className="wizard-progress" aria-label={`Step ${currentStep} of 3`}>
+        {steps.map((step, index) => {
+          const stepNumber = index + 1;
+          const state = stepNumber < currentStep ? "complete" : stepNumber === currentStep ? "active" : "upcoming";
+          return (
+            <li key={step} data-status={state}>
+              <span>{stepNumber < currentStep ? "✓" : stepNumber}</span>
+              <strong>{step}</strong>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+}
+
 const liveDashboardEnabled = (process.env.NEXT_PUBLIC_LIVE_DASHBOARD ?? "false") === "true";
 const liveDataEnabled = (process.env.NEXT_PUBLIC_USE_MOCKS ?? "true") === "false";
 
@@ -2291,9 +2320,14 @@ const handleWalletWithdraw = async () => {
   );
 
   const renderDashboard = () => (
-    <section className="screen active">
-      <h2 className="page-title">Dashboard</h2>
-      <p className="lead">Overview of your transactions and quick actions.</p>
+    <section className="screen active dashboard-screen app-content-page">
+      <div className="compact-page-header">
+        <div>
+          <p className="compact-page-header__eyebrow">Your workspace</p>
+          <h2>Dashboard</h2>
+          <p>Overview of your transactions and quick actions.</p>
+        </div>
+      </div>
       <div className="tiles">
         <div className="tile alerts-tile">
           <div className="t-title">Alerts</div>
@@ -2353,8 +2387,11 @@ const handleWalletWithdraw = async () => {
           </div>
         </button>
       </div>
-      <div className="card" style={{ marginBottom: 12 }}>
-        <strong>Transactions</strong>
+      <div className="card dashboard-transactions" style={{ marginBottom: 12 }}>
+        <div className="section-title-row">
+          <div><span>Portfolio</span><strong>Transactions</strong></div>
+          <span>{displayTransactions.length} total</span>
+        </div>
         <div className="tx-list" style={{ marginTop: 12 }}>
           {displayTransactions.map((tx) => (
             <div
@@ -2390,10 +2427,9 @@ const handleWalletWithdraw = async () => {
     const counterpartLabel = createForm.role === "buyer" ? "Seller" : "Buyer";
 
     return (
-      <section className="screen active create-flow">
-        <div className="create-flow__hero">
-          <span className="create-flow__eyebrow">Step 1 - Transaction details</span>
-          <h2 className="page-title create-flow__title">Create a new transaction</h2>
+      <section className="screen active create-flow wizard-screen">
+        <EscrowWizardHeader currentStep={1} title="Create a new transaction" description="Set the foundation for a secure agreement." />
+        <div className="create-flow__hero create-flow__intro">
           <div className="lead create-flow__lead">
             <ol className="create-flow__intro-steps">
               <li>Enter the transaction details.</li>
@@ -2570,9 +2606,8 @@ const handleWalletWithdraw = async () => {
       && (remainingEscrowAmount < 0 || (remainingEscrowAmount === 0 && !hasDraftMilestoneAmount));
 
     return (
-      <section className="screen active">
-        <h2 className="page-title">Milestones</h2>
-        <p className="lead">Break the agreement into deliverables before moving on to the terms.</p>
+      <section className="screen active wizard-screen">
+        <EscrowWizardHeader currentStep={2} title="Build the milestones" description="Break the agreement into clear, reviewable deliverables." />
         <div className="card" style={{ marginBottom: 12 }}>
           <h3 style={{ marginBottom: 8 }}>How funds are released</h3>
           <div className="flow-grid">
@@ -2797,10 +2832,9 @@ const handleWalletWithdraw = async () => {
   };
 
   const renderAgreement = () => (
-    <section className="screen active">
-      <h2 className="page-title">Agreement & Signature</h2>
-      <p className="lead">Review terms and sign to accept.</p>
-      <p className="muted" style={{ marginTop: -8, marginBottom: 16 }}>
+    <section className="screen active wizard-screen agreement-screen">
+      <EscrowWizardHeader currentStep={3} title="Review and sign" description="Confirm the terms before sending the agreement." />
+      <p className="muted wizard-helper-copy">
         Funding happens after both parties agree to the terms, so no deposits are needed right now.
       </p>
       <div className="card" style={{ marginBottom: 12 }}>
@@ -2888,9 +2922,8 @@ const handleWalletWithdraw = async () => {
   );
 
   const renderWallet = () => (
-    <section className="screen active">
-      <h2 className="page-title">Wallet</h2>
-      <p className="lead">Track deposits and withdrawals.</p>
+    <section className="screen active wallet-screen app-content-page">
+      <div className="compact-page-header"><div><p className="compact-page-header__eyebrow">Funds</p><h2>Wallet</h2><p>Track deposits and withdrawals.</p></div></div>
       <div className="card wallet-card">
         <div className="muted">Available balance</div>
         <div style={{ fontWeight: 800, fontSize: 18 }}>{formatCurrency(walletBalanceDisplay)}</div>
@@ -2939,9 +2972,8 @@ const handleWalletWithdraw = async () => {
   );
 
   const renderHistory = () => (
-    <section className="screen active">
-      <h2 className="page-title">History</h2>
-      <p className="lead">Past escrows and payouts.</p>
+    <section className="screen active app-content-page collection-screen">
+      <div className="compact-page-header"><div><p className="compact-page-header__eyebrow">Archive</p><h2>History</h2><p>Past escrows and payouts.</p></div></div>
       <div className="card">
         {displayTransactions
           .filter((tx) => tx.status === "Complete")
@@ -2967,9 +2999,8 @@ const handleWalletWithdraw = async () => {
   const renderEscrows = () => {
     const activeTransactions = displayTransactions.filter((tx) => tx.status === "Active");
     return (
-      <section className="screen active">
-        <h2 className="page-title">Active escrows</h2>
-        <p className="lead">Track milestones that can release funds.</p>
+      <section className="screen active app-content-page collection-screen">
+        <div className="compact-page-header"><div><p className="compact-page-header__eyebrow">In progress</p><h2>Active escrows</h2><p>Track milestones that can release funds.</p></div></div>
         <div className="card">
           {activeTransactions.length === 0 ? (
             <p className="muted" style={{ margin: 0 }}>
@@ -2997,9 +3028,8 @@ const handleWalletWithdraw = async () => {
   };
 
   const renderSettings = () => (
-    <section className="screen active settings-screen">
-      <h2 className="page-title">Settings</h2>
-      <p className="lead">Manage profile, security, and payout settings.</p>
+    <section className="screen active settings-screen app-content-page">
+      <div className="compact-page-header"><div><p className="compact-page-header__eyebrow">Account</p><h2>Settings</h2><p>Manage profile, security, and payout settings.</p></div></div>
       <div className="settings-stack">
         <div className="card setting-card">
           <div className="settings-form">
@@ -3061,8 +3091,8 @@ const handleWalletWithdraw = async () => {
       : selectedTransaction;
     if (!tx) {
       return (
-        <section className="screen active">
-          <h2 className="page-title">Transaction</h2>
+        <section className="screen active transaction-screen app-content-page">
+          <div className="compact-page-header"><div><p className="compact-page-header__eyebrow">Escrow details</p><h2>Transaction</h2></div></div>
           <div className="card">
             <p className="muted">Select a transaction from the dashboard to view its details.</p>
           </div>
@@ -3108,9 +3138,9 @@ const handleWalletWithdraw = async () => {
     const draftEditTotal = draftEscrowEdit ? draftEscrowEditTotal(draftEscrowEdit) : 0;
     const draftEditAmount = draftEscrowEdit ? Number(draftEscrowEdit.amount) || 0 : 0;
     return (
-      <section className="screen active">
-        <h2 className="page-title">Transaction</h2>
-        <div className="card">
+      <section className="screen active transaction-screen app-content-page">
+        <div className="compact-page-header"><div><p className="compact-page-header__eyebrow">Escrow details</p><h2>Transaction</h2></div></div>
+        <div className="card transaction-hero-card">
           <div style={{ marginBottom: 12 }}>
             <div className="muted">Title</div>
             <div style={{ fontSize: 18, fontWeight: 800 }}>{tx.title}</div>
