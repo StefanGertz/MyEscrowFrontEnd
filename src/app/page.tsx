@@ -2195,61 +2195,97 @@ const handleWalletWithdraw = async () => {
   const closeModal = () => setModalContent(null);
 
   const renderWelcome = () => (
-    <section className="screen active">
-      <div className="home-hero card">
-        <p className="auth-eyebrow">MyEscrow</p>
-        <h2 className="page-title">
-          Welcome back,
-          <span style={{ fontWeight: 700, marginLeft: 6 }}>{greetingName}</span>
-        </h2>
-        <p className="lead">
-          Start a new escrow or jump back into the work that needs your attention.
-        </p>
-        <div className="home-actions">
-          <button className="btn" onClick={() => navigate("create")}>
-            Create escrow
-          </button>
-          <button className="ghost" onClick={() => navigate("dashboard")}>
-            Open dashboard
-          </button>
+    <section className="screen active home-screen">
+      <div className="home-hero">
+        <div className="home-hero__content">
+          <p className="home-hero__eyebrow">
+            <span aria-hidden="true">●</span> Secure transactions, made simple
+          </p>
+          <h2 className="home-hero__title">
+            Welcome back, <span>{greetingName}</span>
+          </h2>
+          <p className="home-hero__lead">
+            Create an agreement, protect the payment, and release funds only when the work is done.
+          </p>
+          <div className="home-actions">
+            <button className="btn home-primary-action" onClick={() => navigate("create")}>
+              Create an escrow <span aria-hidden="true">→</span>
+            </button>
+            <button className="home-text-action" onClick={() => navigate("dashboard")}>
+              Open dashboard
+            </button>
+          </div>
+        </div>
+        <div className="home-hero__visual" aria-hidden="true">
+          <div className="home-orbit home-orbit--outer" />
+          <div className="home-orbit home-orbit--inner" />
+          <div className="home-shield">
+            <svg viewBox="0 0 64 72" role="presentation">
+              <path d="M32 3 57 13v19c0 17-10.5 29.5-25 36C17.5 61.5 7 49 7 32V13L32 3Z" />
+              <path d="m21 35 7 7 15-17" />
+            </svg>
+          </div>
+          <span className="home-float-pill home-float-pill--top">Agreement signed</span>
+          <span className="home-float-pill home-float-pill--bottom">Funds protected</span>
         </div>
       </div>
       <div className="home-stack">
         {pendingCard ? (
-          <div className="card alert-card">
-            <div className="alert-pill">Pending action</div>
-            <div className="alert-head">
+          <div className="card alert-card home-next-action">
+            <div className="home-next-action__heading">
               <div>
-                <div className="muted">{pendingCard.context}</div>
-                <div style={{ fontSize: 18, fontWeight: 700 }}>{pendingCard.title}</div>
+                <div className="alert-pill">Your next action</div>
+                <h3>{pendingCard.title}</h3>
+                <p>{pendingCard.context} · {pendingCard.counterpart}</p>
               </div>
-            </div>
-            <div className="alert-counterparty-row">
-              <div className="muted">{pendingCard.counterpart}</div>
               <button className="ghost" onClick={() => viewTransaction(pendingCard)}>
-                View escrow
+                Review escrow <span aria-hidden="true">→</span>
               </button>
             </div>
-            <div className="process-steps">
+            <div className="home-progress" aria-label="Escrow progress">
               {pendingCard.steps.map((step) => (
-                <div key={step.title} className="process-step" data-status={step.status}>
-                  <div className="process-step-title">{step.title}</div>
-                  <div className="process-step-detail">{step.detail}</div>
+                <div key={step.title} className="home-progress__step" data-status={step.status}>
+                  <span className="home-progress__dot" />
+                  <span>{step.title}</span>
                 </div>
               ))}
             </div>
           </div>
         ) : (
-          <div className="card home-empty-state">
-            <strong>No urgent actions</strong>
-            <p className="muted">
-              Your dashboard has the full transaction list, alert history, and account details when you need them.
-            </p>
-            <button className="ghost" onClick={() => navigate("dashboard")}>
-              View dashboard
-            </button>
+          <div className="card home-empty-state home-next-action">
+            <span className="home-empty-state__icon" aria-hidden="true">✓</span>
+            <div>
+              <strong>You’re all caught up</strong>
+              <p>No escrows need your attention right now.</p>
+            </div>
           </div>
         )}
+      </div>
+
+      <div className="home-how">
+        <div className="home-section-heading">
+          <p className="auth-eyebrow">How it works</p>
+          <h3>Confidence at every step</h3>
+        </div>
+        <div className="home-how__steps">
+          {[
+            ["01", "Agree", "Set clear terms, milestones, and delivery expectations."],
+            ["02", "Protect", "Funds are held securely while the work moves forward."],
+            ["03", "Release", "Approve completed work and release payment with confidence."],
+          ].map(([number, title, detail]) => (
+            <div className="home-how__step" key={number}>
+              <span>{number}</span>
+              <h4>{title}</h4>
+              <p>{detail}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="home-trust" aria-label="MyEscrow benefits">
+        <span>Protected funds</span>
+        <span>Transparent milestones</span>
+        <span>Secure agreements</span>
       </div>
     </section>
   );
