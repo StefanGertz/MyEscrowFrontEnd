@@ -104,11 +104,11 @@ export function Header({
           </button>
           {menuOpen ? (
             <div id="account-menu" className="header-menu-popover" role="menu">
-              <button type="button" role="menuitem" onClick={() => runMenuAction(onSettingsClick)}>
+              <button className="header-menu-primary" type="button" role="menuitem" onClick={() => runMenuAction(onSettingsClick)}>
                 <SettingsIcon />
                 Settings
               </button>
-              <button type="button" role="menuitem" onClick={() => runMenuAction(onLogoutClick)}>
+              <button className="header-menu-logout" type="button" role="menuitem" onClick={() => runMenuAction(onLogoutClick)}>
                 <LogoutIcon />
                 Log out
               </button>
