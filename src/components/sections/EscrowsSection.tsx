@@ -1,37 +1,9 @@
 "use client";
 
-import { useEscrows, useReleaseEscrow } from "@/hooks/useDashboardData";
-import { useToast } from "@/components/ToastProvider";
-import { useConfirmDialog } from "@/components/ConfirmDialogProvider";
+import { useEscrows } from "@/hooks/useDashboardData";
 
 export function EscrowsSection() {
   const { data, isLoading, isError } = useEscrows();
-  const releaseEscrow = useReleaseEscrow();
-  const { pushToast } = useToast();
-  const { confirm } = useConfirmDialog();
-
-  const handleRelease = (escrowId: string, counterpartyApproved: boolean) => {
-    if (!counterpartyApproved || releaseEscrow.isPending) return;
-    confirm({
-      title: "Approve milestone release?",
-      body: "Are you sure you want to approve this release? This action cannot be undone.",
-      confirmLabel: "Approve release",
-      onConfirm: async () => {
-        try {
-          await releaseEscrow.mutateAsync({ escrowId });
-          pushToast({
-            variant: "success",
-            title: `Release queued for ${escrowId}.`,
-          });
-        } catch (error) {
-          pushToast({
-            variant: "error",
-            title: error instanceof Error ? error.message : "Unable to release escrow.",
-          });
-        }
-      },
-    });
-  };
 
   if (isLoading) {
     return <EscrowSectionShell className="animate-pulse" />;
@@ -73,13 +45,10 @@ export function EscrowsSection() {
           <span>Amount</span>
           <span>Milestone</span>
           <span>Step</span>
-          <span>Owner</span>
+          <span>Next action</span>
         </div>
 
         {escrows.map((escrow) => {
-          const isRowProcessing =
-            releaseEscrow.isPending &&
-            releaseEscrow.variables?.escrowId === escrow.id;
           return (
             <div
               key={`${escrow.id}-review`}
@@ -100,28 +69,11 @@ export function EscrowsSection() {
                 >
                   {escrow.status === "warning" ? "Needs review" : "Assigned"}
                 </span>
-                <button
-                  className="primary-btn !py-2 text-sm"
-                  type="button"
-                  disabled={
-                    releaseEscrow.isPending || !escrow.counterpartyApproved
-                  }
-                  onClick={() =>
-                    handleRelease(escrow.id, escrow.counterpartyApproved)
-                  }
-                >
+                <span className="text-xs text-slate-500">
                   {escrow.counterpartyApproved
-                    ? isRowProcessing
-                      ? "Releasing..."
-                      : "Release"
-                    : "Awaiting approval"}
-                </button>
-                {!escrow.counterpartyApproved ? (
-                  <span className="text-xs text-slate-500">
-                    Counterparty must approve the project before milestones can be
-                    released.
-                  </span>
-                ) : null}
+                    ? "Review and release individual milestones from the transaction."
+                    : "Counterparty approval is required before milestone review."}
+                </span>
               </div>
             </div>
           );

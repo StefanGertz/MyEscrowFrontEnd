@@ -3,7 +3,6 @@ import { renderHook, act, waitFor } from "@testing-library/react";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import {
   useCreateEscrow,
-  useReleaseEscrow,
   useResolveDispute,
   useApproveEscrow,
   useRejectEscrow,
@@ -51,7 +50,7 @@ afterAll(() => {
 });
 
 describe("escrow flows", () => {
-  it("creates and releases an escrow via staging API", async () => {
+  it("creates an escrow via staging API", async () => {
     const wrapper = createWrapper();
     const createHook = renderHook(() => useCreateEscrow(), { wrapper });
     let createdId: number | undefined;
@@ -71,14 +70,6 @@ describe("escrow flows", () => {
     });
 
     expect(createdId).toBeDefined();
-
-    const releaseHook = renderHook(() => useReleaseEscrow(), { wrapper });
-    await act(async () => {
-      const response = await releaseHook.result.current.mutateAsync({
-        escrowId: String(createdId),
-      });
-      expect(response.status).toBe("released");
-    });
   });
 });
 

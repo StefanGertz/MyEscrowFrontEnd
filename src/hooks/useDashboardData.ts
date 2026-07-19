@@ -188,10 +188,6 @@ export function useLaunchDisputeWorkspace() {
   });
 }
 
-type ReleasePayload = {
-  escrowId: string;
-};
-
 export type BusinessDetails = {
   legalName: string;
   representativeTitle: string;
@@ -254,25 +250,6 @@ type AgreementChangeReviewPayload = {
   decision: "accept" | "reject";
   milestones?: AgreementMilestoneChangePayload[];
 };
-
-export function useReleaseEscrow() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: ({ escrowId }: ReleasePayload) =>
-      fetchJSON<{ escrowId: string }>(
-        `/api/dashboard/escrows/${escrowId}/release`,
-        {
-          method: "POST",
-        },
-      ),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["dashboard", "escrows"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard", "overview"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard", "notifications"] });
-    },
-  });
-}
 
 const buildEscrowAction =
   (path: string) =>

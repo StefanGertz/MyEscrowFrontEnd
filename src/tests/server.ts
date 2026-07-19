@@ -87,12 +87,6 @@ export const handlers = [
   http.get(`${baseUrl}/api/dashboard/business-profile`, () => {
     return HttpResponse.json({ businessProfile: null });
   }),
-  http.post(`${baseUrl}/api/dashboard/escrows/:id/release`, ({ params }) => {
-    return HttpResponse.json({
-      escrowId: params.id,
-      status: "released",
-    });
-  }),
   http.post(`${baseUrl}/api/dashboard/escrows/:id/approve`, ({ params }) => {
     return HttpResponse.json({
       escrowId: params.id,
