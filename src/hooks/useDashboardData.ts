@@ -39,6 +39,11 @@ const fetchJSON = async <T>(input: string, init?: RequestInit): Promise<T> => {
   return (await response.json()) as T;
 };
 
+const idempotencyHeaders = (headers?: HeadersInit) => ({
+  ...Object.fromEntries(new Headers(headers).entries()),
+  "Idempotency-Key": crypto.randomUUID(),
+});
+
 type OverviewResponse = {
   walletBalance?: string;
   summaryMetrics: SummaryMetric[];
@@ -259,9 +264,11 @@ const buildEscrowAction =
       mutationFn: ({ escrowId, ...payload }: EscrowActionPayload) =>
         fetchJSON<{ escrowId: string }>(`/api/dashboard/escrows/${escrowId}/${path}`, {
           method: "POST",
+          headers: idempotencyHeaders(
+            Object.keys(payload).length ? { "Content-Type": "application/json" } : undefined,
+          ),
           ...(Object.keys(payload).length
             ? {
-                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload),
               }
             : {}),
@@ -310,6 +317,7 @@ const buildMilestoneAction =
           `/api/dashboard/escrows/${escrowId}/milestones/${milestoneId}/${path}`,
           {
             method: "POST",
+            headers: idempotencyHeaders(),
           },
         ),
       onSuccess: () => {
@@ -466,7 +474,7 @@ export function useCreateEscrow() {
     mutationFn: (payload: CreateEscrowPayload) =>
       fetchJSON<CreateEscrowResponse>("/api/dashboard/escrows/create", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: idempotencyHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(payload),
       }),
     onSuccess: () => {
@@ -488,7 +496,7 @@ export function useWalletTopup() {
     mutationFn: ({ amount }: WalletPayload) =>
       fetchJSON<{ amount: number; balance: number }>("/api/dashboard/wallet/topup", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: idempotencyHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ amount }),
       }),
     onSuccess: () => {
@@ -505,7 +513,7 @@ export function useWalletWithdraw() {
     mutationFn: ({ amount }: WalletPayload) =>
       fetchJSON<{ amount: number; balance: number }>("/api/dashboard/wallet/withdraw", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: idempotencyHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ amount }),
       }),
     onSuccess: () => {
