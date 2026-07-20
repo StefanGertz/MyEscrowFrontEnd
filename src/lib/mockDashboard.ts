@@ -25,6 +25,21 @@ export type EscrowRecord = {
   approvedAt?: string;
   buyerSignatureDataUrl?: string;
   sellerSignatureDataUrl?: string;
+  agreement?: {
+    version: number;
+    status: "current" | "locked" | "superseded";
+    creatorSigned: boolean;
+    counterpartySigned: boolean;
+    lockedAt?: string;
+  };
+  invitation?: {
+    status: "queued" | "delivered" | "failed" | "corrected" | "expired" | "accepted";
+    recipient: string;
+    attemptCount: number;
+    expiresAt: string;
+    responseDueAt: string;
+    failureReason?: string;
+  };
   role?: "buyer" | "seller";
   isOwner?: boolean;
   buyer?: {

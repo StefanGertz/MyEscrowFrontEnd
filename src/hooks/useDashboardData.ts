@@ -287,6 +287,53 @@ export const useRejectEscrow = buildEscrowAction("reject");
 export const useCancelEscrow = buildEscrowAction("cancel");
 export const useFundEscrow = buildEscrowAction("fund");
 
+export function useSignAgreement() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ escrowId, signatureDataUrl }: { escrowId: string; signatureDataUrl: string }) =>
+      fetchJSON<{ success: true }>(`/api/dashboard/escrows/${escrowId}/agreement/sign`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ signatureDataUrl }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "escrows"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "overview"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "notifications"] });
+    },
+  });
+}
+
+export function useResendInvitation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ escrowId }: { escrowId: string }) =>
+      fetchJSON<{ success: true }>(`/api/dashboard/escrows/${escrowId}/invitation/resend`, {
+        method: "POST",
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "escrows"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "notifications"] });
+    },
+  });
+}
+
+export function useExtendInvitation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ escrowId, days }: { escrowId: string; days: number }) =>
+      fetchJSON<{ success: true }>(`/api/dashboard/escrows/${escrowId}/invitation/extend`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ days }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "escrows"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "notifications"] });
+    },
+  });
+}
+
 export function useUpdateDraftEscrow() {
   const queryClient = useQueryClient();
   return useMutation({

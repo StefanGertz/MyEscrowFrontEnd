@@ -16,8 +16,11 @@ import {
   useFundEscrow,
   useRejectEscrow,
   useRejectMilestone,
+  useResendInvitation,
   useRequestAgreementChanges,
   useResubmitMilestone,
+  useSignAgreement,
+  useExtendInvitation,
   useUpdateDraftEscrow,
   useEscrowSummary,
   useEscrows,
@@ -110,6 +113,8 @@ type Transaction = {
   approvedAt?: string;
   buyerSignatureDataUrl?: string;
   sellerSignatureDataUrl?: string;
+  agreement?: EscrowRecord["agreement"];
+  invitation?: EscrowRecord["invitation"];
   userRole?: "buyer" | "seller";
   isOwner?: boolean;
   steps: ProcessStep[];
@@ -792,7 +797,7 @@ const mapEscrowsToTransactions = (
       status = "Active";
     } else if (lifecycleStatus === "completed") {
       status = "Complete";
-    } else if (lifecycleStatus === "cancelled" || lifecycleStatus === "rejected") {
+    } else if (lifecycleStatus === "cancelled") {
       status = "Cancelled";
     }
     const pendingDetail =
@@ -800,6 +805,10 @@ const mapEscrowsToTransactions = (
         ? `Waiting for ${counterpart} to create an account`
         : lifecycleStatus === "pending_approval"
         ? `Waiting for ${counterpart}`
+        : lifecycleStatus === "creator_signature_required"
+          ? "Creator must sign the latest agreement"
+          : lifecycleStatus === "rejected"
+            ? "Creator can revise, resend, or close the proposal"
         : lifecycleStatus === "funding_pending"
           ? "Buyer funding required"
           : lifecycleStatus === "funded"
@@ -810,7 +819,7 @@ const mapEscrowsToTransactions = (
         title: "Agreement drafted",
         detail: pendingDetail,
         status:
-          lifecycleStatus === "pending_counterparty_signup" || lifecycleStatus === "pending_approval" || lifecycleStatus === "changes_requested"
+          lifecycleStatus === "pending_counterparty_signup" || lifecycleStatus === "pending_approval" || lifecycleStatus === "creator_signature_required" || lifecycleStatus === "changes_requested" || lifecycleStatus === "rejected"
             ? "active"
             : "complete",
       },
@@ -821,13 +830,17 @@ const mapEscrowsToTransactions = (
             ? "Counterparty must join before approval"
             : lifecycleStatus === "pending_approval"
             ? "Buyer deposits after approval"
+            : lifecycleStatus === "creator_signature_required"
+              ? "The latest agreement needs the creator's signature"
+            : lifecycleStatus === "rejected"
+              ? "Proposal must be revised and approved first"
             : lifecycleStatus === "changes_requested"
               ? "Milestone changes must be resolved first"
             : lifecycleStatus === "funding_pending"
               ? "Buyer funding pending"
               : "Funds secured in escrow",
         status:
-          lifecycleStatus === "pending_counterparty_signup" || lifecycleStatus === "pending_approval" || lifecycleStatus === "changes_requested"
+          lifecycleStatus === "pending_counterparty_signup" || lifecycleStatus === "pending_approval" || lifecycleStatus === "creator_signature_required" || lifecycleStatus === "changes_requested" || lifecycleStatus === "rejected"
             ? "upcoming"
             : lifecycleStatus === "funding_pending"
               ? "active"
@@ -855,6 +868,8 @@ const mapEscrowsToTransactions = (
       approvedAt: record.approvedAt,
       buyerSignatureDataUrl: record.buyerSignatureDataUrl,
       sellerSignatureDataUrl: record.sellerSignatureDataUrl,
+      agreement: record.agreement,
+      invitation: record.invitation,
       userRole: record.role ?? (isBuyer ? "buyer" : "seller"),
       isOwner: record.isOwner,
       steps,
@@ -957,6 +972,9 @@ function MockExperienceHome({ searchParams }: HomeProps) {
   const [approvalSignatureCaptured, setApprovalSignatureCaptured] = useState(false);
   const [approvalSignatureVersion, setApprovalSignatureVersion] = useState(0);
   const approvalSignaturePadRef = useRef<SignaturePadHandle | null>(null);
+  const [creatorSignatureCaptured, setCreatorSignatureCaptured] = useState(false);
+  const [creatorSignatureVersion, setCreatorSignatureVersion] = useState(0);
+  const creatorSignaturePadRef = useRef<SignaturePadHandle | null>(null);
   const [approvalPartyType, setApprovalPartyType] = useState<"individual" | "business">("individual");
   const [approvalBusiness, setApprovalBusiness] = useState<BusinessDetails>(emptyBusinessDetails);
   const [walletAmountInput, setWalletAmountInput] = useState("");
@@ -993,6 +1011,9 @@ function MockExperienceHome({ searchParams }: HomeProps) {
   const approveEscrowMutation = useApproveEscrow();
   const approveMilestoneMutation = useApproveMilestone();
   const rejectEscrowMutation = useRejectEscrow();
+  const resendInvitationMutation = useResendInvitation();
+  const extendInvitationMutation = useExtendInvitation();
+  const signAgreementMutation = useSignAgreement();
   const rejectMilestoneMutation = useRejectMilestone();
   const requestAgreementChangesMutation = useRequestAgreementChanges();
   const applyAgreementChangesMutation = useApplyAgreementChanges();
@@ -1872,7 +1893,7 @@ const findTransactionById = (id: number) => {
         })),
       });
       setDraftEscrowEdit(null);
-      setMessage("Draft escrow updated.");
+      setMessage("Proposal revised and invitation queued. Sign the latest agreement version to complete the update.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to update the draft escrow.");
     }
@@ -2058,6 +2079,47 @@ const findTransactionById = (id: number) => {
       setMessage("Escrow approved. The buyer can now fund it with dummy wallet funds.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to approve escrow.");
+    }
+  };
+
+  const handleSignCurrentAgreement = async (tx: Transaction) => {
+    const signatureDataUrl = creatorSignaturePadRef.current?.getDataUrl();
+    if (!signatureDataUrl) {
+      setMessage("Draw your signature before signing the corrected agreement.");
+      return;
+    }
+    try {
+      await signAgreementMutation.mutateAsync({
+        escrowId: tx.reference ?? `PO-${tx.id}`,
+        signatureDataUrl,
+      });
+      creatorSignaturePadRef.current?.clear();
+      setCreatorSignatureCaptured(false);
+      setCreatorSignatureVersion((version) => version + 1);
+      setMessage("The latest agreement version is signed and ready for the counterparty.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to sign the current agreement.");
+    }
+  };
+
+  const handleResendInvitation = async (tx: Transaction) => {
+    try {
+      await resendInvitationMutation.mutateAsync({ escrowId: tx.reference ?? `PO-${tx.id}` });
+      setMessage("A fresh invitation has been queued for delivery.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to resend the invitation.");
+    }
+  };
+
+  const handleExtendInvitation = async (tx: Transaction) => {
+    try {
+      await extendInvitationMutation.mutateAsync({
+        escrowId: tx.reference ?? `PO-${tx.id}`,
+        days: 7,
+      });
+      setMessage("The invitation deadline was extended by seven days.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to extend the invitation.");
     }
   };
 
@@ -3110,7 +3172,9 @@ const handleWalletWithdraw = async () => {
     const isCurrentUserBuyer = sameEmail(currentUser.email, tx.buyerEmail);
     const isAwaitingSignup = tx.lifecycleStatus === "pending_counterparty_signup";
     const isAwaitingApproval = tx.lifecycleStatus === "pending_approval";
+    const isCreatorSignatureRequired = tx.lifecycleStatus === "creator_signature_required";
     const isChangesRequested = tx.lifecycleStatus === "changes_requested";
+    const isRejected = tx.lifecycleStatus === "rejected";
     const isAwaitingFunding = tx.lifecycleStatus === "funding_pending";
     const canApproveEscrow = !tx.isOwner && isAwaitingApproval;
     const canRequestMilestoneChanges = !tx.isOwner && (isAwaitingApproval || isChangesRequested);
@@ -3140,8 +3204,14 @@ const handleWalletWithdraw = async () => {
       Boolean(tx.isOwner) &&
       tx.status !== "Cancelled" &&
       tx.status !== "Complete" &&
-      (isAwaitingSignup || isAwaitingApproval || isChangesRequested);
-    const canEditDraftEscrow = Boolean(tx.isOwner) && isAwaitingSignup;
+      (isAwaitingSignup || isAwaitingApproval || isCreatorSignatureRequired || isChangesRequested || isRejected);
+    const canEditDraftEscrow = Boolean(tx.isOwner) &&
+      (isAwaitingSignup || isAwaitingApproval || isCreatorSignatureRequired || isRejected);
+    const canRecoverInvitation = Boolean(tx.isOwner) && Boolean(tx.invitation) &&
+      !["accepted", "corrected"].includes(tx.invitation?.status ?? "accepted") &&
+      !["funded", "completed", "cancelled"].includes(tx.lifecycleStatus ?? "");
+    const needsCreatorSignature = Boolean(tx.isOwner && tx.agreement && !tx.agreement.creatorSigned) &&
+      !["funding_pending", "funded", "completed", "cancelled"].includes(tx.lifecycleStatus ?? "");
     const draftEditTotal = draftEscrowEdit ? draftEscrowEditTotal(draftEscrowEdit) : 0;
     const draftEditAmount = draftEscrowEdit ? Number(draftEscrowEdit.amount) || 0 : 0;
     return (
@@ -3221,7 +3291,91 @@ const handleWalletWithdraw = async () => {
             </button>
           </div>
         </div>
-        {(canFundEscrow || canCancelEscrow || canEditDraftEscrow || (tx.isOwner && isChangesRequested)) ? (
+        {tx.invitation || tx.agreement ? (
+          <div className="card" style={{ marginTop: 12 }}>
+            <strong>Agreement and invitation</strong>
+            <div className="transaction-overview" style={{ marginTop: 12 }}>
+              {tx.agreement ? (
+                <div className="transaction-summary-field">
+                  <div className="muted">Agreement version</div>
+                  <div style={{ fontWeight: 700 }}>Version {tx.agreement.version}</div>
+                  <div className="muted" style={{ marginTop: 4 }}>
+                    {tx.agreement.status === "locked"
+                      ? "Locked after both parties signed"
+                      : `${tx.agreement.creatorSigned ? "Creator signed" : "Creator signature needed"} · ${tx.agreement.counterpartySigned ? "Counterparty signed" : "Counterparty signature needed"}`}
+                  </div>
+                </div>
+              ) : null}
+              {tx.invitation ? (
+                <div className="transaction-summary-field">
+                  <div className="muted">Invitation</div>
+                  <div style={{ fontWeight: 700, textTransform: "capitalize" }}>{tx.invitation.status}</div>
+                  <div className="muted" style={{ marginTop: 4 }}>
+                    Sent to {tx.invitation.recipient} · response due {formatHistoryDate(tx.invitation.responseDueAt)}
+                  </div>
+                  {tx.invitation.failureReason ? (
+                    <div className="muted" style={{ marginTop: 4 }}>Delivery issue: {tx.invitation.failureReason}</div>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+            {canRecoverInvitation ? (
+              <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+                <button
+                  className="btn"
+                  onClick={() => handleResendInvitation(tx)}
+                  disabled={resendInvitationMutation.isPending}
+                >
+                  {resendInvitationMutation.isPending ? "Resending..." : "Resend invitation"}
+                </button>
+                <button
+                  className="ghost"
+                  onClick={() => handleExtendInvitation(tx)}
+                  disabled={extendInvitationMutation.isPending}
+                >
+                  {extendInvitationMutation.isPending ? "Extending..." : "Extend 7 days"}
+                </button>
+                {canEditDraftEscrow && !draftEscrowEdit ? (
+                  <button className="ghost" onClick={() => beginDraftEscrowEdit(tx)}>Correct details</button>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        {needsCreatorSignature ? (
+          <div className="card" style={{ marginTop: 12 }}>
+            <strong>Sign the corrected agreement</strong>
+            <p className="muted" style={{ marginTop: 8, marginBottom: 12 }}>
+              The terms changed, so earlier signatures no longer apply. Review version {tx.agreement?.version ?? "the latest"} and sign it before the counterparty can approve.
+            </p>
+            <div className="signature-pad">
+              <SignaturePad
+                ref={creatorSignaturePadRef}
+                resetVersion={creatorSignatureVersion}
+                onSignedChange={setCreatorSignatureCaptured}
+              />
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+              <button
+                className="btn"
+                onClick={() => handleSignCurrentAgreement(tx)}
+                disabled={!creatorSignatureCaptured || signAgreementMutation.isPending}
+              >
+                {signAgreementMutation.isPending ? "Signing..." : "Sign latest agreement"}
+              </button>
+              <button
+                className="ghost"
+                onClick={() => {
+                  creatorSignaturePadRef.current?.clear();
+                  setCreatorSignatureCaptured(false);
+                }}
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+        ) : null}
+        {(canFundEscrow || canCancelEscrow || canEditDraftEscrow || canRecoverInvitation || (tx.isOwner && isChangesRequested)) ? (
           <div className="card" style={{ marginTop: 12 }}>
             <strong>Next step</strong>
             <p className="muted" style={{ marginTop: 8, marginBottom: 12 }}>
@@ -3233,6 +3387,10 @@ const handleWalletWithdraw = async () => {
                     : "Move dummy wallet funds into escrow so milestone work can begin."
                   : isAwaitingSignup
                     ? "This escrow is waiting for the counterparty to finish signup and verification."
+                    : isCreatorSignatureRequired
+                      ? "Review and sign the latest agreement version before asking the counterparty to approve it."
+                    : isRejected
+                      ? "Revise and resend this proposal, or close it."
                     : isChangesRequested
                       ? "The escrow creator is reviewing requested milestone changes."
                       : "This draft is still waiting for counterparty approval."}
@@ -3264,7 +3422,7 @@ const handleWalletWithdraw = async () => {
               ) : null}
               {canEditDraftEscrow && !draftEscrowEdit ? (
                 <button className="ghost" onClick={() => beginDraftEscrowEdit(tx)}>
-                  Edit draft
+                  Revise proposal
                 </button>
               ) : null}
             </div>
@@ -3272,9 +3430,9 @@ const handleWalletWithdraw = async () => {
               <div className="agreement-change-card" style={{ marginTop: 14 }}>
                 <div className="agreement-change-card__heading">
                   <div>
-                    <strong>Edit draft escrow</strong>
+                    <strong>Revise proposal</strong>
                     <p className="muted" style={{ margin: "4px 0 0" }}>
-                      Update this agreement before the counterparty joins.
+                      Material changes create a new agreement version and require fresh signatures.
                     </p>
                   </div>
                 </div>
@@ -3384,7 +3542,7 @@ const handleWalletWithdraw = async () => {
                 </button>
                 <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
                   <button className="btn" onClick={() => handleUpdateDraftEscrow(tx)} disabled={updateDraftEscrowMutation.isPending}>
-                    {updateDraftEscrowMutation.isPending ? "Saving..." : "Save draft"}
+                    {updateDraftEscrowMutation.isPending ? "Saving..." : "Save and resend"}
                   </button>
                   <button className="ghost" onClick={() => setDraftEscrowEdit(null)}>
                     Cancel
