@@ -1,6 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/components/AuthProvider";
+import { apiFetch } from "@/lib/apiClient";
 
 type Health = {
   status: "healthy" | "attention";
@@ -50,6 +53,8 @@ async function readJson<T>(response: Response): Promise<T> {
 }
 
 export default function OperationsPage() {
+  const router = useRouter();
+  const { isAuthenticated, isHydrating } = useAuth();
   const [health, setHealth] = useState<Health | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [error, setError] = useState("");
@@ -62,11 +67,11 @@ export default function OperationsPage() {
   const load = useCallback(async () => {
     try {
       setError("");
-      const healthBody = await readJson<Health>(await fetch("/api/operations/health", { cache: "no-store" }));
+      const healthBody = await readJson<Health>(await apiFetch("/api/operations/health", { cache: "no-store" }));
       const [jobsBody, operatorsBody] = await Promise.all([
-        readJson<{ jobs: Job[] }>(await fetch("/api/operations/jobs?status=failed", { cache: "no-store" })),
+        readJson<{ jobs: Job[] }>(await apiFetch("/api/operations/jobs?status=failed", { cache: "no-store" })),
         healthBody.currentRole === "admin"
-          ? readJson<{ operators: Operator[] }>(await fetch("/api/operations/operators", { cache: "no-store" }))
+          ? readJson<{ operators: Operator[] }>(await apiFetch("/api/operations/operators", { cache: "no-store" }))
           : Promise.resolve({ operators: [] }),
       ]);
       setHealth(healthBody);
@@ -78,13 +83,18 @@ export default function OperationsPage() {
   }, []);
 
   useEffect(() => {
+    if (isHydrating) return;
+    if (!isAuthenticated) {
+      router.replace("/login");
+      return;
+    }
     void load();
-  }, [load]);
+  }, [isAuthenticated, isHydrating, load, router]);
 
   const retry = async (jobId: number) => {
     try {
       setRetrying(jobId);
-      const response = await fetch(`/api/operations/jobs/${jobId}/retry`, {
+      const response = await apiFetch(`/api/operations/jobs/${jobId}/retry`, {
         method: "POST",
         headers: { "Idempotency-Key": `operations-retry-${jobId}-${crypto.randomUUID()}` },
       });
@@ -101,7 +111,7 @@ export default function OperationsPage() {
     try {
       setSavingRole(true);
       setError("");
-      const response = await fetch("/api/operations/operators/role", {
+      const response = await apiFetch("/api/operations/operators/role", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
