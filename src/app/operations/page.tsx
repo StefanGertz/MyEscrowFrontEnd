@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 type Health = {
   status: "healthy" | "attention";
+  currentRole: "support" | "admin";
   counts: {
     failedOutbox: number;
     failedJobs: number;
@@ -18,6 +19,11 @@ type Health = {
     exceptionCount: number;
     completedAt?: string;
   };
+  worker: {
+    status: "healthy" | "stale";
+    lastSuccessAt?: string | null;
+    lastError?: string | null;
+  };
 };
 
 type Job = {
@@ -27,6 +33,14 @@ type Job = {
   attemptCount: number;
   runAt: string;
   lastError?: string;
+};
+
+type Operator = {
+  id: string;
+  name: string;
+  email: string;
+  role: "support" | "admin";
+  emailVerified: boolean;
 };
 
 async function readJson<T>(response: Response): Promise<T> {
@@ -40,20 +54,24 @@ export default function OperationsPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [error, setError] = useState("");
   const [retrying, setRetrying] = useState<number | null>(null);
+  const [operators, setOperators] = useState<Operator[]>([]);
+  const [operatorEmail, setOperatorEmail] = useState("");
+  const [operatorRole, setOperatorRole] = useState<"customer" | "support" | "admin">("support");
+  const [savingRole, setSavingRole] = useState(false);
 
   const load = useCallback(async () => {
     try {
       setError("");
-      const [healthResponse, jobsResponse] = await Promise.all([
-        fetch("/api/operations/health", { cache: "no-store" }),
-        fetch("/api/operations/jobs?status=failed", { cache: "no-store" }),
-      ]);
-      const [healthBody, jobsBody] = await Promise.all([
-        readJson<Health>(healthResponse),
-        readJson<{ jobs: Job[] }>(jobsResponse),
+      const healthBody = await readJson<Health>(await fetch("/api/operations/health", { cache: "no-store" }));
+      const [jobsBody, operatorsBody] = await Promise.all([
+        readJson<{ jobs: Job[] }>(await fetch("/api/operations/jobs?status=failed", { cache: "no-store" })),
+        healthBody.currentRole === "admin"
+          ? readJson<{ operators: Operator[] }>(await fetch("/api/operations/operators", { cache: "no-store" }))
+          : Promise.resolve({ operators: [] }),
       ]);
       setHealth(healthBody);
       setJobs(jobsBody.jobs);
+      setOperators(operatorsBody.operators);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Unable to load operations data.");
     }
@@ -76,6 +94,28 @@ export default function OperationsPage() {
       setError(retryError instanceof Error ? retryError.message : "Unable to retry this job.");
     } finally {
       setRetrying(null);
+    }
+  };
+
+  const saveOperatorRole = async () => {
+    try {
+      setSavingRole(true);
+      setError("");
+      const response = await fetch("/api/operations/operators/role", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": `operator-role-${crypto.randomUUID()}`,
+        },
+        body: JSON.stringify({ email: operatorEmail, role: operatorRole }),
+      });
+      await readJson(response);
+      setOperatorEmail("");
+      await load();
+    } catch (roleError) {
+      setError(roleError instanceof Error ? roleError.message : "Unable to change operator access.");
+    } finally {
+      setSavingRole(false);
     }
   };
 
@@ -133,6 +173,10 @@ export default function OperationsPage() {
                   Latest reconciliation: {health.latestReconciliation.status}; {health.latestReconciliation.checkedEscrows} escrows checked; {health.latestReconciliation.exceptionCount} exceptions.
                 </p>
               ) : null}
+              <p className="mt-2 text-sm text-slate-500">
+                Recovery worker: {health.worker.status}
+                {health.worker.lastSuccessAt ? `; last successful cycle ${new Date(health.worker.lastSuccessAt).toLocaleString()}` : "; no successful cycle recorded"}.
+              </p>
             </section>
           </>
         ) : null}
@@ -159,6 +203,49 @@ export default function OperationsPage() {
             </div>
           )}
         </section>
+
+        {health?.currentRole === "admin" ? (
+          <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="text-xl font-bold">Operator access</h2>
+            <p className="mt-2 text-sm text-slate-600">Only verified existing accounts can receive access. Every change is idempotent and audited.</p>
+            <div className="mt-4 grid gap-3 md:grid-cols-[1fr,180px,auto]">
+              <input
+                className="rounded-xl border border-slate-300 px-4 py-3"
+                type="email"
+                placeholder="verified.user@example.com"
+                value={operatorEmail}
+                onChange={(event) => setOperatorEmail(event.target.value)}
+              />
+              <select
+                className="rounded-xl border border-slate-300 px-4 py-3"
+                value={operatorRole}
+                onChange={(event) => setOperatorRole(event.target.value as "customer" | "support" | "admin")}
+              >
+                <option value="support">Support</option>
+                <option value="admin">Administrator</option>
+                <option value="customer">Revoke access</option>
+              </select>
+              <button
+                className="rounded-xl bg-teal-300 px-5 py-3 font-bold text-slate-900 disabled:opacity-50"
+                disabled={savingRole || !operatorEmail.trim()}
+                onClick={() => void saveOperatorRole()}
+              >
+                {savingRole ? "Saving..." : "Update access"}
+              </button>
+            </div>
+            <div className="mt-5 space-y-2">
+              {operators.map((operator) => (
+                <div key={operator.id} className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
+                  <div>
+                    <p className="font-bold">{operator.name}</p>
+                    <p className="text-sm text-slate-500">{operator.email}</p>
+                  </div>
+                  <span className="rounded-full bg-slate-200 px-3 py-1 text-sm font-bold">{operator.role}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
       </div>
     </main>
   );
