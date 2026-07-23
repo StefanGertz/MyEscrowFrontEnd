@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
 import { apiFetch } from "@/lib/apiClient";
 
@@ -119,7 +120,12 @@ function MetricDetails({ health, metric }: { health: Health; metric: MetricKey }
         </article>
       )) : null}
       {metric === "agedEscrows" ? health.details.agedEscrows.map((record) => (
-        <article key={record.reference} className="rounded-xl bg-slate-50 p-4">
+        <Link
+          key={record.reference}
+          href={`/operations/escrows/${encodeURIComponent(record.reference)}`}
+          className="block rounded-xl bg-slate-50 p-4 transition hover:bg-teal-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600"
+          aria-label={`View escrow details for ${record.title}, ${record.reference}`}
+        >
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="font-bold">{record.title} · {record.reference}</p>
@@ -129,7 +135,8 @@ function MetricDetails({ health, metric }: { health: Health; metric: MetricKey }
             <p className="font-bold">{formatMoney(record.amountCents)}</p>
           </div>
           <p className="mt-2 text-xs text-slate-500">Last activity: {formatDateTime(record.updatedAt)}</p>
-        </article>
+          <p className="mt-3 text-xs font-bold uppercase tracking-wide text-teal-700">View escrow details</p>
+        </Link>
       )) : null}
       {metric === "duplicateCommands" ? health.details.duplicateCommands.map((record) => (
         <article key={record.id} className="rounded-xl bg-slate-50 p-4">
@@ -179,10 +186,11 @@ async function readJson<T>(response: Response): Promise<T> {
 
 export default function OperationsPage() {
   const router = useRouter();
-  const { isAuthenticated, isHydrating } = useAuth();
+  const { isAuthenticated, isHydrating, logout } = useAuth();
   const [health, setHealth] = useState<Health | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [error, setError] = useState("");
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [retrying, setRetrying] = useState<number | null>(null);
   const [operators, setOperators] = useState<Operator[]>([]);
   const [operatorEmail, setOperatorEmail] = useState("");
@@ -192,6 +200,7 @@ export default function OperationsPage() {
 
   const load = useCallback(async () => {
     try {
+      setIsRefreshing(true);
       setError("");
       const healthBody = await readJson<Health>(await apiFetch("/api/operations/health", { cache: "no-store" }));
       const [jobsBody, operatorsBody] = await Promise.all([
@@ -205,8 +214,15 @@ export default function OperationsPage() {
       setOperators(operatorsBody.operators);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Unable to load operations data.");
+    } finally {
+      setIsRefreshing(false);
     }
   }, []);
+
+  const handleLogout = () => {
+    logout();
+    router.replace("/login");
+  };
 
   useEffect(() => {
     if (isHydrating) return;
@@ -274,9 +290,24 @@ export default function OperationsPage() {
             <h1 className="mt-2 text-4xl font-bold text-slate-950">Recovery health</h1>
             <p className="mt-2 text-slate-600">Failed work is visible, permissioned, audited, and safe to retry.</p>
           </div>
-          <button className="rounded-xl bg-teal-300 px-5 py-3 font-bold text-slate-900" onClick={() => void load()}>
-            Refresh
-          </button>
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              className="rounded-xl border border-slate-300 bg-white px-5 py-3 font-bold text-slate-700 hover:bg-slate-100"
+              onClick={handleLogout}
+            >
+              Log out
+            </button>
+            <button
+              type="button"
+              className="rounded-xl bg-teal-300 px-5 py-3 font-bold text-slate-900 disabled:cursor-wait disabled:opacity-60"
+              disabled={isRefreshing}
+              aria-busy={isRefreshing}
+              onClick={() => void load()}
+            >
+              {isRefreshing ? "Refreshing..." : "Refresh"}
+            </button>
+          </div>
         </div>
 
         {error ? <div className="mt-6 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-rose-800">{error}</div> : null}
