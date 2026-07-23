@@ -2514,12 +2514,31 @@ const handleWalletWithdraw = async () => {
               </button>
             </div>
             <div className="home-progress" aria-label="Escrow progress">
-              {pendingCard.steps.map((step) => (
-                <div key={step.title} className="home-progress__step" data-status={step.status}>
-                  <span className="home-progress__dot" />
-                  <span>{step.title}</span>
-                </div>
-              ))}
+              {pendingCard.steps.map((step) => {
+                const content = (
+                  <>
+                    <span className="home-progress__dot" />
+                    <span className="home-progress__label">{step.title}</span>
+                  </>
+                );
+
+                return step.status === "upcoming" ? (
+                  <div key={step.title} className="home-progress__step" data-status={step.status}>
+                    {content}
+                  </div>
+                ) : (
+                  <button
+                    key={step.title}
+                    type="button"
+                    className="home-progress__step home-progress__step--clickable"
+                    data-status={step.status}
+                    onClick={() => viewTransaction(pendingCard)}
+                    aria-label={`${step.title}: open ${pendingCard.title}`}
+                  >
+                    {content}
+                  </button>
+                );
+              })}
             </div>
           </div>
         ) : (
