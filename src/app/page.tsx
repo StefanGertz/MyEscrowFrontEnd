@@ -19,6 +19,7 @@ import {
   useRejectMilestone,
   useOpenMilestoneDispute,
   useSubmitDisputeEvidence,
+  useRequestDisputeArbitration,
   useProposeDisputeResolution,
   useResolveDispute,
   useRequestFundedCancellation,
@@ -1072,6 +1073,7 @@ function MockExperienceHome({ searchParams }: HomeProps) {
   const submitMilestoneMutation = useSubmitMilestone();
   const openMilestoneDisputeMutation = useOpenMilestoneDispute();
   const submitDisputeEvidenceMutation = useSubmitDisputeEvidence();
+  const requestDisputeArbitrationMutation = useRequestDisputeArbitration();
   const proposeDisputeResolutionMutation = useProposeDisputeResolution();
   const resolveDisputeMutation = useResolveDispute();
   const requestFundedCancellationMutation = useRequestFundedCancellation();
@@ -1943,6 +1945,15 @@ const findTransactionById = (id: number) => {
       setMessage("Complete allocation proposed. The other party must accept it before money moves.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to propose the resolution.");
+    }
+  };
+
+  const handleRequestDisputeArbitration = async (disputeId: string) => {
+    try {
+      await requestDisputeArbitrationMutation.mutateAsync({ disputeId });
+      setMessage("Arbitration requested. The disputed funds remain reserved during review.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to request arbitration.");
     }
   };
 
@@ -4373,27 +4384,45 @@ const handleWalletWithdraw = async () => {
                               ))}
                             </div>
                           ) : null}
-                          <label className="field" style={{ marginTop: 10 }}>
-                            <span>Add evidence note</span>
-                            <textarea
-                              rows={2}
-                              value={disputeEvidenceNotes[dispute.id] ?? ""}
-                              onChange={(event) => setDisputeEvidenceNotes((current) => ({
-                                ...current,
-                                [dispute.id]: event.target.value,
-                              }))}
-                              placeholder="Add facts, dates, or a summary of supporting material"
-                            />
-                          </label>
-                          <button
-                            className="ghost"
-                            style={{ marginTop: 8 }}
-                            onClick={() => handleSubmitDisputeEvidence(dispute.id)}
-                            disabled={submitDisputeEvidenceMutation.isPending}
-                          >
-                            {submitDisputeEvidenceMutation.isPending ? "Adding..." : "Add evidence note"}
-                          </button>
-                          {dispute.resolution ? (
+                          {dispute.status !== "arbitration_requested" ? (
+                            <>
+                              <label className="field" style={{ marginTop: 10 }}>
+                                <span>Add evidence note</span>
+                                <textarea
+                                  rows={2}
+                                  value={disputeEvidenceNotes[dispute.id] ?? ""}
+                                  onChange={(event) => setDisputeEvidenceNotes((current) => ({
+                                    ...current,
+                                    [dispute.id]: event.target.value,
+                                  }))}
+                                  placeholder="Add facts, dates, or a summary of supporting material"
+                                />
+                              </label>
+                              <button
+                                className="ghost"
+                                style={{ marginTop: 8 }}
+                                onClick={() => handleSubmitDisputeEvidence(dispute.id)}
+                                disabled={submitDisputeEvidenceMutation.isPending}
+                              >
+                                {submitDisputeEvidenceMutation.isPending ? "Adding..." : "Add evidence note"}
+                              </button>
+                            </>
+                          ) : null}
+                          {dispute.status === "arbitration_requested" ? (
+                            <div className="tx-item" style={{ marginTop: 12 }}>
+                              <div>
+                                <strong>Arbitration requested</strong>
+                                <div className="muted">
+                                  The evidence and dispute are awaiting arbitration review. The disputed funds remain reserved.
+                                </div>
+                                {dispute.arbitrationRequestedAt ? (
+                                  <div className="muted" style={{ marginTop: 4 }}>
+                                    Requested {formatDateTime(dispute.arbitrationRequestedAt)}
+                                  </div>
+                                ) : null}
+                              </div>
+                            </div>
+                          ) : dispute.resolution ? (
                             <div className="tx-item" style={{ marginTop: 12 }}>
                               <div>
                                 <strong>Complete resolution proposal</strong>
@@ -4411,6 +4440,14 @@ const handleWalletWithdraw = async () => {
                                   {resolveDisputeMutation.isPending ? "Allocating..." : "Accept and allocate funds"}
                                 </button>
                               ) : <span className="muted">Waiting for the other party</span>}
+                              <button
+                                className="ghost"
+                                style={{ marginTop: 8 }}
+                                onClick={() => handleRequestDisputeArbitration(dispute.id)}
+                                disabled={requestDisputeArbitrationMutation.isPending}
+                              >
+                                {requestDisputeArbitrationMutation.isPending ? "Requesting..." : "Request arbitration"}
+                              </button>
                             </div>
                           ) : (
                             <div style={{ marginTop: 12 }}>
@@ -4473,6 +4510,16 @@ const handleWalletWithdraw = async () => {
                               >
                                 {proposeDisputeResolutionMutation.isPending ? "Proposing..." : "Propose allocation"}
                               </button>
+                              {dispute.evidence.length > 0 ? (
+                                <button
+                                  className="ghost"
+                                  style={{ marginTop: 8, marginLeft: 8 }}
+                                  onClick={() => handleRequestDisputeArbitration(dispute.id)}
+                                  disabled={requestDisputeArbitrationMutation.isPending}
+                                >
+                                  {requestDisputeArbitrationMutation.isPending ? "Requesting..." : "Request arbitration"}
+                                </button>
+                              ) : null}
                             </div>
                           )}
                         </>

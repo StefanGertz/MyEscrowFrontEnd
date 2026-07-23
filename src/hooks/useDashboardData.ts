@@ -468,6 +468,29 @@ export function useSubmitDisputeEvidence() {
   });
 }
 
+type DisputeArbitrationPayload = {
+  disputeId: string;
+};
+
+export function useRequestDisputeArbitration() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ disputeId }: DisputeArbitrationPayload) =>
+      fetchJSON<{ disputeId: string; status: "arbitration_requested"; arbitrationRequestedAt: string }>(
+        `/api/dashboard/disputes/${disputeId}/arbitration`,
+        {
+          method: "POST",
+          headers: idempotencyHeaders(),
+        },
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "disputes"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "escrows"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "notifications"] });
+    },
+  });
+}
+
 type DisputeResolutionPayload = {
   disputeId: string;
   sellerAmount: number;

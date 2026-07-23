@@ -4,6 +4,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import {
   useCreateEscrow,
   useResolveDispute,
+  useRequestDisputeArbitration,
   useApproveEscrow,
   useRejectEscrow,
   useCancelEscrow,
@@ -114,6 +115,19 @@ describe("dispute flows", () => {
       });
       expect(response.disputeId).toBe("DSP-01");
       expect(response.resolvedAt).toBeTruthy();
+    });
+  });
+
+  it("requests arbitration after evidence is submitted", async () => {
+    const wrapper = createWrapper();
+    const arbitrationHook = renderHook(() => useRequestDisputeArbitration(), { wrapper });
+
+    await act(async () => {
+      const response = await arbitrationHook.result.current.mutateAsync({
+        disputeId: "DSP-01",
+      });
+      expect(response.status).toBe("arbitration_requested");
+      expect(response.arbitrationRequestedAt).toBeTruthy();
     });
   });
 });

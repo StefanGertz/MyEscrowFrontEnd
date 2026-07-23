@@ -131,12 +131,14 @@ export type DisputeTicket = {
   amount: string;
   updated: string;
   priority: "high" | "medium";
-  status: "open" | "resolution_proposed" | "resolving";
+  status: "open" | "resolution_proposed" | "resolving" | "arbitration_requested";
   reason?: string;
   escrowId?: string;
   milestoneId?: number;
   amountFrozenCents: number;
   evidenceWindowEndsAt?: string;
+  arbitrationRequestedAt?: string;
+  arbitrationRequestedById?: string;
   openedBy?: { id: string; name: string };
   resolution?: {
     proposedById: string;

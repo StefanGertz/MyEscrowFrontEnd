@@ -126,6 +126,13 @@ export const handlers = [
       resolvedAt: new Date().toISOString(),
     });
   }),
+  http.post(`${baseUrl}/api/dashboard/disputes/:id/arbitration`, ({ params }) => {
+    return HttpResponse.json({
+      disputeId: params.id,
+      status: "arbitration_requested",
+      arbitrationRequestedAt: new Date().toISOString(),
+    });
+  }),
   http.post(`${baseUrl}/api/dashboard/wallet/topup`, async ({ request }) => {
     const body = (await request.json()) as { amount: number };
     return HttpResponse.json({
