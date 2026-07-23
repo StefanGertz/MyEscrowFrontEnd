@@ -13,9 +13,16 @@ import {
   type CreateEscrowResponse,
   useCreateEscrow,
   useDismissNotification,
+  useDisputes,
   useFundEscrow,
   useRejectEscrow,
   useRejectMilestone,
+  useOpenMilestoneDispute,
+  useSubmitDisputeEvidence,
+  useProposeDisputeResolution,
+  useResolveDispute,
+  useRequestFundedCancellation,
+  useAcceptFundedCancellation,
   useResendInvitation,
   useRequestAgreementChanges,
   useSubmitMilestone,
@@ -85,7 +92,7 @@ type TxMilestone = {
   requestedDeadline?: string;
   changeRequestNote?: string;
   changeRequestedAt?: string;
-  status: "not_started" | "submitted" | "revision_requested" | "released" | "disputed";
+  status: "not_started" | "submitted" | "revision_requested" | "released" | "disputed" | "refunded" | "settled" | "cancelled";
   releasedAt?: string;
   rejectedAt?: string;
   reviewDeadline?: string;
@@ -140,6 +147,7 @@ type Transaction = {
   sellerSignatureDataUrl?: string;
   agreement?: EscrowRecord["agreement"];
   invitation?: EscrowRecord["invitation"];
+  cancellation?: EscrowRecord["cancellation"];
   userRole?: "buyer" | "seller";
   isOwner?: boolean;
   steps: ProcessStep[];
@@ -818,7 +826,7 @@ const mapEscrowsToTransactions = (
     const seller = record.seller ?? { id: "seller", name: counterpart, email: "counterparty@example.com" };
     const isBuyer = sameEmail(currentUserEmail, buyer.email);
     let status: Transaction["status"] = "Pending";
-    if (lifecycleStatus === "funded") {
+    if (["funded", "cancellation_pending", "cancellation_review", "dispute_resolution_pending"].includes(lifecycleStatus)) {
       status = "Active";
     } else if (lifecycleStatus === "completed") {
       status = "Complete";
@@ -895,6 +903,7 @@ const mapEscrowsToTransactions = (
       sellerSignatureDataUrl: record.sellerSignatureDataUrl,
       agreement: record.agreement,
       invitation: record.invitation,
+      cancellation: record.cancellation,
       userRole: record.role ?? (isBuyer ? "buyer" : "seller"),
       isOwner: record.isOwner,
       steps,
@@ -1010,6 +1019,17 @@ function MockExperienceHome({ searchParams }: HomeProps) {
   const [message, setMessage] = useState<string | null>(null);
   const [milestoneSubmissionNotes, setMilestoneSubmissionNotes] = useState<Record<string, string>>({});
   const [milestoneRevisionReasons, setMilestoneRevisionReasons] = useState<Record<string, string>>({});
+  const [milestoneDisputeReasons, setMilestoneDisputeReasons] = useState<Record<string, string>>({});
+  const [disputeEvidenceNotes, setDisputeEvidenceNotes] = useState<Record<string, string>>({});
+  const [disputeResolutionDrafts, setDisputeResolutionDrafts] = useState<Record<string, {
+    sellerAmount: string;
+    buyerAmount: string;
+    note: string;
+  }>>({});
+  const [cancellationDrafts, setCancellationDrafts] = useState<Record<number, {
+    mode: "mutual" | "unilateral";
+    reason: string;
+  }>>({});
   const [profileDraft, setProfileDraft] = useState<ProfileDraft>({
     userId: "demo-scott",
     name: defaultUser.name,
@@ -1050,12 +1070,19 @@ function MockExperienceHome({ searchParams }: HomeProps) {
   const applyAgreementChangesMutation = useApplyAgreementChanges();
   const updateDraftEscrowMutation = useUpdateDraftEscrow();
   const submitMilestoneMutation = useSubmitMilestone();
+  const openMilestoneDisputeMutation = useOpenMilestoneDispute();
+  const submitDisputeEvidenceMutation = useSubmitDisputeEvidence();
+  const proposeDisputeResolutionMutation = useProposeDisputeResolution();
+  const resolveDisputeMutation = useResolveDispute();
+  const requestFundedCancellationMutation = useRequestFundedCancellation();
+  const acceptFundedCancellationMutation = useAcceptFundedCancellation();
   const cancelEscrowMutation = useCancelEscrow();
   const fundEscrowMutation = useFundEscrow();
   const notificationsQuery = useNotifications();
   const notificationHistoryQuery = useNotificationHistory();
   const overviewQuery = useEscrowSummary();
   const escrowsQuery = useEscrows();
+  const disputesQuery = useDisputes();
   const walletTransactionsQuery = useWalletTransactions(liveDataEnabled);
   const liveTransactions = liveDataEnabled
     ? mapEscrowsToTransactions(escrowsQuery.data?.escrows, currentUser.name, currentUser.email)
@@ -1861,6 +1888,99 @@ const findTransactionById = (id: number) => {
     if (updated) {
       setMilestoneSubmissionNotes((current) => ({ ...current, [milestoneId]: "" }));
       setMessage("Work submitted for buyer review.");
+    }
+  };
+
+  const handleOpenMilestoneDispute = async (tx: Transaction, milestoneId: string) => {
+    const reason = milestoneDisputeReasons[milestoneId]?.trim() ?? "";
+    if (reason.length < 10) {
+      setMessage("Describe the dispute in at least 10 characters.");
+      return;
+    }
+    try {
+      await openMilestoneDisputeMutation.mutateAsync({
+        escrowId: tx.reference ?? `PO-${tx.id}`,
+        milestoneId,
+        reason,
+      });
+      setMilestoneDisputeReasons((current) => ({ ...current, [milestoneId]: "" }));
+      setMessage("Dispute opened. Only this milestone's remaining funds are reserved.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to open the dispute.");
+    }
+  };
+
+  const handleSubmitDisputeEvidence = async (disputeId: string) => {
+    const note = disputeEvidenceNotes[disputeId]?.trim() ?? "";
+    if (!note) {
+      setMessage("Add an evidence note before submitting.");
+      return;
+    }
+    try {
+      await submitDisputeEvidenceMutation.mutateAsync({ disputeId, note });
+      setDisputeEvidenceNotes((current) => ({ ...current, [disputeId]: "" }));
+      setMessage("Evidence note added to the shared dispute history.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to add dispute evidence.");
+    }
+  };
+
+  const handleProposeDisputeResolution = async (disputeId: string) => {
+    const draft = disputeResolutionDrafts[disputeId];
+    const sellerAmount = Number(draft?.sellerAmount ?? "");
+    const buyerAmount = Number(draft?.buyerAmount ?? "");
+    if (!Number.isFinite(sellerAmount) || !Number.isFinite(buyerAmount) || sellerAmount < 0 || buyerAmount < 0) {
+      setMessage("Enter valid non-negative seller and buyer allocations.");
+      return;
+    }
+    try {
+      await proposeDisputeResolutionMutation.mutateAsync({
+        disputeId,
+        sellerAmount,
+        buyerAmount,
+        note: draft?.note.trim() || undefined,
+      });
+      setMessage("Complete allocation proposed. The other party must accept it before money moves.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to propose the resolution.");
+    }
+  };
+
+  const handleAcceptDisputeResolution = async (disputeId: string) => {
+    try {
+      await resolveDisputeMutation.mutateAsync({ disputeId });
+      setMessage("Resolution accepted. The frozen amount was fully allocated through the escrow ledger.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to accept the resolution.");
+    }
+  };
+
+  const handleRequestFundedCancellation = async (tx: Transaction) => {
+    const draft = cancellationDrafts[tx.id] ?? { mode: "mutual" as const, reason: "" };
+    if (draft.reason.trim().length < 10) {
+      setMessage("Explain the cancellation request in at least 10 characters.");
+      return;
+    }
+    try {
+      const result = await requestFundedCancellationMutation.mutateAsync({
+        escrowId: tx.reference ?? `PO-${tx.id}`,
+        mode: draft.mode,
+        reason: draft.reason.trim(),
+      });
+      setMessage(result.status === "pending"
+        ? "Mutual cancellation requested. No refund occurs until the other party accepts."
+        : "Unilateral cancellation escalated for governed review. Funds remain held.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to request cancellation.");
+    }
+  };
+
+  const handleAcceptFundedCancellation = async (cancellationId: string) => {
+    try {
+      const result = await acceptFundedCancellationMutation.mutateAsync({ cancellationId });
+      setMessage(`Cancellation accepted. ${formatCurrency(result.refundedCents / 100)} was returned to the buyer; disputed funds remain held.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to accept cancellation.");
     }
   };
 
@@ -3228,7 +3348,7 @@ const handleWalletWithdraw = async () => {
         </section>
       );
     }
-    const canReviewMilestones = tx.counterpartyApproved && tx.status === "Active";
+    const canReviewMilestones = tx.counterpartyApproved && tx.lifecycleStatus === "funded";
     const isCurrentUserBuyer = sameEmail(currentUser.email, tx.buyerEmail);
     const isAwaitingSignup = tx.lifecycleStatus === "pending_counterparty_signup";
     const isAwaitingApproval = tx.lifecycleStatus === "pending_approval";
@@ -3236,6 +3356,10 @@ const handleWalletWithdraw = async () => {
     const isChangesRequested = tx.lifecycleStatus === "changes_requested";
     const isRejected = tx.lifecycleStatus === "rejected";
     const isAwaitingFunding = tx.lifecycleStatus === "funding_pending";
+    const activeDisputes = (disputesQuery.data?.disputes ?? []).filter(
+      (dispute) => dispute.escrowId === (tx.reference ?? `PO-${tx.id}`),
+    );
+    const currentUserId = user?.id ?? profileIdentity.id;
     const canApproveEscrow = !tx.isOwner && isAwaitingApproval;
     const canRequestMilestoneChanges = !tx.isOwner && (isAwaitingApproval || isChangesRequested);
     const canFundEscrow = isCurrentUserBuyer && isAwaitingFunding;
@@ -3936,6 +4060,84 @@ const handleWalletWithdraw = async () => {
             </div>
           </div>
         ) : null}
+        {tx.lifecycleStatus === "funded" || tx.cancellation ? (
+          <div className="card" style={{ marginTop: 12 }}>
+            <strong>Cancellation and refunds</strong>
+            {tx.cancellation ? (
+              <div style={{ marginTop: 10 }}>
+                <div className="milestone-warning">
+                  <strong style={{ textTransform: "capitalize" }}>{tx.cancellation.mode} cancellation — {tx.cancellation.status}</strong>
+                  <p style={{ margin: "6px 0 0" }}>{tx.cancellation.reason}</p>
+                  <div className="muted" style={{ marginTop: 4 }}>
+                    Requested {formatDateTime(tx.cancellation.requestedAt)}. Funds do not move until the authorized path completes.
+                  </div>
+                </div>
+                {tx.cancellation.mode === "mutual"
+                  && tx.cancellation.status === "pending"
+                  && tx.cancellation.requestedById !== currentUserId ? (
+                  <button
+                    className="btn"
+                    style={{ marginTop: 10 }}
+                    onClick={() => handleAcceptFundedCancellation(tx.cancellation!.id)}
+                    disabled={acceptFundedCancellationMutation.isPending}
+                  >
+                    {acceptFundedCancellationMutation.isPending ? "Refunding..." : "Accept cancellation and refund available funds"}
+                  </button>
+                ) : null}
+                {tx.cancellation.mode === "unilateral" ? (
+                  <p className="muted" style={{ marginBottom: 0 }}>
+                    Unilateral requests require governed review. All remaining funds stay held meanwhile.
+                  </p>
+                ) : null}
+              </div>
+            ) : (
+              <div style={{ marginTop: 10 }}>
+                <p className="muted" style={{ marginTop: 0 }}>
+                  A mutual cancellation refunds only unreleased, undisputed funds after the other party accepts. A unilateral request freezes new releases and enters governed review.
+                </p>
+                <label className="field">
+                  <span>Cancellation path</span>
+                  <select
+                    value={cancellationDrafts[tx.id]?.mode ?? "mutual"}
+                    onChange={(event) => setCancellationDrafts((current) => ({
+                      ...current,
+                      [tx.id]: {
+                        mode: event.target.value as "mutual" | "unilateral",
+                        reason: current[tx.id]?.reason ?? "",
+                      },
+                    }))}
+                  >
+                    <option value="mutual">Mutual cancellation</option>
+                    <option value="unilateral">Unilateral governed review</option>
+                  </select>
+                </label>
+                <label className="field" style={{ marginTop: 10 }}>
+                  <span>Reason</span>
+                  <textarea
+                    rows={2}
+                    value={cancellationDrafts[tx.id]?.reason ?? ""}
+                    onChange={(event) => setCancellationDrafts((current) => ({
+                      ...current,
+                      [tx.id]: {
+                        mode: current[tx.id]?.mode ?? "mutual",
+                        reason: event.target.value,
+                      },
+                    }))}
+                    placeholder="Explain why the escrow should be cancelled"
+                  />
+                </label>
+                <button
+                  className="ghost"
+                  style={{ marginTop: 10 }}
+                  onClick={() => handleRequestFundedCancellation(tx)}
+                  disabled={requestFundedCancellationMutation.isPending}
+                >
+                  {requestFundedCancellationMutation.isPending ? "Requesting..." : "Request cancellation"}
+                </button>
+              </div>
+            )}
+          </div>
+        ) : null}
         {tx.milestones.length && !isAwaitingApproval && !isChangesRequested ? (
           <div className="card" style={{ marginTop: 12 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -3960,6 +4162,7 @@ const handleWalletWithdraw = async () => {
             ) : null}
             <div className="tx-list" style={{ marginTop: 12 }}>
               {tx.milestones.map((milestone) => {
+                const dispute = activeDisputes.find((item) => item.milestoneId === Number(milestone.id));
                 return (
                 <div key={milestone.id} className="tx-item milestone-entry">
                   <div className="milestone-entry__top">
@@ -3970,6 +4173,14 @@ const handleWalletWithdraw = async () => {
                           ? "Proposed new milestone"
                           : milestone.status === "released"
                           ? `Released ${milestone.releasedAt ? formatHistoryDate(milestone.releasedAt) : ""}`
+                          : milestone.status === "refunded"
+                            ? "Resolved with a full buyer refund"
+                          : milestone.status === "settled"
+                            ? "Resolved with a split settlement"
+                          : milestone.status === "cancelled"
+                            ? "Cancelled before release"
+                          : milestone.status === "disputed"
+                            ? "Disputed — this milestone's funds are reserved"
                           : milestone.status === "revision_requested"
                             ? `Revision requested ${milestone.rejectedAt ? formatHistoryDate(milestone.rejectedAt) : ""}`
                             : milestone.status === "submitted"
@@ -4068,6 +4279,14 @@ const handleWalletWithdraw = async () => {
                       <span className={`milestone-chip milestone-chip--${milestone.status}`}>
                         {milestone.status === "released"
                           ? "Approved"
+                          : milestone.status === "refunded"
+                            ? "Refunded"
+                          : milestone.status === "settled"
+                            ? "Settled"
+                          : milestone.status === "cancelled"
+                            ? "Cancelled"
+                          : milestone.status === "disputed"
+                            ? "Dispute open"
                           : milestone.status === "submitted"
                             ? "Awaiting buyer review"
                             : milestone.status === "revision_requested"
@@ -4076,6 +4295,173 @@ const handleWalletWithdraw = async () => {
                       </span>
                     )}
                   </div>
+                  {["submitted", "revision_requested"].includes(milestone.status) && canReviewMilestones ? (
+                    <div className="milestone-warning" style={{ marginTop: 12 }}>
+                      <strong>Disagree about this milestone?</strong>
+                      <p className="muted" style={{ margin: "4px 0 8px" }}>
+                        Either party can open a dispute. Only this milestone&apos;s remaining balance will be reserved.
+                      </p>
+                      <label className="field">
+                        <span>Dispute reason</span>
+                        <textarea
+                          rows={2}
+                          value={milestoneDisputeReasons[milestone.id] ?? ""}
+                          onChange={(event) => setMilestoneDisputeReasons((current) => ({
+                            ...current,
+                            [milestone.id]: event.target.value,
+                          }))}
+                          placeholder="Explain the specific disagreement"
+                        />
+                      </label>
+                      <button
+                        className="ghost"
+                        style={{ marginTop: 8 }}
+                        onClick={() => handleOpenMilestoneDispute(tx, milestone.id)}
+                        disabled={openMilestoneDisputeMutation.isPending}
+                      >
+                        {openMilestoneDisputeMutation.isPending ? "Opening..." : "Open milestone dispute"}
+                      </button>
+                    </div>
+                  ) : null}
+                  {milestone.status === "disputed" ? (
+                    <div className="milestone-warning" style={{ marginTop: 12 }}>
+                      <strong>Dispute workspace{dispute ? ` • ${dispute.id}` : ""}</strong>
+                      {disputesQuery.isLoading ? <p className="muted">Loading dispute details...</p> : null}
+                      {dispute ? (
+                        <>
+                          <p style={{ margin: "8px 0 4px" }}>{dispute.reason}</p>
+                          <div className="muted">
+                            {formatCurrency(dispute.amountFrozenCents / 100)} reserved
+                            {dispute.evidenceWindowEndsAt
+                              ? ` • Evidence due ${formatDateTime(dispute.evidenceWindowEndsAt)}`
+                              : ""}
+                          </div>
+                          {dispute.evidence.length ? (
+                            <div style={{ marginTop: 10 }}>
+                              <strong>Evidence history</strong>
+                              {dispute.evidence.map((evidence) => (
+                                <div key={evidence.id} className="tx-item" style={{ marginTop: 6 }}>
+                                  <div>
+                                    <div>{evidence.note || "Evidence references added"}</div>
+                                    <div className="muted">
+                                      {evidence.submitter.name} • {formatDateTime(evidence.submittedAt)}
+                                    </div>
+                                    {evidence.references.length ? (
+                                      <div className="muted">Files: {evidence.references.map((item) => item.fileName).join(", ")}</div>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
+                          <label className="field" style={{ marginTop: 10 }}>
+                            <span>Add evidence note</span>
+                            <textarea
+                              rows={2}
+                              value={disputeEvidenceNotes[dispute.id] ?? ""}
+                              onChange={(event) => setDisputeEvidenceNotes((current) => ({
+                                ...current,
+                                [dispute.id]: event.target.value,
+                              }))}
+                              placeholder="Add facts, dates, or a summary of supporting material"
+                            />
+                          </label>
+                          <button
+                            className="ghost"
+                            style={{ marginTop: 8 }}
+                            onClick={() => handleSubmitDisputeEvidence(dispute.id)}
+                            disabled={submitDisputeEvidenceMutation.isPending}
+                          >
+                            {submitDisputeEvidenceMutation.isPending ? "Adding..." : "Add evidence note"}
+                          </button>
+                          {dispute.resolution ? (
+                            <div className="tx-item" style={{ marginTop: 12 }}>
+                              <div>
+                                <strong>Complete resolution proposal</strong>
+                                <div className="muted">
+                                  Seller {formatCurrency(dispute.resolution.sellerCents / 100)} • Buyer {formatCurrency(dispute.resolution.buyerCents / 100)}
+                                </div>
+                                {dispute.resolution.note ? <div style={{ marginTop: 4 }}>{dispute.resolution.note}</div> : null}
+                              </div>
+                              {dispute.resolution.proposedById !== currentUserId ? (
+                                <button
+                                  className="btn"
+                                  onClick={() => handleAcceptDisputeResolution(dispute.id)}
+                                  disabled={resolveDisputeMutation.isPending}
+                                >
+                                  {resolveDisputeMutation.isPending ? "Allocating..." : "Accept and allocate funds"}
+                                </button>
+                              ) : <span className="muted">Waiting for the other party</span>}
+                            </div>
+                          ) : (
+                            <div style={{ marginTop: 12 }}>
+                              <strong>Propose a complete allocation</strong>
+                              <p className="muted" style={{ margin: "4px 0 8px" }}>
+                                Seller and buyer amounts must total {formatCurrency(dispute.amountFrozenCents / 100)}.
+                              </p>
+                              <div className="form-grid">
+                                <label className="field">
+                                  <span>To seller</span>
+                                  <input
+                                    inputMode="decimal"
+                                    value={disputeResolutionDrafts[dispute.id]?.sellerAmount ?? ""}
+                                    onChange={(event) => setDisputeResolutionDrafts((current) => ({
+                                      ...current,
+                                      [dispute.id]: {
+                                        sellerAmount: event.target.value,
+                                        buyerAmount: current[dispute.id]?.buyerAmount ?? "",
+                                        note: current[dispute.id]?.note ?? "",
+                                      },
+                                    }))}
+                                  />
+                                </label>
+                                <label className="field">
+                                  <span>To buyer</span>
+                                  <input
+                                    inputMode="decimal"
+                                    value={disputeResolutionDrafts[dispute.id]?.buyerAmount ?? ""}
+                                    onChange={(event) => setDisputeResolutionDrafts((current) => ({
+                                      ...current,
+                                      [dispute.id]: {
+                                        sellerAmount: current[dispute.id]?.sellerAmount ?? "",
+                                        buyerAmount: event.target.value,
+                                        note: current[dispute.id]?.note ?? "",
+                                      },
+                                    }))}
+                                  />
+                                </label>
+                              </div>
+                              <label className="field" style={{ marginTop: 8 }}>
+                                <span>Resolution note</span>
+                                <textarea
+                                  rows={2}
+                                  value={disputeResolutionDrafts[dispute.id]?.note ?? ""}
+                                  onChange={(event) => setDisputeResolutionDrafts((current) => ({
+                                    ...current,
+                                    [dispute.id]: {
+                                      sellerAmount: current[dispute.id]?.sellerAmount ?? "",
+                                      buyerAmount: current[dispute.id]?.buyerAmount ?? "",
+                                      note: event.target.value,
+                                    },
+                                  }))}
+                                />
+                              </label>
+                              <button
+                                className="btn"
+                                style={{ marginTop: 8 }}
+                                onClick={() => handleProposeDisputeResolution(dispute.id)}
+                                disabled={proposeDisputeResolutionMutation.isPending}
+                              >
+                                {proposeDisputeResolutionMutation.isPending ? "Proposing..." : "Propose allocation"}
+                              </button>
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <p className="muted">Dispute details are unavailable. Refresh to try again.</p>
+                      )}
+                    </div>
+                  ) : null}
                   {(milestone.submissions ?? []).length ? (
                     <div style={{ marginTop: 14, borderTop: "1px solid #dce9e7", paddingTop: 12 }}>
                       <strong>Submission history</strong>

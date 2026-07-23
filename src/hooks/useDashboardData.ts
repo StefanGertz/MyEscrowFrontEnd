@@ -425,6 +425,116 @@ export function useSubmitMilestone() {
   });
 }
 
+type OpenMilestoneDisputePayload = MilestoneActionPayload & { reason: string };
+
+export function useOpenMilestoneDispute() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ escrowId, milestoneId, reason }: OpenMilestoneDisputePayload) =>
+      fetchJSON<{ disputeId: string; amountFrozenCents: number }>(
+        `/api/dashboard/escrows/${escrowId}/milestones/${milestoneId}/dispute`,
+        {
+          method: "POST",
+          headers: idempotencyHeaders({ "Content-Type": "application/json" }),
+          body: JSON.stringify({ reason }),
+        },
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "escrows"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "disputes"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "notifications"] });
+    },
+  });
+}
+
+type DisputeEvidencePayload = {
+  disputeId: string;
+  note: string;
+};
+
+export function useSubmitDisputeEvidence() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ disputeId, note }: DisputeEvidencePayload) =>
+      fetchJSON<{ disputeId: string; evidenceSubmissionId: number }>(
+        `/api/dashboard/disputes/${disputeId}/evidence`,
+        {
+          method: "POST",
+          headers: idempotencyHeaders({ "Content-Type": "application/json" }),
+          body: JSON.stringify({ note }),
+        },
+      ),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["dashboard", "disputes"] }),
+  });
+}
+
+type DisputeResolutionPayload = {
+  disputeId: string;
+  sellerAmount: number;
+  buyerAmount: number;
+  note?: string;
+};
+
+export function useProposeDisputeResolution() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ disputeId, ...payload }: DisputeResolutionPayload) =>
+      fetchJSON<{ disputeId: string; status: string }>(
+        `/api/dashboard/disputes/${disputeId}/resolution`,
+        {
+          method: "POST",
+          headers: idempotencyHeaders({ "Content-Type": "application/json" }),
+          body: JSON.stringify(payload),
+        },
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "disputes"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "notifications"] });
+    },
+  });
+}
+
+type FundedCancellationPayload = {
+  escrowId: string;
+  mode: "mutual" | "unilateral";
+  reason: string;
+};
+
+export function useRequestFundedCancellation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ escrowId, ...payload }: FundedCancellationPayload) =>
+      fetchJSON<{ cancellationId: string; status: string }>(
+        `/api/dashboard/escrows/${escrowId}/cancellation/request`,
+        {
+          method: "POST",
+          headers: idempotencyHeaders({ "Content-Type": "application/json" }),
+          body: JSON.stringify(payload),
+        },
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "escrows"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "notifications"] });
+    },
+  });
+}
+
+export function useAcceptFundedCancellation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ cancellationId }: { cancellationId: string }) =>
+      fetchJSON<{ cancellationId: string; refundedCents: number; disputedCents: number }>(
+        `/api/dashboard/cancellations/${cancellationId}/accept`,
+        { method: "POST", headers: idempotencyHeaders() },
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "escrows"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "overview"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "notifications"] });
+    },
+  });
+}
+
 export function useRequestMilestoneChanges() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -526,10 +636,13 @@ export function useResolveDispute() {
         `/api/dashboard/disputes/${disputeId}/resolve`,
         {
           method: "POST",
+          headers: idempotencyHeaders(),
         },
       ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["dashboard", "disputes"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "escrows"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "overview"] });
     },
   });
 }

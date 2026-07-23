@@ -3,14 +3,12 @@
 import {
   useDisputes,
   useLaunchDisputeWorkspace,
-  useResolveDispute,
 } from "@/hooks/useDashboardData";
 import { useToast } from "@/components/ToastProvider";
 
 export function DisputesSection() {
   const { data, isLoading, isError } = useDisputes();
   const launchWorkspace = useLaunchDisputeWorkspace();
-  const resolveDispute = useResolveDispute();
   const { pushToast } = useToast();
 
   const handleLaunch = async (disputeId: string) => {
@@ -24,21 +22,6 @@ export function DisputesSection() {
       pushToast({
         variant: "error",
         title: error instanceof Error ? error.message : "Unable to launch workspace.",
-      });
-    }
-  };
-
-  const handleResolve = async (disputeId: string) => {
-    try {
-      await resolveDispute.mutateAsync({ disputeId });
-      pushToast({
-        variant: "success",
-        title: `Dispute ${disputeId} resolved.`,
-      });
-    } catch (error) {
-      pushToast({
-        variant: "error",
-        title: error instanceof Error ? error.message : "Unable to resolve dispute.",
       });
     }
   };
@@ -80,13 +63,6 @@ export function DisputesSection() {
             const isSuccess =
               launchWorkspace.isSuccess &&
               launchWorkspace.data?.disputeId === ticket.id;
-            const isResolving =
-              resolveDispute.isPending &&
-              resolveDispute.variables?.disputeId === ticket.id;
-            const resolved =
-              resolveDispute.isSuccess &&
-              resolveDispute.data?.disputeId === ticket.id;
-
             return (
               <article
                 key={ticket.id}
@@ -106,37 +82,23 @@ export function DisputesSection() {
                 <div className="mt-2 text-sm text-slate-500">
                   <p>{ticket.owner}</p>
                   <p>{ticket.updated}</p>
+                  <p className="mt-1 font-semibold text-slate-600">
+                    {ticket.status === "resolution_proposed"
+                      ? "Complete allocation proposal awaiting acceptance"
+                      : "Evidence and resolution workspace open"}
+                  </p>
                 </div>
-                <div className="flex flex-col gap-2">
-                  <button
-                    className="primary-btn mt-3 w-full justify-center"
-                    type="button"
-                    disabled={isPending}
-                    onClick={() =>
-                      handleLaunch(ticket.id)
-                    }
-                  >
-                    {isPending ? "Launching..." : "Launch dispute workspace"}
-                  </button>
-                  <button
-                    className="ghost w-full justify-center"
-                    type="button"
-                    disabled={isResolving}
-                    onClick={() =>
-                      handleResolve(ticket.id)
-                    }
-                  >
-                    {isResolving ? "Resolving..." : "Resolve dispute"}
-                  </button>
-                </div>
+                <button
+                  className="primary-btn mt-3 w-full justify-center"
+                  type="button"
+                  disabled={isPending}
+                  onClick={() => handleLaunch(ticket.id)}
+                >
+                  {isPending ? "Launching..." : "Open dispute workspace"}
+                </button>
                 {isSuccess ? (
                   <p className="mt-1 text-xs font-semibold text-emerald-600">
                     Workspace launched
-                  </p>
-                ) : null}
-                {resolved ? (
-                  <p className="mt-1 text-xs font-semibold text-blue-600">
-                    Dispute resolved
                   </p>
                 ) : null}
               </article>
@@ -169,18 +131,6 @@ export function DisputesSection() {
           disabled={launchWorkspace.isPending}
         >
           {launchWorkspace.isPending ? "Launching..." : "Launch dispute workspace"}
-        </button>
-        <button
-          className="ghost mt-3 w-full justify-center"
-          type="button"
-          disabled={resolveDispute.isPending}
-          onClick={() => {
-            if (disputeTickets[0]) {
-              void handleResolve(disputeTickets[0].id);
-            }
-          }}
-        >
-          {resolveDispute.isPending ? "Resolving..." : "Resolve dispute"}
         </button>
       </section>
     </div>

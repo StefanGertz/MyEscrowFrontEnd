@@ -40,6 +40,15 @@ export type EscrowRecord = {
     responseDueAt: string;
     failureReason?: string;
   };
+  cancellation?: {
+    id: string;
+    mode: string;
+    reason: string;
+    status: string;
+    requestedById: string;
+    requestedAt: string;
+    refundAmountCents: number;
+  } | null;
   role?: "buyer" | "seller";
   isOwner?: boolean;
   buyer?: {
@@ -68,7 +77,7 @@ export type EscrowRecord = {
     id: number;
     title: string;
     amount: string;
-    status: "not_started" | "submitted" | "revision_requested" | "released" | "disputed";
+    status: "not_started" | "submitted" | "revision_requested" | "released" | "disputed" | "refunded" | "settled" | "cancelled";
     description?: string;
     deadline?: string;
     requestedTitle?: string;
@@ -122,6 +131,32 @@ export type DisputeTicket = {
   amount: string;
   updated: string;
   priority: "high" | "medium";
+  status: "open" | "resolution_proposed" | "resolving";
+  reason?: string;
+  escrowId?: string;
+  milestoneId?: number;
+  amountFrozenCents: number;
+  evidenceWindowEndsAt?: string;
+  openedBy?: { id: string; name: string };
+  resolution?: {
+    proposedById: string;
+    sellerCents: number;
+    buyerCents: number;
+    note?: string;
+  };
+  evidence: Array<{
+    id: number;
+    note?: string;
+    submittedAt: string;
+    submitter: { id: string; name: string };
+    references: Array<{
+      objectKey: string;
+      fileName: string;
+      contentType: string;
+      sizeBytes: number;
+      sha256: string;
+    }>;
+  }>;
 };
 
 export const summaryMetrics: SummaryMetric[] = [
@@ -226,6 +261,9 @@ export const disputeTickets: DisputeTicket[] = [
     amount: "$42,000 held",
     updated: "Last update 45m ago",
     priority: "high",
+    status: "open",
+    amountFrozenCents: 4_200_000,
+    evidence: [],
   },
   {
     id: "DSP-07",
@@ -234,5 +272,8 @@ export const disputeTickets: DisputeTicket[] = [
     amount: "$18,200 held",
     updated: "Last update 3h ago",
     priority: "medium",
+    status: "open",
+    amountFrozenCents: 1_820_000,
+    evidence: [],
   },
 ];
