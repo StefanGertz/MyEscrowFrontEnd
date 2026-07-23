@@ -343,7 +343,11 @@ export default function OperationsPage() {
               </section>
             ) : null}
 
-            <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <Link
+              href="/operations/alerts"
+              className="mt-6 block rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:border-teal-400 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600"
+              aria-label="View current alert details"
+            >
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-xl font-bold">Current alerts</h2>
                 <span className={`rounded-full px-3 py-1 text-sm font-bold ${health.status === "healthy" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-900"}`}>
@@ -364,7 +368,8 @@ export default function OperationsPage() {
                 Recovery worker: {health.worker.status}
                 {health.worker.lastSuccessAt ? `; last successful cycle ${new Date(health.worker.lastSuccessAt).toLocaleString()}` : "; no successful cycle recorded"}.
               </p>
-            </section>
+              <p className="mt-4 text-xs font-bold uppercase tracking-wide text-teal-700">View alert details</p>
+            </Link>
           </>
         ) : null}
 
