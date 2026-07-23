@@ -14,6 +14,7 @@ type Health = {
     failedJobs: number;
     agedEscrows: number;
     disputesApproaching: number;
+    arbitrationRequested: number;
   };
   latestReconciliation?: {
     status: string;
@@ -62,6 +63,15 @@ type Health = {
       priority: string;
       amountFrozenCents: number;
       evidenceWindowEndsAt?: string | null;
+      escrow?: { reference: string; title: string } | null;
+    }>;
+    arbitrationRequested: Array<{
+      reference: string;
+      title: string;
+      status: string;
+      priority: string;
+      amountFrozenCents: number;
+      arbitrationRequestedAt?: string | null;
       escrow?: { reference: string; title: string } | null;
     }>;
   };
@@ -199,6 +209,31 @@ export default function OperationsAlertsPage() {
                     <p className="font-bold">{money(record.amountFrozenCents)} frozen</p>
                   </div>
                   <p className="mt-2 text-xs text-slate-500">Evidence deadline: {date(record.evidenceWindowEndsAt)}</p>
+                  {record.escrow ? <p className="mt-3 text-xs font-bold uppercase tracking-wide text-teal-700">View escrow details</p> : null}
+                </>
+              );
+              return record.escrow ? (
+                <Link key={record.reference} href={`/operations/escrows/${encodeURIComponent(record.escrow.reference)}`} className={escrowCardClass}>{content}</Link>
+              ) : (
+                <article key={record.reference} className="rounded-xl bg-slate-50 p-4">{content}</article>
+              );
+            })}
+          </AlertGroup>
+        ) : null}
+
+        {health && health.counts.arbitrationRequested > 0 ? (
+          <AlertGroup title="Arbitration">
+            {health.details.arbitrationRequested.map((record) => {
+              const content = (
+                <>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="font-bold">{record.title} · {record.reference}</p>
+                      <p className="mt-1 text-sm capitalize text-slate-600">{label(record.status)}; {record.priority} priority</p>
+                    </div>
+                    <p className="font-bold">{money(record.amountFrozenCents)} frozen</p>
+                  </div>
+                  <p className="mt-2 text-xs text-slate-500">Requested: {date(record.arbitrationRequestedAt)}</p>
                   {record.escrow ? <p className="mt-3 text-xs font-bold uppercase tracking-wide text-teal-700">View escrow details</p> : null}
                 </>
               );

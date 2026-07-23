@@ -15,6 +15,7 @@ type Health = {
     agedEscrows: number;
     duplicateCommandAttempts: number;
     disputesApproaching: number;
+    arbitrationRequested: number;
   };
   alerts: string[];
   latestReconciliation?: {
@@ -79,6 +80,15 @@ type Health = {
       evidenceWindowEndsAt?: string | null;
       escrow?: { reference: string; title: string } | null;
     }>;
+    arbitrationRequested: Array<{
+      reference: string;
+      title: string;
+      status: string;
+      priority: string;
+      amountFrozenCents: number;
+      arbitrationRequestedAt?: string | null;
+      escrow?: { reference: string; title: string } | null;
+    }>;
   };
 };
 
@@ -89,6 +99,7 @@ const metricLabels: Record<MetricKey, string> = {
   failedJobs: "Failed recovery jobs",
   agedEscrows: "Aged active escrows",
   disputesApproaching: "Disputes near deadline",
+  arbitrationRequested: "Arbitration",
   duplicateCommands: "Safe command replays",
 };
 
@@ -157,6 +168,32 @@ function MetricDetails({ health, metric }: { health: Health; metric: MetricKey }
           <p className="mt-2 text-xs text-slate-500">Evidence deadline: {formatDateTime(record.evidenceWindowEndsAt)}</p>
         </article>
       )) : null}
+      {metric === "arbitrationRequested" ? health.details.arbitrationRequested.map((record) => {
+        const content = (
+          <>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="font-bold">{record.title} · {record.reference}</p>
+                <p className="mt-1 text-sm text-slate-600">{record.escrow ? `${record.escrow.title} · ${record.escrow.reference}; ` : ""}{record.priority} priority</p>
+              </div>
+              <p className="font-bold">{formatMoney(record.amountFrozenCents)} frozen</p>
+            </div>
+            <p className="mt-2 text-xs text-slate-500">Requested: {formatDateTime(record.arbitrationRequestedAt)}</p>
+            {record.escrow ? <p className="mt-3 text-xs font-bold uppercase tracking-wide text-teal-700">View escrow details</p> : null}
+          </>
+        );
+        return record.escrow ? (
+          <Link
+            key={record.reference}
+            href={`/operations/escrows/${encodeURIComponent(record.escrow.reference)}`}
+            className="block rounded-xl bg-slate-50 p-4 transition hover:bg-teal-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600"
+          >
+            {content}
+          </Link>
+        ) : (
+          <article key={record.reference} className="rounded-xl bg-slate-50 p-4">{content}</article>
+        );
+      }) : null}
     </div>
   );
 }
@@ -277,6 +314,7 @@ export default function OperationsPage() {
         { key: "failedJobs", label: metricLabels.failedJobs, value: health.counts.failedJobs },
         { key: "agedEscrows", label: metricLabels.agedEscrows, value: health.counts.agedEscrows },
         { key: "disputesApproaching", label: metricLabels.disputesApproaching, value: health.counts.disputesApproaching },
+        { key: "arbitrationRequested", label: metricLabels.arbitrationRequested, value: health.counts.arbitrationRequested },
         { key: "duplicateCommands", label: metricLabels.duplicateCommands, value: health.counts.duplicateCommandAttempts },
       ]
     : [];
@@ -314,7 +352,7 @@ export default function OperationsPage() {
 
         {health ? (
           <>
-            <section className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+            <section className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-6">
               {metrics.map((metric) => (
                 <button
                   key={metric.key}
