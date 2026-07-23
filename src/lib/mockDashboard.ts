@@ -68,7 +68,7 @@ export type EscrowRecord = {
     id: number;
     title: string;
     amount: string;
-    status: "pending" | "released" | "rejected";
+    status: "not_started" | "submitted" | "revision_requested" | "released" | "disputed";
     description?: string;
     deadline?: string;
     requestedTitle?: string;
@@ -79,6 +79,31 @@ export type EscrowRecord = {
     changeRequestedAt?: string;
     releasedAt?: string;
     rejectedAt?: string;
+    reviewDeadline?: string;
+    reminderSentAt?: string;
+    reviewOverdueAt?: string;
+    submissions?: Array<{
+      id: number;
+      submissionNumber: number;
+      note?: string;
+      submittedAt: string;
+      reviewDeadline: string;
+      submitter: { id: string; name: string };
+      evidence: Array<{
+        id: number;
+        objectKey: string;
+        fileName: string;
+        contentType: string;
+        sizeBytes: number;
+        sha256: string;
+      }>;
+      review?: {
+        decision: string;
+        reason?: string;
+        reviewedAt: string;
+        reviewer: { id: string; name: string };
+      };
+    }>;
   }>;
 };
 

@@ -220,6 +220,14 @@ type MilestoneActionPayload = {
   milestoneId: string;
 };
 
+type MilestoneReviewPayload = MilestoneActionPayload & {
+  reason: string;
+};
+
+type MilestoneSubmissionPayload = MilestoneActionPayload & {
+  note: string;
+};
+
 type MilestoneChangeRequestPayload = MilestoneActionPayload & {
   title: string;
   description?: string;
@@ -376,8 +384,46 @@ const buildMilestoneAction =
   };
 
 export const useApproveMilestone = buildMilestoneAction("approve");
-export const useRejectMilestone = buildMilestoneAction("reject");
-export const useResubmitMilestone = buildMilestoneAction("resubmit");
+
+export function useRejectMilestone() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ escrowId, milestoneId, reason }: MilestoneReviewPayload) =>
+      fetchJSON<{ escrowId: string; milestoneId: number }>(
+        `/api/dashboard/escrows/${escrowId}/milestones/${milestoneId}/reject`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reason }),
+        },
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "escrows"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "overview"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "notifications"] });
+    },
+  });
+}
+
+export function useSubmitMilestone() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ escrowId, milestoneId, note }: MilestoneSubmissionPayload) =>
+      fetchJSON<{ escrowId: string; milestoneId: number; reviewDeadline: string }>(
+        `/api/dashboard/escrows/${escrowId}/milestones/${milestoneId}/submit`,
+        {
+          method: "POST",
+          headers: idempotencyHeaders({ "Content-Type": "application/json" }),
+          body: JSON.stringify({ note }),
+        },
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "escrows"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "overview"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "notifications"] });
+    },
+  });
+}
 
 export function useRequestMilestoneChanges() {
   const queryClient = useQueryClient();

@@ -18,7 +18,7 @@ import {
   useRejectMilestone,
   useResendInvitation,
   useRequestAgreementChanges,
-  useResubmitMilestone,
+  useSubmitMilestone,
   useSignAgreement,
   useExtendInvitation,
   useUpdateDraftEscrow,
@@ -85,9 +85,34 @@ type TxMilestone = {
   requestedDeadline?: string;
   changeRequestNote?: string;
   changeRequestedAt?: string;
-  status: "pending" | "released" | "rejected";
+  status: "not_started" | "submitted" | "revision_requested" | "released" | "disputed";
   releasedAt?: string;
   rejectedAt?: string;
+  reviewDeadline?: string;
+  reminderSentAt?: string;
+  reviewOverdueAt?: string;
+  submissions?: Array<{
+    id: number;
+    submissionNumber: number;
+    note?: string;
+    submittedAt: string;
+    reviewDeadline: string;
+    submitter: { id: string; name: string };
+    evidence: Array<{
+      id: number;
+      objectKey: string;
+      fileName: string;
+      contentType: string;
+      sizeBytes: number;
+      sha256: string;
+    }>;
+    review?: {
+      decision: string;
+      reason?: string;
+      reviewedAt: string;
+      reviewer: { id: string; name: string };
+    };
+  }>;
 };
 
 type TimelineEntry = {
@@ -375,8 +400,8 @@ const initialTransactions: Transaction[] = [
     seller: "Acme DJ Corp",
     sellerEmail: "bookings@acmedj.com",
     milestones: [
-      { id: "m10106a", title: "Wedding deposit", amount: 800, status: "pending", description: "Non-refundable date hold" },
-      { id: "m10106b", title: "Wedding day performance", amount: 800, status: "pending", description: "Final set payment" },
+      { id: "m10106a", title: "Wedding deposit", amount: 800, status: "not_started", description: "Non-refundable date hold" },
+      { id: "m10106b", title: "Wedding day performance", amount: 800, status: "not_started", description: "Final set payment" },
     ],
     timeline: [
       { id: "tl-10106-a", label: "Created", detail: "Created by you (buyer)", time: new Date(Date.now() - 3600 * 1000 * 2).toISOString() },
@@ -402,8 +427,8 @@ const initialTransactions: Transaction[] = [
     sellerEmail: "projects@tilesrus.com",
     milestones: [
       { id: "m10107a", title: "Deposit", amount: 50000, status: "released", releasedAt: new Date(Date.now() - 864e5 * 3).toISOString(), description: "Initial mobilisation payment" },
-      { id: "m10107b", title: "Material acquisition", amount: 100000, status: "pending", description: "Order porcelain tile sets" },
-      { id: "m10107c", title: "Delivery", amount: 100000, status: "pending", description: "Deliver tile to restaurant site" },
+      { id: "m10107b", title: "Material acquisition", amount: 100000, status: "not_started", description: "Order porcelain tile sets" },
+      { id: "m10107c", title: "Delivery", amount: 100000, status: "not_started", description: "Deliver tile to restaurant site" },
     ],
     timeline: [
       { id: "tl-10107-a", label: "Created", detail: "Created by you (buyer)", time: new Date(Date.now() - 864e5 * 7).toISOString() },
@@ -429,7 +454,7 @@ const initialTransactions: Transaction[] = [
     buyerEmail: defaultUser.email,
     seller: "Nora Studio",
     sellerEmail: "nora@example.com",
-    milestones: [{ id: "m10105a", title: "Prototype delivery (Northwind)", amount: 650, status: "pending" }],
+    milestones: [{ id: "m10105a", title: "Prototype delivery (Northwind)", amount: 650, status: "not_started" }],
     timeline: [
       { id: "tl-10105-a", label: "Created", detail: "Created by you (buyer)", time: new Date(Date.now() - 3600 * 1000 * 6).toISOString() },
       { id: "tl-10105-b", label: "Seller notified", detail: "Nora Studio invited to approve", time: new Date(Date.now() - 3600 * 1000 * 5.5).toISOString() },
@@ -454,8 +479,8 @@ const initialTransactions: Transaction[] = [
     sellerEmail: defaultUser.email,
     milestones: [
       { id: "m10102a", title: "Design draft", amount: 400, status: "released", releasedAt: new Date(Date.now() - 864e5 * 1).toISOString() },
-      { id: "m10102b", title: "Development sprint", amount: 400, status: "pending" },
-      { id: "m10102c", title: "Final handoff", amount: 400, status: "pending" },
+      { id: "m10102b", title: "Development sprint", amount: 400, status: "not_started" },
+      { id: "m10102c", title: "Final handoff", amount: 400, status: "not_started" },
     ],
     timeline: [
       { id: "tl-10102-a", label: "Created", detail: "Created by you (seller)", time: new Date(Date.now() - 864e5 * 4).toISOString() },
@@ -908,6 +933,10 @@ const mapEscrowsToTransactions = (
         status: milestone.status,
         releasedAt: milestone.releasedAt,
         rejectedAt: milestone.rejectedAt,
+        reviewDeadline: milestone.reviewDeadline,
+        reminderSentAt: milestone.reminderSentAt,
+        reviewOverdueAt: milestone.reviewOverdueAt,
+        submissions: milestone.submissions ?? [],
       })),
       timeline: [],
       counterpartyApproved: approved,
@@ -979,6 +1008,8 @@ function MockExperienceHome({ searchParams }: HomeProps) {
   const [approvalBusiness, setApprovalBusiness] = useState<BusinessDetails>(emptyBusinessDetails);
   const [walletAmountInput, setWalletAmountInput] = useState("");
   const [message, setMessage] = useState<string | null>(null);
+  const [milestoneSubmissionNotes, setMilestoneSubmissionNotes] = useState<Record<string, string>>({});
+  const [milestoneRevisionReasons, setMilestoneRevisionReasons] = useState<Record<string, string>>({});
   const [profileDraft, setProfileDraft] = useState<ProfileDraft>({
     userId: "demo-scott",
     name: defaultUser.name,
@@ -1018,7 +1049,7 @@ function MockExperienceHome({ searchParams }: HomeProps) {
   const requestAgreementChangesMutation = useRequestAgreementChanges();
   const applyAgreementChangesMutation = useApplyAgreementChanges();
   const updateDraftEscrowMutation = useUpdateDraftEscrow();
-  const resubmitMilestoneMutation = useResubmitMilestone();
+  const submitMilestoneMutation = useSubmitMilestone();
   const cancelEscrowMutation = useCancelEscrow();
   const fundEscrowMutation = useFundEscrow();
   const notificationsQuery = useNotifications();
@@ -1110,7 +1141,7 @@ function MockExperienceHome({ searchParams }: HomeProps) {
           });
         }
       } else if (tx.status === "Active") {
-        const pendingMilestone = tx.milestones.find((milestone) => milestone.status === "pending");
+        const pendingMilestone = tx.milestones.find((milestone) => milestone.status === "submitted");
         if (pendingMilestone) {
           const amountMeta = pendingMilestone.amount ? formatCurrency(pendingMilestone.amount) : null;
           if (sameEmail(tx.buyerEmail, currentUser.email)) {
@@ -1184,7 +1215,7 @@ function MockExperienceHome({ searchParams }: HomeProps) {
       if (tx.buyer !== currentUser.name) {
         return false;
       }
-      return Boolean(tx.milestones.find((milestone) => milestone.status === "pending"));
+      return Boolean(tx.milestones.find((milestone) => milestone.status === "submitted"));
     }
     return false;
   };
@@ -1593,7 +1624,7 @@ const findTransactionById = (id: number) => {
           amount: milestone.amount,
           description: milestone.description || undefined,
           deadline: milestone.deadline || undefined,
-          status: "pending",
+          status: "not_started",
         })),
         timeline: [
           { id: randomId(), label: "Created", detail: `Created by ${currentUser.name}`, time: timestamp },
@@ -1656,15 +1687,24 @@ const findTransactionById = (id: number) => {
     }
     if (liveDataEnabled) {
       const escrowId = target.reference ?? `PO-${target.id}`;
-      const mutation = decision === "approve" ? approveMilestoneMutation : rejectMilestoneMutation;
       const actionLabel = decision === "approve" ? "approve" : "reject";
       const executeLiveDecision = async () => {
         try {
-          await mutation.mutateAsync({ escrowId, milestoneId });
+          if (decision === "approve") {
+            await approveMilestoneMutation.mutateAsync({ escrowId, milestoneId });
+          } else {
+            const reason = milestoneRevisionReasons[milestoneId]?.trim() ?? "";
+            if (reason.length < 3) {
+              setMessage("Explain what the seller needs to revise before sending it back.");
+              return;
+            }
+            await rejectMilestoneMutation.mutateAsync({ escrowId, milestoneId, reason });
+            setMilestoneRevisionReasons((current) => ({ ...current, [milestoneId]: "" }));
+          }
           setMessage(
             decision === "approve"
-              ? "Milestone approved and dummy funds released to the seller."
-              : "Milestone rejected and sent back for revision.",
+              ? "Milestone approved and funds released to the seller."
+              : "Revision requested and the reason was saved in the submission history.",
           );
         } catch (error) {
           setMessage(error instanceof Error ? error.message : `Unable to ${actionLabel} milestone.`);
@@ -1701,12 +1741,12 @@ const findTransactionById = (id: number) => {
         }
         return {
           ...milestone,
-          status: "rejected",
+          status: "revision_requested",
           rejectedAt: timestamp,
         };
       });
         const allReleased = updatedMilestones.length > 0 && updatedMilestones.every((item) => item.status === "released");
-        const anyRejected = updatedMilestones.some((item) => item.status === "rejected");
+        const anyRejected = updatedMilestones.some((item) => item.status === "revision_requested");
         let status = tx.status;
         let context = tx.context;
         if (allReleased) {
@@ -1760,19 +1800,25 @@ const findTransactionById = (id: number) => {
     executeDecision();
   };
 
-  const handleMilestoneResubmit = async (txId: number, milestoneId: string) => {
+  const handleMilestoneSubmit = async (txId: number, milestoneId: string) => {
     const target = findTransactionById(txId);
     if (!target) {
       setMessage("Transaction not found.");
       return;
     }
+    const note = milestoneSubmissionNotes[milestoneId]?.trim() ?? "";
+    if (!note) {
+      setMessage("Add a note describing the completed work before submitting it.");
+      return;
+    }
     if (liveDataEnabled) {
       const escrowId = target.reference ?? `PO-${target.id}`;
       try {
-        await resubmitMilestoneMutation.mutateAsync({ escrowId, milestoneId });
-        setMessage("Milestone resubmitted for buyer review.");
+        await submitMilestoneMutation.mutateAsync({ escrowId, milestoneId, note });
+        setMilestoneSubmissionNotes((current) => ({ ...current, [milestoneId]: "" }));
+        setMessage("Work submitted for buyer review. Funds remain held until the buyer decides.");
       } catch (error) {
-        setMessage(error instanceof Error ? error.message : "Unable to resubmit milestone.");
+        setMessage(error instanceof Error ? error.message : "Unable to submit milestone work.");
       }
       return;
     }
@@ -1783,8 +1829,21 @@ const findTransactionById = (id: number) => {
         milestone.id === milestoneId
           ? {
               ...milestone,
-              status: "pending",
+              status: "submitted",
               rejectedAt: undefined,
+              reviewDeadline: new Date(Date.now() + 7 * 86_400_000).toISOString(),
+              submissions: [
+                ...(milestone.submissions ?? []),
+                {
+                  id: Date.now(),
+                  submissionNumber: (milestone.submissions?.length ?? 0) + 1,
+                  note,
+                  submittedAt: new Date().toISOString(),
+                  reviewDeadline: new Date(Date.now() + 7 * 86_400_000).toISOString(),
+                  submitter: { id: currentUser.email, name: currentUser.name },
+                  evidence: [],
+                },
+              ],
             }
           : milestone,
       ),
@@ -1800,7 +1859,8 @@ const findTransactionById = (id: number) => {
       ],
     }));
     if (updated) {
-      setMessage("Milestone resubmitted for buyer review.");
+      setMilestoneSubmissionNotes((current) => ({ ...current, [milestoneId]: "" }));
+      setMessage("Work submitted for buyer review.");
     }
   };
 
@@ -1901,7 +1961,7 @@ const findTransactionById = (id: number) => {
 
   const buildAgreementChangeDraft = (tx: Transaction): AgreementChangeDraft => ({
     milestones: tx.milestones
-      .filter((milestone) => milestone.status === "pending")
+      .filter((milestone) => milestone.status === "not_started")
       .map((milestone) => ({
         id: milestone.id,
         ...(milestone.amount === 0 && milestone.changeRequestedAt ? {} : { milestoneId: milestone.id }),
@@ -3910,9 +3970,13 @@ const handleWalletWithdraw = async () => {
                           ? "Proposed new milestone"
                           : milestone.status === "released"
                           ? `Released ${milestone.releasedAt ? formatHistoryDate(milestone.releasedAt) : ""}`
-                          : milestone.status === "rejected"
-                            ? `Rejected ${milestone.rejectedAt ? formatHistoryDate(milestone.rejectedAt) : ""}`
-                            : "Pending release"}
+                          : milestone.status === "revision_requested"
+                            ? `Revision requested ${milestone.rejectedAt ? formatHistoryDate(milestone.rejectedAt) : ""}`
+                            : milestone.status === "submitted"
+                              ? milestone.reviewOverdueAt
+                                ? "Buyer review overdue — funds remain held"
+                                : `Submitted for review${milestone.reviewDeadline ? ` • Due ${formatHistoryDate(milestone.reviewDeadline)}` : ""}`
+                              : "Waiting for seller submission"}
                       </div>
                       {milestone.description ? (
                         <p className="muted" style={{ margin: "4px 0 0" }}>
@@ -3944,41 +4008,110 @@ const handleWalletWithdraw = async () => {
                   <div className="milestone-actions">
                     {milestone.changeRequestedAt ? (
                       null
-                    ) : milestone.status === "pending" ? (
-                      <>
-                        {isCurrentUserBuyer ? (
-                          <>
-                            <button
-                              className="btn"
-                              onClick={() => handleMilestoneDecision(tx.id, milestone.id, "approve")}
-                              disabled={!canReviewMilestones || approveMilestoneMutation.isPending}
-                            >
-                              {approveMilestoneMutation.isPending ? "Approving..." : "Approve"}
-                            </button>
-                            <button
-                              className="ghost"
-                              onClick={() => handleMilestoneDecision(tx.id, milestone.id, "reject")}
-                              disabled={!canReviewMilestones || rejectMilestoneMutation.isPending}
-                            >
-                              {rejectMilestoneMutation.isPending ? "Rejecting..." : "Reject"}
-                            </button>
-                          </>
-                        ) : null}
-                      </>
-                    ) : milestone.status === "rejected" && sameEmail(tx.sellerEmail, currentUser.email) ? (
-                      <button
-                        className="ghost"
-                        onClick={() => handleMilestoneResubmit(tx.id, milestone.id)}
-                        disabled={resubmitMilestoneMutation.isPending}
-                      >
-                        {resubmitMilestoneMutation.isPending ? "Resubmitting..." : "Resubmit"}
-                      </button>
+                    ) : milestone.status === "submitted" && isCurrentUserBuyer ? (
+                      <div style={{ width: "100%" }}>
+                        <label className="field" style={{ marginBottom: 10 }}>
+                          <span>Revision reason (required only when requesting changes)</span>
+                          <textarea
+                            rows={2}
+                            value={milestoneRevisionReasons[milestone.id] ?? ""}
+                            onChange={(event) => setMilestoneRevisionReasons((current) => ({
+                              ...current,
+                              [milestone.id]: event.target.value,
+                            }))}
+                            placeholder="Describe exactly what needs to change"
+                          />
+                        </label>
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          <button
+                            className="btn"
+                            onClick={() => handleMilestoneDecision(tx.id, milestone.id, "approve")}
+                            disabled={!canReviewMilestones || approveMilestoneMutation.isPending}
+                          >
+                            {approveMilestoneMutation.isPending ? "Approving..." : "Approve and release"}
+                          </button>
+                          <button
+                            className="ghost"
+                            onClick={() => handleMilestoneDecision(tx.id, milestone.id, "reject")}
+                            disabled={!canReviewMilestones || rejectMilestoneMutation.isPending}
+                          >
+                            {rejectMilestoneMutation.isPending ? "Sending..." : "Request revision"}
+                          </button>
+                        </div>
+                      </div>
+                    ) : ["not_started", "revision_requested"].includes(milestone.status)
+                      && sameEmail(tx.sellerEmail, currentUser.email) ? (
+                      <div style={{ width: "100%" }}>
+                        <label className="field" style={{ marginBottom: 10 }}>
+                          <span>{milestone.status === "revision_requested" ? "Describe what changed" : "Submission note"}</span>
+                          <textarea
+                            rows={2}
+                            value={milestoneSubmissionNotes[milestone.id] ?? ""}
+                            onChange={(event) => setMilestoneSubmissionNotes((current) => ({
+                              ...current,
+                              [milestone.id]: event.target.value,
+                            }))}
+                            placeholder="Summarize the completed work for the buyer"
+                          />
+                        </label>
+                        <button
+                          className="btn"
+                          onClick={() => handleMilestoneSubmit(tx.id, milestone.id)}
+                          disabled={submitMilestoneMutation.isPending}
+                        >
+                          {submitMilestoneMutation.isPending
+                            ? "Submitting..."
+                            : milestone.status === "revision_requested" ? "Resubmit work" : "Submit work"}
+                        </button>
+                      </div>
                     ) : (
                       <span className={`milestone-chip milestone-chip--${milestone.status}`}>
-                        {milestone.status === "released" ? "Approved" : "Rejected"}
+                        {milestone.status === "released"
+                          ? "Approved"
+                          : milestone.status === "submitted"
+                            ? "Awaiting buyer review"
+                            : milestone.status === "revision_requested"
+                              ? "Awaiting seller revision"
+                              : "Not started"}
                       </span>
                     )}
                   </div>
+                  {(milestone.submissions ?? []).length ? (
+                    <div style={{ marginTop: 14, borderTop: "1px solid #dce9e7", paddingTop: 12 }}>
+                      <strong>Submission history</strong>
+                      <div className="tx-list" style={{ marginTop: 8 }}>
+                        {[...(milestone.submissions ?? [])].reverse().map((submission) => (
+                          <div className="tx-item" key={submission.id} style={{ alignItems: "flex-start" }}>
+                            <div>
+                              <strong>Submission {submission.submissionNumber}</strong>
+                              <div className="muted">
+                                {submission.submitter.name} • {formatDateTime(submission.submittedAt)}
+                              </div>
+                              {submission.note ? <p style={{ margin: "6px 0 0" }}>{submission.note}</p> : null}
+                              {submission.evidence.length ? (
+                                <div className="muted" style={{ marginTop: 6 }}>
+                                  Evidence: {submission.evidence.map((item) => item.fileName).join(", ")}
+                                </div>
+                              ) : null}
+                              {submission.review ? (
+                                <div className="milestone-warning" style={{ marginTop: 8 }}>
+                                  <strong>{submission.review.decision === "approved" ? "Approved" : "Revision requested"}</strong>
+                                  {submission.review.reason ? <div style={{ marginTop: 4 }}>{submission.review.reason}</div> : null}
+                                  <div className="muted" style={{ marginTop: 4 }}>
+                                    {submission.review.reviewer.name} • {formatDateTime(submission.review.reviewedAt)}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="muted" style={{ marginTop: 6 }}>
+                                  Review due {formatDateTime(submission.reviewDeadline)}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
                 );
               })}
