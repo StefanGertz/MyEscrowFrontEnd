@@ -4014,6 +4014,110 @@ const handleWalletWithdraw = async () => {
             </div>
           </div>
         ) : null}
+        {isCurrentUserBuyer
+          && tx.milestones.length > 0
+          && !["completed", "cancelled"].includes(tx.lifecycleStatus ?? "") ? (
+          <div className="card funding-plan" style={{ marginTop: 12 }}>
+            <div className="funding-plan__header">
+              <div>
+                <strong>Funding plan</strong>
+                <p className="muted">
+                  Choose one deposit for the whole escrow or secure one milestone at a time.
+                </p>
+              </div>
+              {tx.fundingMode ? (
+                <span className="milestone-chip milestone-chip--released">
+                  {tx.fundingMode === "milestone" ? "Milestone funding selected" : "Full funding selected"}
+                </span>
+              ) : null}
+            </div>
+            {tx.fundingMode ? (
+              <div className="funding-plan__selected">
+                <strong>
+                  {tx.fundingMode === "milestone"
+                    ? "Fund each milestone separately"
+                    : "Fund the entire escrow up front"}
+                </strong>
+                <span className="muted">
+                  {tx.fundingMode === "milestone"
+                    ? `${formatCurrency(tx.fundedAmount ?? 0)} of ${formatCurrency(tx.amount)} secured`
+                    : `${formatCurrency(tx.amount)} secured for all milestones`}
+                </span>
+              </div>
+            ) : (
+              <div className="funding-plan__grid">
+                <article className="funding-plan__option">
+                  <span className="funding-plan__eyebrow">Traditional</span>
+                  <strong>Fund the entire escrow</strong>
+                  <span className="funding-plan__amount">{formatCurrency(tx.amount)}</span>
+                  <p className="muted">
+                    Deposit the full agreement amount now so every milestone is ready.
+                  </p>
+                  <button
+                    className="btn"
+                    onClick={() => handleFundEscrow(tx)}
+                    disabled={
+                      !canFundEscrow
+                      || fundEscrowMutation.isPending
+                      || walletBalanceDisplay < tx.amount
+                    }
+                  >
+                    {fundEscrowMutation.isPending
+                      ? "Funding..."
+                      : canFundEscrow
+                        ? "Fund entire escrow"
+                        : "Available after approval"}
+                  </button>
+                </article>
+                <article className="funding-plan__option funding-plan__option--tiered">
+                  <span className="funding-plan__eyebrow">Flexible</span>
+                  <strong>Fund by milestone</strong>
+                  <span className="funding-plan__amount">
+                    {nextMilestoneToFund
+                      ? `${formatCurrency(nextMilestoneToFund.amount)} first`
+                      : "Milestone by milestone"}
+                  </span>
+                  <p className="muted">
+                    Fund the next milestone only. Later milestones remain unfunded until their turn.
+                  </p>
+                  <button
+                    className="btn"
+                    onClick={() => {
+                      if (nextMilestoneToFund) handleFundMilestone(tx, nextMilestoneToFund);
+                    }}
+                    disabled={
+                      !canFundEscrow
+                      || !nextMilestoneToFund
+                      || fundMilestoneMutation.isPending
+                      || walletBalanceDisplay < (nextMilestoneToFund?.amount ?? 0)
+                    }
+                  >
+                    {fundMilestoneMutation.isPending
+                      ? "Funding..."
+                      : canFundEscrow
+                        ? "Start milestone funding"
+                        : "Available after approval"}
+                  </button>
+                </article>
+              </div>
+            )}
+            {!tx.fundingMode && !canFundEscrow ? (
+              <p className="funding-plan__availability muted">
+                You can make this choice as soon as both parties approve and sign the agreement.
+              </p>
+            ) : null}
+            {!tx.fundingMode && canFundEscrow && walletBalanceDisplay < tx.amount ? (
+              <p className="funding-plan__availability muted">
+                Wallet balance: {formatCurrency(walletBalanceDisplay)}. Full funding needs {formatCurrency(walletShortfall)} more.
+                {nextMilestoneToFund
+                  ? nextMilestoneShortfall === 0
+                    ? " You already have enough to start milestone funding."
+                    : ` The first milestone needs ${formatCurrency(nextMilestoneShortfall)} more.`
+                  : ""}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
         {(canFundEscrow || canCancelEscrow || canEditDraftEscrow || canRecoverInvitation || (tx.isOwner && isChangesRequested)) ? (
           <div className="card" style={{ marginTop: 12 }}>
             <strong>Next step</strong>
@@ -4021,13 +4125,7 @@ const handleWalletWithdraw = async () => {
               {tx.isOwner && isChangesRequested
                   ? "Review the requested agreement changes below."
                 : canFundEscrow
-                  ? walletShortfall > 0
-                    ? nextMilestoneToFund && nextMilestoneShortfall === 0
-                      ? `You can fund the first milestone now, or top up ${formatCurrency(walletShortfall)} more to fund the entire escrow.`
-                      : nextMilestoneToFund
-                        ? `Top up ${formatCurrency(nextMilestoneShortfall)} to fund the first milestone, or ${formatCurrency(walletShortfall)} to fund the entire escrow.`
-                        : `Top up ${formatCurrency(walletShortfall)} to fund the entire escrow.`
-                    : "Choose whether to fund the entire escrow now or fund one milestone at a time."
+                  ? "Choose either full or milestone funding in the funding plan above."
                   : isAwaitingSignup
                     ? "This escrow is waiting for the counterparty to finish signup and verification."
                     : isCreatorSignatureRequired
@@ -4039,37 +4137,6 @@ const handleWalletWithdraw = async () => {
                       : "This draft is still waiting for counterparty approval."}
             </p>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {canFundEscrow ? (
-                <button
-                  className="btn"
-                  onClick={() => handleFundEscrow(tx)}
-                  disabled={fundEscrowMutation.isPending || walletBalanceDisplay < tx.amount}
-                >
-                  {fundEscrowMutation.isPending ? "Funding..." : `Fund entire escrow (${formatCurrency(tx.amount)})`}
-                </button>
-              ) : null}
-              {canFundEscrow && nextMilestoneToFund ? (
-                <button
-                  className="ghost"
-                  onClick={() => handleFundMilestone(tx, nextMilestoneToFund)}
-                  disabled={
-                    fundMilestoneMutation.isPending
-                    || walletBalanceDisplay < nextMilestoneToFund.amount
-                  }
-                >
-                  {fundMilestoneMutation.isPending
-                    ? "Funding milestone..."
-                    : `Fund first milestone only (${formatCurrency(nextMilestoneToFund.amount)})`}
-                </button>
-              ) : null}
-              {canFundEscrow && walletBalanceDisplay < tx.amount ? (
-                <div className="muted" style={{ width: "100%" }}>
-                  Wallet balance: {formatCurrency(walletBalanceDisplay)}. Full funding requires {formatCurrency(tx.amount)}.
-                  {nextMilestoneToFund && walletBalanceDisplay >= nextMilestoneToFund.amount
-                    ? ` You can still start milestone funding with ${formatCurrency(nextMilestoneToFund.amount)}.`
-                    : " Top up your wallet before funding."}
-                </div>
-              ) : null}
               {canCancelEscrow ? (
                 <button
                   className="ghost"
