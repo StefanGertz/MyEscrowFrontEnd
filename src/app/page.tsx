@@ -2114,7 +2114,7 @@ const findTransactionById = (id: number) => {
         })),
       });
       setDraftEscrowEdit(null);
-      setMessage("Proposal revised and invitation queued. Sign the latest agreement version to complete the update.");
+      setMessage("Proposal updated and invitation queued. Sign the latest agreement version to complete the update.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to update the draft escrow.");
     }
@@ -3807,9 +3807,6 @@ const handleWalletWithdraw = async () => {
                 >
                   {extendInvitationMutation.isPending ? "Extending..." : "Extend 7 days"}
                 </button>
-                {canEditDraftEscrow && !draftEscrowEdit ? (
-                  <button className="ghost" onClick={() => beginDraftEscrowEdit(tx)}>Correct details</button>
-                ) : null}
               </div>
             ) : null}
           </div>
@@ -3894,19 +3891,27 @@ const handleWalletWithdraw = async () => {
               ) : null}
               {canEditDraftEscrow && !draftEscrowEdit ? (
                 <button className="ghost" onClick={() => beginDraftEscrowEdit(tx)}>
-                  Revise proposal
+                  Edit proposal
                 </button>
               ) : null}
             </div>
             {canEditDraftEscrow && draftEscrowEdit ? (
               <div className="agreement-change-card" style={{ marginTop: 14 }}>
-                <div className="agreement-change-card__heading">
+                <div className="agreement-change-card__heading proposal-edit-header">
                   <div>
-                    <strong>Revise proposal</strong>
+                    <strong>Edit proposal</strong>
                     <p className="muted" style={{ margin: "4px 0 0" }}>
-                      Material changes create a new agreement version and require fresh signatures.
+                      Saving any changes creates a new agreement version and requires fresh signatures.
                     </p>
                   </div>
+                  <button
+                    type="button"
+                    className="ghost"
+                    onClick={() => setDraftEscrowEdit(null)}
+                    disabled={updateDraftEscrowMutation.isPending}
+                  >
+                    Cancel editing
+                  </button>
                 </div>
                 <div className="form-grid" style={{ marginTop: 12 }}>
                   <div className="form-field">
@@ -4014,10 +4019,15 @@ const handleWalletWithdraw = async () => {
                 </button>
                 <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
                   <button className="btn" onClick={() => handleUpdateDraftEscrow(tx)} disabled={updateDraftEscrowMutation.isPending}>
-                    {updateDraftEscrowMutation.isPending ? "Saving..." : "Save and resend"}
+                    {updateDraftEscrowMutation.isPending ? "Saving..." : "Save changes and resend"}
                   </button>
-                  <button className="ghost" onClick={() => setDraftEscrowEdit(null)}>
-                    Cancel
+                  <button
+                    type="button"
+                    className="ghost"
+                    onClick={() => setDraftEscrowEdit(null)}
+                    disabled={updateDraftEscrowMutation.isPending}
+                  >
+                    Cancel editing
                   </button>
                 </div>
               </div>

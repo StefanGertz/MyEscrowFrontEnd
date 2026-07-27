@@ -1411,6 +1411,19 @@ body {
   flex-wrap: wrap;
 }
 
+.proposal-edit-header {
+  position: sticky;
+  top: 72px;
+  z-index: 4;
+  margin: -2px -2px 0;
+  padding: 12px;
+  border: 1px solid rgba(10, 166, 154, 0.18);
+  border-radius: 12px;
+  background: rgba(246, 253, 252, 0.96);
+  box-shadow: 0 8px 20px rgba(8, 52, 84, 0.08);
+  backdrop-filter: blur(10px);
+}
+
 .agreement-change-list {
   display: flex;
   flex-direction: column;
