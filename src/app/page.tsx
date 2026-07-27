@@ -60,6 +60,11 @@ import {
   type ProfileDraft,
   type ProfileIdentity,
 } from "@/lib/profileSettings";
+import {
+  escrowDetailPrompts,
+  type EscrowDetailPromptIndex,
+  validateEscrowDetailPrompt,
+} from "@/lib/escrowWalkthrough";
 import { useConfirmDialog } from "@/components/ConfirmDialogProvider";
 import { jsPDF } from "jspdf";
 import { LiveDashboard } from "@/components/LiveDashboard";
@@ -373,21 +378,6 @@ const milestoneReleaseSteps = [
   "Buyer reviews the deliverable and approves the milestone.",
   "Funds immediately release to the seller's payout account.",
 ];
-
-const createGuideSteps = [
-  {
-    title: "Build and sign",
-    detail: "Add the transaction details and milestones, then review and sign the agreement.",
-  },
-  {
-    title: "Counterparty review",
-    detail: "After you submit, we invite the other party to approve and sign or request changes.",
-  },
-  {
-    title: "Buyer funds the escrow",
-    detail: "Once both parties have signed, the buyer funds the escrow and milestone work can begin.",
-  },
-] as const;
 
 const initialWalletHistory: WalletHistoryEntry[] = [
   { id: "wallet-h1", type: "deposit", amount: 250, date: new Date(Date.now() - 864e5 * 3).toISOString() },
@@ -992,6 +982,7 @@ function MockExperienceHome({ searchParams }: HomeProps) {
   const [createForm, setCreateForm] = useState({
     role: "buyer" as "buyer" | "seller",
     counterpartyEmail: "",
+    counterpartyEmailConfirmation: "",
     title: "",
     amount: "",
     category: "Goods",
@@ -999,6 +990,10 @@ function MockExperienceHome({ searchParams }: HomeProps) {
     partyType: "individual" as "individual" | "business",
     business: emptyBusinessDetails(),
   });
+  const [createPromptStep, setCreatePromptStep] = useState<EscrowDetailPromptIndex>(0);
+  const [createPromptError, setCreatePromptError] = useState<string | null>(null);
+  const [descriptionSkipped, setDescriptionSkipped] = useState(false);
+  const createPromptHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const [milestones, setMilestones] = useState<DraftMilestone[]>([]);
   const [milestoneInputs, setMilestoneInputs] = useState({ title: "", amount: "", description: "", deadline: "" });
   const milestoneDeadlineRef = useRef<HTMLInputElement | null>(null);
@@ -1408,6 +1403,14 @@ useEffect(() => {
 }, [activeScreen]);
 
 useEffect(() => {
+  if (activeScreen !== "create") return;
+  const frameId = window.requestAnimationFrame(() => {
+    createPromptHeadingRef.current?.focus({ preventScroll: true });
+  });
+  return () => window.cancelAnimationFrame(frameId);
+}, [activeScreen, createPromptStep]);
+
+useEffect(() => {
   const handlePopState = (event: PopStateEvent) => {
     const params = new URLSearchParams(window.location.search);
     const fallbackScreen = (params.get("screen") as ScreenId) || "welcome";
@@ -1459,17 +1462,40 @@ const findTransactionById = (id: number) => {
   return pool.find((item) => item.id === id) ?? null;
 };
 
-  const handleCreateNext = () => {
-    if (!createForm.counterpartyEmail || !Number(createForm.amount)) {
-      setMessage("Enter the counterparty email and amount to continue.");
+  const handleCreatePromptNext = () => {
+    const promptError = validateEscrowDetailPrompt(createPromptStep, {
+      partyType: createForm.partyType,
+      business: createForm.business,
+      counterpartyEmail: createForm.counterpartyEmail,
+      counterpartyEmailConfirmation: createForm.counterpartyEmailConfirmation,
+      currentUserEmail: currentUser.email,
+      title: createForm.title,
+      amount: createForm.amount,
+      description: createForm.description,
+      descriptionSkipped,
+    });
+    if (promptError) {
+      setCreatePromptError(promptError);
       return;
     }
-    if (createForm.partyType === "business" && !businessDetailsComplete(createForm.business)) {
-      setMessage("Enter the Business Name and Your Title before continuing.");
-      return;
-    }
+
+    setCreatePromptError(null);
     setMessage(null);
+    if (createPromptStep < escrowDetailPrompts.length - 1) {
+      setCreatePromptStep((createPromptStep + 1) as EscrowDetailPromptIndex);
+      return;
+    }
     navigate("milestones");
+  };
+
+  const handleCreatePromptBack = () => {
+    setCreatePromptError(null);
+    setMessage(null);
+    if (createPromptStep === 0) {
+      navigate("welcome");
+      return;
+    }
+    setCreatePromptStep((createPromptStep - 1) as EscrowDetailPromptIndex);
   };
 
   const handleAddMilestone = () => {
@@ -1671,6 +1697,7 @@ const findTransactionById = (id: number) => {
       setCreateForm({
         role: "buyer",
         counterpartyEmail: "",
+        counterpartyEmailConfirmation: "",
         title: "",
         amount: "",
         category: "Goods",
@@ -1678,6 +1705,9 @@ const findTransactionById = (id: number) => {
         partyType: "individual",
         business: emptyBusinessDetails(),
       });
+      setCreatePromptStep(0);
+      setCreatePromptError(null);
+      setDescriptionSkipped(false);
       setMilestones([]);
       setMilestoneInputs({ title: "", amount: "", description: "", deadline: "" });
       setEditingMilestoneId(null);
@@ -2702,163 +2732,391 @@ const handleWalletWithdraw = async () => {
 
   const renderCreate = () => {
     const counterpartLabel = createForm.role === "buyer" ? "Seller" : "Buyer";
+    const prompt = escrowDetailPrompts[createPromptStep];
+    const progress = Math.round(((createPromptStep + 1) / escrowDetailPrompts.length) * 100);
 
-    return (
-      <section className="screen active create-flow wizard-screen">
-        <EscrowWizardHeader currentStep={1} title="Create a new transaction" description="Set the foundation for a secure agreement." />
-        <div className="create-flow__hero create-flow__intro">
-          <div className="lead create-flow__lead">
-            <p style={{ margin: 0 }}>
-              After you submit, we&apos;ll invite the counterparty to review and sign. Once both parties have
-              signed, the buyer funds the escrow.
-            </p>
-          </div>
-        </div>
-        <div className="create-flow__grid">
-          <div className="card create-flow__form-card">
-            <div className="create-form-section">
-              <div className="muted create-form-label">Your role</div>
-              <div className="role-toggle create-form-role">
-                {["buyer", "seller"].map((role) => (
+    const updateCreateForm = <Key extends keyof typeof createForm>(
+      key: Key,
+      value: (typeof createForm)[Key],
+    ) => {
+      setCreateForm((current) => ({ ...current, [key]: value }));
+      setCreatePromptError(null);
+    };
+
+    const renderPrompt = () => {
+      switch (createPromptStep) {
+        case 0:
+          return (
+            <fieldset className="walkthrough-fieldset">
+              <legend className="sr-only">{prompt.title}</legend>
+              <div className="walkthrough-choice-grid">
+                {(["buyer", "seller"] as const).map((role) => (
                   <label
                     key={role}
-                    className={`role-option ${createForm.role === role ? "active" : ""}`}
-                    onClick={() =>
-                      setCreateForm((prev) => ({
-                        ...prev,
-                        role: role as "buyer" | "seller",
-                      }))
-                    }
+                    className={`walkthrough-choice ${createForm.role === role ? "active" : ""}`}
                   >
-                    <input type="radio" name="role" checked={createForm.role === role} readOnly />
-                    <span className="role-copy">
-                      {role === "buyer" ? "I'm the buyer" : "I'm the seller"}
+                    <input
+                      type="radio"
+                      name="role"
+                      checked={createForm.role === role}
+                      onChange={() => updateCreateForm("role", role)}
+                    />
+                    <span className="walkthrough-choice__icon" aria-hidden="true">
+                      {role === "buyer" ? "↓" : "↑"}
+                    </span>
+                    <span>
+                      <strong>{role === "buyer" ? "I'm the buyer" : "I'm the seller"}</strong>
+                      <small>
+                        {role === "buyer"
+                          ? "You will fund the escrow after both parties sign."
+                          : "You will receive funds as work is approved."}
+                      </small>
                     </span>
                   </label>
                 ))}
               </div>
-            </div>
-            <div className="create-form-section">
-              <div className="muted create-form-label">You are creating this escrow as</div>
-              <div className="role-toggle create-form-role">
-                {(["individual", "business"] as const).map((partyType) => (
-                  <label
-                    key={partyType}
-                    className={`role-option ${createForm.partyType === partyType ? "active" : ""}`}
-                    onClick={() => setCreateForm((current) => ({
-                      ...current,
-                      partyType,
-                      business: partyType === "business" && businessProfileQuery.data?.businessProfile && !Object.values(current.business).some((value) => value.trim())
-                        ? businessProfileQuery.data.businessProfile
-                        : current.business,
-                    }))}
-                  >
-                    <input type="radio" name="creator-party-type" checked={createForm.partyType === partyType} readOnly />
-                    <span className="role-copy">{partyType === "individual" ? "Myself" : "A business"}</span>
-                  </label>
-                ))}
-              </div>
+            </fieldset>
+          );
+        case 1:
+          return (
+            <>
+              <fieldset className="walkthrough-fieldset">
+                <legend className="sr-only">{prompt.title}</legend>
+                <div className="walkthrough-choice-grid">
+                  {(["individual", "business"] as const).map((partyType) => (
+                    <label
+                      key={partyType}
+                      className={`walkthrough-choice ${createForm.partyType === partyType ? "active" : ""}`}
+                    >
+                      <input
+                        type="radio"
+                        name="creator-party-type"
+                        checked={createForm.partyType === partyType}
+                        onChange={() => {
+                          const nextBusiness =
+                            partyType === "business"
+                            && businessProfileQuery.data?.businessProfile
+                            && !Object.values(createForm.business).some((value) => value.trim())
+                              ? businessProfileQuery.data.businessProfile
+                              : createForm.business;
+                          setCreateForm((current) => ({
+                            ...current,
+                            partyType,
+                            business: nextBusiness,
+                          }));
+                          setCreatePromptError(null);
+                        }}
+                      />
+                      <span className="walkthrough-choice__icon" aria-hidden="true">
+                        {partyType === "individual" ? "01" : "Co"}
+                      </span>
+                      <span>
+                        <strong>{partyType === "individual" ? "Myself" : "A business"}</strong>
+                        <small>
+                          {partyType === "individual"
+                            ? "Use your personal identity on the agreement."
+                            : "Sign as an authorized business representative."}
+                        </small>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
               {createForm.partyType === "business" ? (
-                <div className="business-identity-fields">
+                <div className="business-identity-fields walkthrough-followup">
                   <div className="form-field">
-                    <label className="muted">Business Name</label>
-                    <input value={createForm.business.legalName} onChange={(event) => setCreateForm((current) => ({ ...current, business: { ...current.business, legalName: event.target.value } }))} />
+                    <label htmlFor="walkthrough-business-name">
+                      Business name <span aria-hidden="true">*</span>
+                    </label>
+                    <input
+                      id="walkthrough-business-name"
+                      value={createForm.business.legalName}
+                      autoComplete="organization"
+                      onChange={(event) => {
+                        setCreateForm((current) => ({
+                          ...current,
+                          business: { ...current.business, legalName: event.target.value },
+                        }));
+                        setCreatePromptError(null);
+                      }}
+                    />
                   </div>
                   <div className="form-field">
-                    <label className="muted">Your Title</label>
-                    <input value={createForm.business.representativeTitle} placeholder="Director, owner, officer…" onChange={(event) => setCreateForm((current) => ({ ...current, business: { ...current.business, representativeTitle: event.target.value } }))} />
+                    <label htmlFor="walkthrough-business-title">
+                      Your title <span aria-hidden="true">*</span>
+                    </label>
+                    <input
+                      id="walkthrough-business-title"
+                      value={createForm.business.representativeTitle}
+                      placeholder="Director, owner, officer…"
+                      autoComplete="organization-title"
+                      onChange={(event) => {
+                        setCreateForm((current) => ({
+                          ...current,
+                          business: {
+                            ...current.business,
+                            representativeTitle: event.target.value,
+                          },
+                        }));
+                        setCreatePromptError(null);
+                      }}
+                    />
                   </div>
                 </div>
               ) : null}
-            </div>
-            <div className="create-form-section">
+            </>
+          );
+        case 2:
+          return (
+            <div className="walkthrough-stacked-fields walkthrough-email-confirmation">
               <div className="form-field">
-                <label className="muted">Escrow name</label>
+                <label htmlFor="walkthrough-counterparty-email">
+                  {counterpartLabel} email <span aria-hidden="true">*</span>
+                </label>
                 <input
-                  type="text"
-                  value={createForm.title}
-                  placeholder="e.g., Northwind onboarding kit"
-                  onChange={(event) =>
-                    setCreateForm((prev) => ({ ...prev, title: event.target.value }))
-                  }
-                />
-              </div>
-              <div className="form-field">
-                <label className="muted">{counterpartLabel} email</label>
-                <input
+                  id="walkthrough-counterparty-email"
                   type="email"
                   value={createForm.counterpartyEmail}
                   placeholder="counterparty@example.com"
-                  onChange={(event) =>
-                    setCreateForm((prev) => ({ ...prev, counterpartyEmail: event.target.value }))
-                  }
+                  autoComplete="email"
+                  autoFocus
+                  onChange={(event) => updateCreateForm("counterpartyEmail", event.target.value)}
                 />
+                <small>We&apos;ll send the agreement here for review and signature.</small>
               </div>
               <div className="form-field">
-                <label className="muted">Amount</label>
+                <label htmlFor="walkthrough-counterparty-email-confirmation">
+                  Re-enter {counterpartLabel.toLowerCase()} email <span aria-hidden="true">*</span>
+                </label>
                 <input
-                  type="text"
-                  inputMode="decimal"
-                  value={formatCurrencyInput(createForm.amount)}
-                  placeholder="$0.00"
+                  id="walkthrough-counterparty-email-confirmation"
+                  type="email"
+                  value={createForm.counterpartyEmailConfirmation}
+                  placeholder="Enter the email again"
+                  autoComplete="off"
                   onChange={(event) =>
-                    setCreateForm((prev) => ({
-                      ...prev,
-                      amount: normalizeCurrencyInput(event.target.value),
-                    }))
+                    updateCreateForm("counterpartyEmailConfirmation", event.target.value)
                   }
                 />
+                <small>Entering it twice helps catch accidental typos.</small>
+              </div>
+            </div>
+          );
+        case 3:
+          return (
+            <div className="walkthrough-stacked-fields">
+              <div className="form-field">
+                <label htmlFor="walkthrough-title">
+                  Escrow name <span aria-hidden="true">*</span>
+                </label>
+                <input
+                  id="walkthrough-title"
+                  type="text"
+                  value={createForm.title}
+                  placeholder="e.g., Northwind onboarding kit"
+                  autoFocus
+                  onChange={(event) => updateCreateForm("title", event.target.value)}
+                />
+                <small>Use a name both parties will recognize later.</small>
               </div>
               <div className="form-field">
-                <label className="muted">Category</label>
+                <label htmlFor="walkthrough-category">Category</label>
                 <select
+                  id="walkthrough-category"
                   value={createForm.category}
-                  onChange={(event) =>
-                    setCreateForm((prev) => ({ ...prev, category: event.target.value }))
-                  }
+                  onChange={(event) => updateCreateForm("category", event.target.value)}
                 >
                   <option>Goods</option>
                   <option>Services</option>
                   <option>Other</option>
                 </select>
               </div>
-              <div className="form-field">
-                <label className="muted" htmlFor="escrow-description">
-                  Escrow description
-                </label>
-                <textarea
-                  id="escrow-description"
-                  rows={3}
-                  value={createForm.description}
-                  placeholder="Brief context to help both parties remember the scope"
+            </div>
+          );
+        case 4:
+          return (
+            <div className="form-field walkthrough-single-field walkthrough-amount-field">
+              <label htmlFor="walkthrough-amount">
+                Escrow amount <span aria-hidden="true">*</span>
+              </label>
+              <div className="walkthrough-currency-input">
+                <span aria-hidden="true">$</span>
+                <input
+                  id="walkthrough-amount"
+                  type="text"
+                  inputMode="decimal"
+                  value={formatCurrencyInput(createForm.amount).replace(/^\$/, "")}
+                  placeholder="0.00"
+                  autoFocus
                   onChange={(event) =>
-                    setCreateForm((prev) => ({ ...prev, description: event.target.value }))
+                    updateCreateForm("amount", normalizeCurrencyInput(event.target.value))
                   }
                 />
               </div>
+              <small>This is the total the buyer will fund after both parties sign.</small>
             </div>
-            <div className="create-flow__actions">
-              <button className="ghost" onClick={() => navigate("welcome")}>
-                Cancel
-              </button>
-              <button className="btn" onClick={handleCreateNext}>
-                Next - Milestones
-              </button>
+          );
+        case 5:
+          return (
+            <div className="form-field walkthrough-single-field">
+              <label htmlFor="walkthrough-description">
+                Scope summary <span className="field-optional">Recommended</span>
+              </label>
+              <textarea
+                id="walkthrough-description"
+                rows={5}
+                value={createForm.description}
+                placeholder="Describe what is being provided, the expected outcome, and any important boundaries."
+                autoFocus
+                onChange={(event) => {
+                  updateCreateForm("description", event.target.value);
+                  setDescriptionSkipped(false);
+                }}
+              />
+              <small>This gives both parties shared context before you define payment milestones.</small>
             </div>
+          );
+      }
+    };
+
+    const answerSummary = [
+      createForm.role === "buyer" ? "Buyer" : "Seller",
+      createForm.partyType === "business"
+        ? createForm.business.legalName || "Business"
+        : "Myself",
+      createForm.counterpartyEmail || "Not answered",
+      createForm.title || "Not answered",
+      createForm.amount ? formatCurrency(Number(createForm.amount)) : "Not answered",
+      createForm.description
+        ? "Scope added"
+        : descriptionSkipped
+          ? "Skipped"
+          : "Not answered",
+    ];
+
+    return (
+      <section className="screen active create-flow wizard-screen">
+        <EscrowWizardHeader
+          currentStep={1}
+          title="Create a new transaction"
+          description="We'll guide you through one decision at a time."
+        />
+        <div className="create-flow__hero create-flow__intro">
+          <div className="lead create-flow__lead">
+            <p style={{ margin: 0 }}>
+              Your answers are saved as you go. You&apos;ll review everything before the escrow is sent.
+            </p>
           </div>
-          <aside className="card create-flow__aside">
-            <h3 className="create-aside-title">What happens next</h3>
-            <ol className="create-flow__steps">
-              {createGuideSteps.map((step, index) => (
-                <li key={step.title}>
-                  <span className="create-step-index">{String(index + 1).padStart(2, "0")}</span>
-                  <div>
-                    <div className="create-step-title">{step.title}</div>
-                    <p className="muted create-step-detail">{step.detail}</p>
-                  </div>
-                </li>
-              ))}
+        </div>
+        <div className="walkthrough-layout">
+          <form
+            className="card walkthrough-card"
+            onSubmit={(event) => {
+              event.preventDefault();
+              handleCreatePromptNext();
+            }}
+          >
+            <div className="walkthrough-card__meta">
+              <span>Question {createPromptStep + 1} of {escrowDetailPrompts.length}</span>
+              <span>{progress}% complete</span>
+            </div>
+            <div
+              className="walkthrough-progress-track"
+              role="progressbar"
+              aria-label="Transaction details progress"
+              aria-valuemin={1}
+              aria-valuemax={escrowDetailPrompts.length}
+              aria-valuenow={createPromptStep + 1}
+            >
+              <span style={{ width: `${progress}%` }} />
+            </div>
+            <div className="walkthrough-prompt">
+              <span className="walkthrough-prompt__label">{prompt.shortLabel}</span>
+              <h3 ref={createPromptHeadingRef} tabIndex={-1}>{prompt.title}</h3>
+              {createPromptStep === 0 ? (
+                <p>Choose the role you will have when this agreement is signed.</p>
+              ) : createPromptStep === 1 ? (
+                <p>We&apos;ll use this identity for your side of the agreement.</p>
+              ) : null}
+            </div>
+            <div className="walkthrough-answer">{renderPrompt()}</div>
+            {createPromptError ? (
+              <div className="walkthrough-error" role="alert">
+                <span aria-hidden="true">!</span>
+                {createPromptError}
+              </div>
+            ) : null}
+            <div className="walkthrough-actions">
+              <button type="button" className="ghost" onClick={handleCreatePromptBack}>
+                {createPromptStep === 0 ? "Cancel" : "Back"}
+              </button>
+              <div>
+                {createPromptStep === 5 && !createForm.description.trim() ? (
+                  <button
+                    type="button"
+                    className="ghost"
+                    onClick={() => {
+                      setDescriptionSkipped(true);
+                      setCreatePromptError(null);
+                      setMessage(null);
+                      navigate("milestones");
+                    }}
+                  >
+                    Skip for now
+                  </button>
+                ) : null}
+                <button type="submit" className="btn">
+                  {createPromptStep === escrowDetailPrompts.length - 1
+                    ? "Continue to milestones"
+                    : "Continue"}
+                </button>
+              </div>
+            </div>
+          </form>
+          <aside className="card walkthrough-outline" aria-label="Details walkthrough progress">
+            <div className="walkthrough-outline__heading">
+              <span>Details walkthrough</span>
+              <strong>{createPromptStep + 1} / {escrowDetailPrompts.length}</strong>
+            </div>
+            <ol>
+              {escrowDetailPrompts.map((step, index) => {
+                const status =
+                  index < createPromptStep
+                    ? "complete"
+                    : index === createPromptStep
+                      ? "active"
+                      : "upcoming";
+                return (
+                  <li key={step.shortLabel} data-status={status}>
+                    <span className="walkthrough-outline__marker" aria-hidden="true">
+                      {status === "complete" ? "✓" : index + 1}
+                    </span>
+                    <div>
+                      <strong>{step.shortLabel}</strong>
+                      <small>{answerSummary[index]}</small>
+                    </div>
+                    {status === "complete" ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCreatePromptStep(index as EscrowDetailPromptIndex);
+                          setCreatePromptError(null);
+                        }}
+                        aria-label={`Edit ${step.shortLabel.toLowerCase()}`}
+                      >
+                        Edit
+                      </button>
+                    ) : null}
+                  </li>
+                );
+              })}
             </ol>
+            <div className="walkthrough-outline__note">
+              <span aria-hidden="true">✓</span>
+              <p>
+                You won&apos;t advance past a required question until it has been answered.
+              </p>
+            </div>
           </aside>
         </div>
       </section>
