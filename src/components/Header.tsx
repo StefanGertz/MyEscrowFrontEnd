@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import Image from "next/image";
+import { useState } from "react";
 
 type HeaderProps = {
   activeScreen?: string;
@@ -15,8 +16,13 @@ type HeaderProps = {
   onSettingsClick?: () => void;
 };
 
-export function Header({
-  activeScreen,
+export function Header(props: HeaderProps) {
+  const menuScope = props.activeScreen ?? "default";
+
+  return <HeaderContent key={menuScope} {...props} />;
+}
+
+function HeaderContent({
   notificationCount = 0,
   hasUnreadNotifications,
   primaryLabel = "New Escrow",
@@ -27,13 +33,8 @@ export function Header({
   onAlertsClick,
   onSettingsClick,
 }: HeaderProps) {
-  const menuScope = activeScreen ?? "default";
   const [menuOpen, setMenuOpen] = useState(false);
   const showNotificationBadge = hasUnreadNotifications ?? notificationCount > 0;
-
-  useEffect(() => {
-    setMenuOpen(false);
-  }, [menuScope]);
 
   const runMenuAction = (action?: () => void) => {
     setMenuOpen(false);
@@ -43,7 +44,14 @@ export function Header({
   return (
     <header className="app-header">
       <button className="brand" type="button" onClick={() => runMenuAction(onBrandClick)}>
-        <img className="logo-mark" src="/myescrow-mark.svg" alt="" aria-hidden="true" />
+        <Image
+          className="logo-mark"
+          src="/myescrow-mark.svg"
+          alt=""
+          aria-hidden="true"
+          width={64}
+          height={64}
+        />
         <div className="brand-copy">
           <span>MyEscrow</span>
         </div>

@@ -42,6 +42,9 @@ describe("mobile header menu", () => {
 
     rerender(<Header activeScreen="wallet" />);
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+
+    rerender(<Header activeScreen="dashboard" />);
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 
   it("can hide the alerts badge while alerts still exist", () => {

@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { Header } from "@/components/Header";
@@ -45,7 +46,10 @@ import { useToast } from "@/components/ToastProvider";
 import { useAuth } from "@/components/AuthProvider";
 import { moveItem, sortByDeadline } from "@/lib/milestoneOrdering";
 import { orderNotifications } from "@/lib/notificationOrdering";
-import { latestNotificationSeenToken, notificationSeenStorageKey } from "@/lib/notificationSeen";
+import {
+  latestNotificationSeenToken,
+  useNotificationSeenToken,
+} from "@/lib/notificationSeen";
 import {
   formatCurrencyInput,
   formatCurrencyValue as formatCurrency,
@@ -1055,7 +1059,8 @@ function MockExperienceHome({ searchParams }: HomeProps) {
   const [modalContent, setModalContent] = useState<ModalContent | null>(null);
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const [notificationsPanelOpen, setNotificationsPanelOpen] = useState(false);
-  const [seenNotificationToken, setSeenNotificationToken] = useState("");
+  const { seenNotificationToken, saveNotificationSeenToken } =
+    useNotificationSeenToken(profileIdentity.id);
 
   const createEscrowMutation = useCreateEscrow();
   const businessProfileQuery = useBusinessProfile();
@@ -1264,8 +1269,7 @@ function MockExperienceHome({ searchParams }: HomeProps) {
 
   const markAlertsSeen = () => {
     if (!latestAlertToken) return;
-    setSeenNotificationToken(latestAlertToken);
-    window.localStorage.setItem(notificationSeenStorageKey(profileIdentity.id), latestAlertToken);
+    saveNotificationSeenToken(latestAlertToken);
   };
 
 useEffect(() => {
@@ -1283,14 +1287,10 @@ useEffect(() => {
 }, [notificationsQuery.isError, pushToast]);
 
 useEffect(() => {
-  setSeenNotificationToken(window.localStorage.getItem(notificationSeenStorageKey(profileIdentity.id)) ?? "");
-}, [profileIdentity.id]);
-
-useEffect(() => {
-  if (notificationsPanelOpen) {
-    markAlertsSeen();
+  if (notificationsPanelOpen && latestAlertToken) {
+    saveNotificationSeenToken(latestAlertToken);
   }
-}, [notificationsPanelOpen, latestAlertToken]);
+}, [notificationsPanelOpen, latestAlertToken, saveNotificationSeenToken]);
 
 useEffect(() => {
   if (!isHydrating && !isAuthenticated) {
@@ -4764,7 +4764,13 @@ function SplashScreen() {
   return (
     <main className="splash-screen" aria-label="Loading MyEscrow">
       <div className="splash-logo-wrap">
-        <img className="splash-logo" src="/myescrow-logo.png" alt="MyEscrow" />
+        <Image
+          className="splash-logo"
+          src="/myescrow-logo.png"
+          alt="MyEscrow"
+          width={1254}
+          height={1254}
+        />
       </div>
     </main>
   );

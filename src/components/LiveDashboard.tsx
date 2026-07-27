@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { Header } from "@/components/Header";
@@ -15,7 +15,10 @@ import {
   useNotifications,
 } from "@/hooks/useDashboardData";
 import { orderNotifications } from "@/lib/notificationOrdering";
-import { latestNotificationSeenToken, notificationSeenStorageKey } from "@/lib/notificationSeen";
+import {
+  latestNotificationSeenToken,
+  useNotificationSeenToken,
+} from "@/lib/notificationSeen";
 
 type EscrowFormState = {
   title: string;
@@ -45,11 +48,12 @@ export function LiveDashboard() {
     description: "",
   });
   const [formError, setFormError] = useState<string | null>(null);
-  const [seenNotificationToken, setSeenNotificationToken] = useState("");
 
   const notificationCount = notificationsQuery.data?.notifications.length ?? 0;
   const displayName = user?.name?.trim() || user?.email || "Your account";
   const notificationUserId = user?.id ?? user?.email ?? "anonymous";
+  const { seenNotificationToken, saveNotificationSeenToken } =
+    useNotificationSeenToken(notificationUserId);
 
   const summaryMetrics = overviewQuery.data?.summaryMetrics ?? [];
   const disputes = disputesQuery.data?.disputes ?? [];
@@ -66,13 +70,8 @@ export function LiveDashboard() {
 
   const markAlertsSeen = () => {
     if (!latestAlertToken) return;
-    setSeenNotificationToken(latestAlertToken);
-    window.localStorage.setItem(notificationSeenStorageKey(notificationUserId), latestAlertToken);
+    saveNotificationSeenToken(latestAlertToken);
   };
-
-  useEffect(() => {
-    setSeenNotificationToken(window.localStorage.getItem(notificationSeenStorageKey(notificationUserId)) ?? "");
-  }, [notificationUserId]);
 
   const handleEscrowSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
