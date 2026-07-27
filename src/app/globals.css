@@ -3635,29 +3635,103 @@ select:focus {
 }
 .dashboard-transactions .section-title-row { flex: 0 0 auto; }
 .dashboard-transactions__list {
-  max-height: clamp(260px, 48dvh, 520px);
+  max-height: none;
   margin-top: 12px;
-  padding-right: 8px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-color: rgba(10, 166, 154, .42) transparent;
-  scrollbar-gutter: stable;
-  scrollbar-width: thin;
+  padding-right: 0;
+  overflow: visible;
 }
-.dashboard-transactions__list:focus-visible {
-  border-radius: 12px;
-  outline: 2px solid rgba(10, 166, 154, .55);
-  outline-offset: 4px;
-}
-.dashboard-transactions__list::-webkit-scrollbar { width: 7px; }
-.dashboard-transactions__list::-webkit-scrollbar-track { background: transparent; }
-.dashboard-transactions__list::-webkit-scrollbar-thumb {
-  border-radius: 999px;
-  background: rgba(10, 166, 154, .32);
-}
-.dashboard-transactions__list::-webkit-scrollbar-thumb:hover { background: rgba(10, 166, 154, .52); }
 .dashboard-screen .tx-item { padding: 15px 16px; border-color: transparent; background: #f8fbfb; box-shadow: none; }
 .dashboard-screen .tx-item:hover { border-color: rgba(10,166,154,.2); background: #fff; }
+
+.section-title-row > .portfolio-list-actions {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.portfolio-list-count {
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(10,166,154,.1);
+  color: #087c78;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.portfolio-see-all { min-height: 36px; padding: 7px 11px; }
+
+.portfolio-transaction-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  padding: 0 !important;
+  overflow: hidden;
+}
+
+.portfolio-transaction-row__main {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 15px 16px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.portfolio-transaction-row__main > span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.portfolio-transaction-row__main strong,
+.portfolio-transaction-row__main .muted {
+  overflow-wrap: anywhere;
+}
+
+.portfolio-transaction-row__meta {
+  flex: 0 0 auto;
+  align-items: flex-end;
+  text-align: right;
+}
+
+.portfolio-transaction-row__archive {
+  min-height: 38px;
+  margin-right: 14px;
+  padding: 7px 11px;
+}
+
+.portfolio-transaction-row:has(.portfolio-transaction-row__main:hover) {
+  border-color: rgba(10,166,154,.2);
+  background: #fff;
+}
+
+.portfolio-transaction-row--archived { opacity: .72; }
+
+.portfolio-empty-state {
+  padding: 18px;
+  border: 1px dashed rgba(10,166,154,.2);
+  border-radius: 12px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.portfolio-all-card { margin-top: 12px; }
+.portfolio-all-list { margin-top: 0; }
+
+.portfolio-archived-heading {
+  margin-top: 24px;
+  padding-top: 22px;
+  border-top: 1px solid rgba(10,166,154,.12);
+}
 
 /* Transaction detail */
 .transaction-screen > .card { border-color: var(--section-border); box-shadow: var(--section-shadow); }
@@ -3941,6 +4015,26 @@ select:focus {
 
   .alerts-tile .alerts-history > summary::after {
     margin-left: auto;
+  }
+
+  .portfolio-transaction-row__main {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 7px;
+    padding: 14px;
+  }
+
+  .portfolio-transaction-row__meta {
+    align-items: flex-start;
+    text-align: left;
+  }
+
+  .portfolio-transaction-row__archive {
+    margin-right: 12px;
+  }
+
+  .portfolio-all-card {
+    padding: 16px;
   }
 
   .settings-stack > .setting-card:first-child { grid-column: auto; }

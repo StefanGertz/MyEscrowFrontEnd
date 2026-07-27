@@ -70,6 +70,10 @@ import { useConfirmDialog } from "@/components/ConfirmDialogProvider";
 import { jsPDF } from "jspdf";
 import { apiFetch } from "@/lib/apiClient";
 import { findTransactionByToken } from "@/lib/transactionRouting";
+import {
+  parseArchivedTransactionTokens,
+  updateArchivedTransactionTokens,
+} from "@/lib/transactionArchive";
 import { LiveDashboard } from "@/components/LiveDashboard";
 import { NotificationTimestamp } from "@/components/NotificationTimestamp";
 import { ChangePasswordModal } from "@/components/ChangePasswordModal";
@@ -82,6 +86,7 @@ type ScreenId =
   | "milestones"
   | "agreement"
   | "wallet"
+  | "transactions"
   | "history"
   | "escrows"
   | "settings"
@@ -339,6 +344,7 @@ const screenIds: ScreenId[] = [
   "milestones",
   "agreement",
   "wallet",
+  "transactions",
   "history",
   "escrows",
   "settings",
@@ -963,6 +969,7 @@ function MockExperienceHome({ searchParams }: HomeProps) {
     balance: number;
   } | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>(initialTransactions);
+  const [archivedTransactionTokens, setArchivedTransactionTokens] = useState<string[]>([]);
   const transactionsRef = useRef(transactions);
   const visibleTransactionsRef = useRef<Transaction[]>(transactions);
   const [selectedTransactionToken, setSelectedTransactionToken] = useState<string | number | null>(() =>
@@ -1063,6 +1070,7 @@ function MockExperienceHome({ searchParams }: HomeProps) {
       }
     : { id: profileDraft.userId, name: profileDraft.name, email: profileDraft.email };
   const currentUser = { name: profileIdentity.name, email: profileIdentity.email };
+  const transactionArchiveStorageKey = `myescrow.archived-transactions.${profileIdentity.id}`;
   const savedProfile = resolveProfileDraft(profileDraft, profileIdentity);
   const profile = resolveProfileDraft(profileFormDraft, profileIdentity);
   const greetingName = currentUser.name.trim().split(/\s+/)[0] || currentUser.name;
@@ -1134,6 +1142,19 @@ function MockExperienceHome({ searchParams }: HomeProps) {
       }))
     : mockWalletHistory;
   const displayTransactions = liveDataEnabled ? liveTransactions : transactions;
+  const archivedTransactionSet = useMemo(
+    () => new Set(archivedTransactionTokens),
+    [archivedTransactionTokens],
+  );
+  const transactionArchiveToken = (transaction: Transaction) =>
+    String(transaction.reference ?? transaction.id);
+  const visiblePortfolioTransactions = displayTransactions.filter(
+    (transaction) => !archivedTransactionSet.has(transactionArchiveToken(transaction)),
+  );
+  const archivedPortfolioTransactions = displayTransactions.filter(
+    (transaction) => archivedTransactionSet.has(transactionArchiveToken(transaction)),
+  );
+  const dashboardTransactions = visiblePortfolioTransactions.slice(0, 4);
   const { pushToast } = useToast();
   const { confirm } = useConfirmDialog();
   const walletTopup = useWalletTopup();
@@ -1309,6 +1330,16 @@ useEffect(() => {
   }
 }, [isHydrating, isAuthenticated, router]);
 
+useEffect(() => {
+  try {
+    setArchivedTransactionTokens(
+      parseArchivedTransactionTokens(window.localStorage.getItem(transactionArchiveStorageKey)),
+    );
+  } catch {
+    setArchivedTransactionTokens([]);
+  }
+}, [transactionArchiveStorageKey]);
+
   const milestoneTotal = useMemo(
     () => milestones.reduce((sum, item) => sum + item.amount, 0),
     [milestones],
@@ -1341,7 +1372,7 @@ const navActiveId = useMemo<ScreenId>(() => {
   if (["milestones", "agreement"].includes(activeScreen)) {
     return "create";
   }
-  if (activeScreen === "transaction" || activeScreen === "history") {
+  if (activeScreen === "transaction" || activeScreen === "transactions" || activeScreen === "history") {
     return "dashboard";
   }
   return activeScreen;
@@ -1370,6 +1401,25 @@ const viewTransaction = (tx: Transaction) => {
   const txToken = tx.reference ?? String(tx.id);
   window.history.pushState({ screen: "transaction", txId: txToken }, "", `/?screen=transaction&tx=${encodeURIComponent(txToken)}`);
   setActiveScreen("transaction");
+};
+
+const setTransactionArchived = (transaction: Transaction, archived: boolean) => {
+  const token = transactionArchiveToken(transaction);
+  setArchivedTransactionTokens((current) => {
+    const next = updateArchivedTransactionTokens(current, token, archived);
+    try {
+      window.localStorage.setItem(transactionArchiveStorageKey, JSON.stringify(next));
+    } catch {
+      // Keep the current session responsive if browser storage is unavailable.
+    }
+    return next;
+  });
+  pushToast({
+    variant: "success",
+    title: archived
+      ? `${transaction.title} was hidden from the dashboard.`
+      : `${transaction.title} was restored to the dashboard.`,
+  });
 };
 
 const recordWalletHistory = (type: WalletHistoryEntry["type"], amount: number) => {
@@ -2883,6 +2933,37 @@ const handleWalletWithdraw = async () => {
     </section>
   );
 
+  const renderPortfolioTransactionRow = (tx: Transaction, archived = false) => (
+    <div
+      key={tx.id}
+      className={`tx-item portfolio-transaction-row${archived ? " portfolio-transaction-row--archived" : ""}`}
+    >
+      <button
+        className="portfolio-transaction-row__main"
+        type="button"
+        onClick={() => viewTransaction(tx)}
+        aria-label={`View transaction ${tx.title}`}
+      >
+        <span>
+          <strong>{tx.title}</strong>
+          <span className="muted">{tx.counterpart}</span>
+        </span>
+        <span className="portfolio-transaction-row__meta">
+          <span>{formatCurrency(tx.amount)}</span>
+          <span className="muted">{tx.context}</span>
+        </span>
+      </button>
+      <button
+        className="ghost portfolio-transaction-row__archive"
+        type="button"
+        onClick={() => setTransactionArchived(tx, !archived)}
+        aria-label={`${archived ? "Restore" : "Archive"} ${tx.title}`}
+      >
+        {archived ? "Restore" : "Archive"}
+      </button>
+    </div>
+  );
+
   const renderDashboard = () => (
     <section className="screen active dashboard-screen app-content-page">
       <div className="compact-page-header">
@@ -2954,39 +3035,25 @@ const handleWalletWithdraw = async () => {
       <div className="card dashboard-transactions" style={{ marginBottom: 12 }}>
         <div className="section-title-row">
           <div><span>Portfolio</span><strong>Transactions</strong></div>
-          <span>{displayTransactions.length} total</span>
+          <div className="portfolio-list-actions">
+            <span className="portfolio-list-count">{visiblePortfolioTransactions.length} visible</span>
+            <button className="ghost portfolio-see-all" type="button" onClick={() => navigate("transactions")}>
+              See all
+            </button>
+          </div>
         </div>
         <div
           className="tx-list dashboard-transactions__list"
           role="region"
           aria-label="Transactions list"
-          tabIndex={0}
         >
-          {displayTransactions.map((tx) => (
-            <div
-              key={tx.id}
-              className="tx-item tx-item--interactive"
-              role="button"
-              tabIndex={0}
-              onClick={() => viewTransaction(tx)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  viewTransaction(tx);
-                }
-              }}
-            >
-              <div>
-                <div style={{ fontWeight: 700 }}>{tx.title}</div>
-                <div className="muted">{tx.counterpart}</div>
-              </div>
-              <div style={{ textAlign: "right" }}>
-                <div>{formatCurrency(tx.amount)}</div>
-                <div className="muted">{tx.context}</div>
-                  <div className="flex flex-wrap gap-2 justify-end mt-2" />
-              </div>
+          {dashboardTransactions.length ? (
+            dashboardTransactions.map((tx) => renderPortfolioTransactionRow(tx))
+          ) : (
+            <div className="portfolio-empty-state">
+              All transactions are archived. Use See all to restore one.
             </div>
-          ))}
+          )}
         </div>
       </div>
     </section>
@@ -3780,6 +3847,49 @@ const handleWalletWithdraw = async () => {
             ))}
           </div>
         )}
+      </div>
+    </section>
+  );
+
+  const renderTransactions = () => (
+    <section className="screen active app-content-page collection-screen portfolio-screen">
+      <div className="compact-page-header">
+        <div>
+          <p className="compact-page-header__eyebrow">Portfolio</p>
+          <h2>All transactions</h2>
+          <p>Review every transaction and manage what appears on your dashboard.</p>
+        </div>
+      </div>
+      <div className="card portfolio-all-card">
+        <div className="section-title-row">
+          <div>
+            <span>Visible</span>
+            <strong>Dashboard transactions</strong>
+          </div>
+          <span>{visiblePortfolioTransactions.length}</span>
+        </div>
+        <div className="tx-list portfolio-all-list">
+          {visiblePortfolioTransactions.length ? (
+            visiblePortfolioTransactions.map((tx) => renderPortfolioTransactionRow(tx))
+          ) : (
+            <div className="portfolio-empty-state">No transactions are currently visible on the dashboard.</div>
+          )}
+        </div>
+
+        <div className="section-title-row portfolio-archived-heading">
+          <div>
+            <span>Hidden</span>
+            <strong>Archived transactions</strong>
+          </div>
+          <span>{archivedPortfolioTransactions.length}</span>
+        </div>
+        <div className="tx-list portfolio-all-list">
+          {archivedPortfolioTransactions.length ? (
+            archivedPortfolioTransactions.map((tx) => renderPortfolioTransactionRow(tx, true))
+          ) : (
+            <div className="portfolio-empty-state">No archived transactions.</div>
+          )}
+        </div>
       </div>
     </section>
   );
@@ -5404,6 +5514,8 @@ const handleWalletWithdraw = async () => {
         return renderAgreement();
       case "wallet":
         return renderWallet();
+      case "transactions":
+        return renderTransactions();
       case "history":
         return renderHistory();
       case "escrows":
