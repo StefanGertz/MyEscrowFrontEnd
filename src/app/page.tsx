@@ -4085,9 +4085,9 @@ const handleWalletWithdraw = async () => {
           </div>
         </div>
         {tx.invitation || tx.agreement ? (
-          <div className="card" style={{ marginTop: 12 }}>
+          <div className="card agreement-invitation-card" style={{ marginTop: 12 }}>
             <strong>Agreement and invitation</strong>
-            <div className="transaction-overview" style={{ marginTop: 12 }}>
+            <div className="transaction-overview agreement-invitation-summary" style={{ marginTop: 12 }}>
               {tx.agreement ? (
                 <div className="transaction-summary-field">
                   <div className="muted">Agreement version</div>
@@ -4113,7 +4113,7 @@ const handleWalletWithdraw = async () => {
               ) : null}
             </div>
             {canRecoverInvitation ? (
-              <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+              <div className="agreement-invitation-actions">
                 <button
                   className="btn"
                   onClick={() => handleResendInvitation(tx)}

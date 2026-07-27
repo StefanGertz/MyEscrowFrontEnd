@@ -3652,6 +3652,7 @@ select:focus {
 .transaction-financial-summary { min-width: 180px; padding: 18px; border-radius: 15px; background: linear-gradient(135deg, #f0fbf9, #f8fdfc); text-align: left; }
 .transaction-financial-summary > div:first-child div:last-child { color: var(--brand-600); font-size: 22px; font-weight: 800 !important; }
 .transaction-download-action { margin-top: 12px; text-align: right; }
+.agreement-invitation-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .transaction-screen .process-step { box-shadow: none; }
 .transaction-screen .process-step[data-status="active"] { background: linear-gradient(135deg, rgba(10,166,154,.1), #fff); border-color: #0aa69a; }
 .transaction-screen .timeline { padding-left: 5px; }
@@ -3883,6 +3884,33 @@ select:focus {
   }
 
   .transaction-download-action .agreement-download-button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .agreement-invitation-summary {
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .agreement-invitation-summary > .transaction-summary-field {
+    width: 100%;
+    text-align: left;
+  }
+
+  .agreement-invitation-summary > .transaction-summary-field + .transaction-summary-field {
+    padding-top: 14px;
+    border-top: 1px solid rgba(10,166,154,.14);
+  }
+
+  .agreement-invitation-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 14px;
+  }
+
+  .agreement-invitation-actions > button {
     width: 100%;
     justify-content: center;
   }
