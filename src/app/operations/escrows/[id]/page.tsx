@@ -20,7 +20,7 @@ export default function OperationsEscrowPage() {
   useEffect(() => {
     if (isHydrating) return;
     if (!isAuthenticated) {
-      router.replace("/login");
+      router.replace("/operations/login");
       return;
     }
 

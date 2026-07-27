@@ -258,13 +258,13 @@ export default function OperationsPage() {
 
   const handleLogout = () => {
     logout();
-    router.replace("/login");
+    router.replace("/operations/login");
   };
 
   useEffect(() => {
     if (isHydrating) return;
     if (!isAuthenticated) {
-      router.replace("/login");
+      router.replace("/operations/login");
       return;
     }
     void load();
