@@ -4778,7 +4778,7 @@ const handleWalletWithdraw = async () => {
           </div>
         ) : null}
         {tx.lifecycleStatus === "funded" || tx.cancellation ? (
-          <div className="card" style={{ marginTop: 12 }}>
+          <div className="card cancellation-card" style={{ marginTop: 12 }}>
             <strong>Cancellation and refunds</strong>
             {tx.cancellation ? (
               <div style={{ marginTop: 10 }}>
@@ -4809,11 +4809,11 @@ const handleWalletWithdraw = async () => {
                 ) : null}
               </div>
             ) : (
-              <div style={{ marginTop: 10 }}>
-                <p className="muted" style={{ marginTop: 0 }}>
+              <div className="cancellation-form">
+                <p className="muted cancellation-form__intro">
                   A mutual cancellation refunds only unreleased, undisputed funds after the other party accepts. A unilateral request freezes new releases and enters governed review.
                 </p>
-                <label className="field">
+                <label className="field cancellation-form__field">
                   <span>Cancellation path</span>
                   <select
                     value={cancellationDrafts[tx.id]?.mode ?? "mutual"}
@@ -4829,7 +4829,7 @@ const handleWalletWithdraw = async () => {
                     <option value="unilateral">Unilateral governed review</option>
                   </select>
                 </label>
-                <label className="field" style={{ marginTop: 10 }}>
+                <label className="field cancellation-form__field">
                   <span>Reason</span>
                   <textarea
                     rows={2}
@@ -4845,8 +4845,7 @@ const handleWalletWithdraw = async () => {
                   />
                 </label>
                 <button
-                  className="ghost"
-                  style={{ marginTop: 10 }}
+                  className="ghost cancellation-form__action"
                   onClick={() => handleRequestFundedCancellation(tx)}
                   disabled={requestFundedCancellationMutation.isPending}
                 >
