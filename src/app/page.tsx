@@ -3273,13 +3273,6 @@ const handleWalletWithdraw = async () => {
           title="Create a new transaction"
           description="We'll guide you through one decision at a time."
         />
-        <div className="create-flow__hero create-flow__intro">
-          <div className="lead create-flow__lead">
-            <p style={{ margin: 0 }}>
-              Your answers are saved as you go. You&apos;ll review everything before the escrow is sent.
-            </p>
-          </div>
-        </div>
         <div className="walkthrough-layout">
           <form
             className="card walkthrough-card"
@@ -3302,6 +3295,10 @@ const handleWalletWithdraw = async () => {
             >
               <span style={{ width: `${progress}%` }} />
             </div>
+            <p className="walkthrough-save-note">
+              <span aria-hidden="true">✓</span>
+              Your answers are saved as you go. You&apos;ll review everything before the escrow is sent.
+            </p>
             <div className="walkthrough-prompt">
               <span className="walkthrough-prompt__label">{prompt.shortLabel}</span>
               <h3 ref={createPromptHeadingRef} tabIndex={-1}>{prompt.title}</h3>

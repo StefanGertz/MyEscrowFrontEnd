@@ -3121,8 +3121,6 @@ select:focus {
 .wizard-screen > .card,
 .create-flow__form-card,
 .create-flow__aside { border-color: var(--section-border); box-shadow: var(--section-shadow); }
-.create-flow__intro { padding: 2px 0; }
-.create-flow__intro .create-flow__lead { max-width: none; margin: 0; padding: 14px 0 0; }
 .create-flow__form-card { padding: 24px; }
 .create-form-section + .create-form-section { padding-top: 20px; border-top: 1px solid rgba(10,166,154,.12); }
 .create-form-label { color: var(--brand-500); font-size: 12px; letter-spacing: .04em; text-transform: uppercase; }
@@ -3169,6 +3167,25 @@ select:focus {
   border-radius: inherit;
   background: linear-gradient(90deg, #0aa69a, #45c7bc);
   transition: width 180ms ease;
+}
+
+.walkthrough-save-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.walkthrough-save-note > span {
+  color: #078c83;
+  font-weight: 900;
+}
+
+.walkthrough-save-note + .walkthrough-prompt {
+  margin-top: 28px;
 }
 
 .walkthrough-prompt {
@@ -3785,21 +3802,6 @@ select:focus {
     overflow-wrap: anywhere;
   }
 
-  .create-flow__intro .create-flow__lead {
-    display: flex;
-    align-items: flex-start;
-    gap: 8px;
-    padding: 2px 4px;
-    font-size: 13px;
-    line-height: 1.4;
-  }
-
-  .create-flow__intro .create-flow__lead::before {
-    color: #078c83;
-    font-weight: 900;
-    content: "✓";
-  }
-
   .walkthrough-layout {
     grid-template-columns: 1fr;
     gap: 8px;
@@ -3861,6 +3863,10 @@ select:focus {
 
   .walkthrough-prompt {
     margin-top: 24px;
+  }
+
+  .walkthrough-save-note + .walkthrough-prompt {
+    margin-top: 22px;
   }
 
   .walkthrough-answer {
