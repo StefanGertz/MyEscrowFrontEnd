@@ -69,6 +69,7 @@ import {
 import { useConfirmDialog } from "@/components/ConfirmDialogProvider";
 import { jsPDF } from "jspdf";
 import { apiFetch } from "@/lib/apiClient";
+import { findTransactionByToken } from "@/lib/transactionRouting";
 import { LiveDashboard } from "@/components/LiveDashboard";
 import { NotificationTimestamp } from "@/components/NotificationTimestamp";
 import { ChangePasswordModal } from "@/components/ChangePasswordModal";
@@ -349,29 +350,6 @@ const pickQueryValue = (value: string | string[] | undefined) =>
 
 const isScreenId = (value: string | undefined): value is ScreenId =>
   value ? screenIds.includes(value as ScreenId) : false;
-
-const normalizeTransactionToken = (value: string | number | undefined | null) => {
-  if (value === undefined || value === null) return null;
-  const text = String(value).trim();
-  if (!text) return null;
-  const digits = text.replace(/[^0-9]/g, "");
-  return {
-    raw: text,
-    digits: digits ? String(Number(digits)) : null,
-  };
-};
-
-const transactionMatchesToken = (tx: Transaction, value: string | number | undefined | null) => {
-  const token = normalizeTransactionToken(value);
-  if (!token) return false;
-  if (String(tx.id) === token.raw) return true;
-  if (tx.reference && tx.reference === token.raw) return true;
-  const referenceDigits = tx.reference ? normalizeTransactionToken(tx.reference)?.digits : null;
-  return Boolean(token.digits && referenceDigits && token.digits === referenceDigits);
-};
-
-const findTransactionByToken = (items: Transaction[], value: string | number | undefined | null) =>
-  items.find((item) => transactionMatchesToken(item, value)) ?? null;
 
 const defaultUser = {
   name: "Scott",
@@ -3928,18 +3906,23 @@ const handleWalletWithdraw = async () => {
   );
 
   const renderTransactionDetail = () => {
-    const tx = liveDataEnabled && selectedTransaction
-      ? findTransactionByToken(
-          displayTransactions,
-          selectedTransactionToken ?? selectedTransaction.reference ?? selectedTransaction.id,
-        ) ?? selectedTransaction
+    const tx = selectedTransactionToken
+      ? findTransactionByToken(displayTransactions, selectedTransactionToken) ?? selectedTransaction
       : selectedTransaction;
     if (!tx) {
+      const isRestoringTransaction =
+        liveDataEnabled && Boolean(selectedTransactionToken) && escrowsQuery.isLoading;
       return (
         <section className="screen active transaction-screen app-content-page">
           <div className="compact-page-header"><div><p className="compact-page-header__eyebrow">Escrow details</p><h2>Transaction</h2></div></div>
           <div className="card">
-            <p className="muted">Select a transaction from the dashboard to view its details.</p>
+            <p className="muted">
+              {isRestoringTransaction
+                ? "Loading transaction details..."
+                : selectedTransactionToken
+                  ? "This transaction could not be found. Return to the dashboard and try again."
+                  : "Select a transaction from the dashboard to view its details."}
+            </p>
           </div>
         </section>
       );
@@ -4088,7 +4071,7 @@ const handleWalletWithdraw = async () => {
               ) : null}
             </div>
           </div>
-          <div style={{ marginTop: 12, textAlign: "right" }}>
+          <div className="transaction-download-action">
             <button
               className="ghost agreement-download-button"
               onClick={() => {
