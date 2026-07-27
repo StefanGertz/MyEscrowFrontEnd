@@ -67,6 +67,7 @@ import {
 } from "@/lib/escrowWalkthrough";
 import { useConfirmDialog } from "@/components/ConfirmDialogProvider";
 import { jsPDF } from "jspdf";
+import { apiFetch } from "@/lib/apiClient";
 import { LiveDashboard } from "@/components/LiveDashboard";
 import { NotificationTimestamp } from "@/components/NotificationTimestamp";
 import { ChangePasswordModal } from "@/components/ChangePasswordModal";
@@ -560,6 +561,11 @@ const formatDateTime = (value: string) =>
     minute: "2-digit",
   });
 
+const formatFileSize = (bytes: number) =>
+  bytes >= 1_000_000
+    ? `${(bytes / 1_000_000).toFixed(1)} MB`
+    : `${Math.max(1, Math.round(bytes / 1_000))} KB`;
+
 const formatAgreementDate = (value?: string) =>
   value
     ? new Date(value).toLocaleString("en-US", {
@@ -1018,6 +1024,7 @@ function MockExperienceHome({ searchParams }: HomeProps) {
   const [walletAmountInput, setWalletAmountInput] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [milestoneSubmissionNotes, setMilestoneSubmissionNotes] = useState<Record<string, string>>({});
+  const [milestoneProofFiles, setMilestoneProofFiles] = useState<Record<string, File[]>>({});
   const [milestoneRevisionReasons, setMilestoneRevisionReasons] = useState<Record<string, string>>({});
   const [milestoneDisputeReasons, setMilestoneDisputeReasons] = useState<Record<string, string>>({});
   const [disputeEvidenceNotes, setDisputeEvidenceNotes] = useState<Record<string, string>>({});
@@ -1866,15 +1873,17 @@ const findTransactionById = (id: number) => {
       return;
     }
     const note = milestoneSubmissionNotes[milestoneId]?.trim() ?? "";
-    if (!note) {
-      setMessage("Add a note describing the completed work before submitting it.");
+    const files = milestoneProofFiles[milestoneId] ?? [];
+    if (!note && files.length === 0) {
+      setMessage("Add a submission note or at least one proof file.");
       return;
     }
     if (liveDataEnabled) {
       const escrowId = target.reference ?? `PO-${target.id}`;
       try {
-        await submitMilestoneMutation.mutateAsync({ escrowId, milestoneId, note });
+        await submitMilestoneMutation.mutateAsync({ escrowId, milestoneId, note, files });
         setMilestoneSubmissionNotes((current) => ({ ...current, [milestoneId]: "" }));
+        setMilestoneProofFiles((current) => ({ ...current, [milestoneId]: [] }));
         setMessage("Work submitted for buyer review. Funds remain held until the buyer decides.");
       } catch (error) {
         setMessage(error instanceof Error ? error.message : "Unable to submit milestone work.");
@@ -1900,7 +1909,14 @@ const findTransactionById = (id: number) => {
                   submittedAt: new Date().toISOString(),
                   reviewDeadline: new Date(Date.now() + 7 * 86_400_000).toISOString(),
                   submitter: { id: currentUser.email, name: currentUser.name },
-                  evidence: [],
+                  evidence: files.map((file, index) => ({
+                    id: Date.now() + index,
+                    objectKey: `demo/${file.name}`,
+                    fileName: file.name,
+                    contentType: file.type,
+                    sizeBytes: file.size,
+                    sha256: "",
+                  })),
                 },
               ],
             }
@@ -1919,7 +1935,51 @@ const findTransactionById = (id: number) => {
     }));
     if (updated) {
       setMilestoneSubmissionNotes((current) => ({ ...current, [milestoneId]: "" }));
+      setMilestoneProofFiles((current) => ({ ...current, [milestoneId]: [] }));
       setMessage("Work submitted for buyer review.");
+    }
+  };
+
+  const handleMilestoneProofSelection = (milestoneId: string, selected: FileList | null) => {
+    const files = Array.from(selected ?? []);
+    if (files.length > 10) {
+      setMessage("Upload no more than 10 proof files per submission.");
+      return;
+    }
+    const oversized = files.find((file) => file.size > 25_000_000);
+    if (oversized) {
+      setMessage(`${oversized.name} is larger than the 25 MB limit.`);
+      return;
+    }
+    setMilestoneProofFiles((current) => ({ ...current, [milestoneId]: files }));
+  };
+
+  const handleDownloadMilestoneProof = async (
+    tx: Transaction,
+    milestone: TxMilestone,
+    submissionId: number,
+    evidenceId: number,
+    fileName: string,
+  ) => {
+    try {
+      const escrowId = tx.reference ?? `PO-${tx.id}`;
+      const response = await apiFetch(
+        `/api/dashboard/escrows/${escrowId}/milestones/${milestone.id}/submissions/${submissionId}/evidence/${evidenceId}`,
+      );
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null) as { error?: string } | null;
+        throw new Error(payload?.error ?? "Unable to download this proof file.");
+      }
+      const objectUrl = URL.createObjectURL(await response.blob());
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = fileName;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to download this proof file.");
     }
   };
 
@@ -4563,8 +4623,44 @@ const handleWalletWithdraw = async () => {
                             placeholder="Summarize the completed work for the buyer"
                           />
                         </label>
+                        <label className="milestone-proof-picker">
+                          <span className="milestone-proof-picker__title">Proof of completion</span>
+                          <span className="milestone-proof-picker__help">
+                            Add receipts, photos, PDFs, Word files, spreadsheets, or text files.
+                          </span>
+                          <input
+                            type="file"
+                            multiple
+                            accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf,text/plain,text/csv,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/rtf"
+                            onChange={(event) => handleMilestoneProofSelection(milestone.id, event.target.files)}
+                          />
+                          <span className="milestone-proof-picker__help">Up to 10 files, 25 MB each.</span>
+                        </label>
+                        {(milestoneProofFiles[milestone.id] ?? []).length ? (
+                          <div className="milestone-proof-list" aria-label="Selected proof files">
+                            {(milestoneProofFiles[milestone.id] ?? []).map((file, index) => (
+                              <div className="milestone-proof-file" key={`${file.name}-${file.lastModified}-${index}`}>
+                                <span>
+                                  <strong>{file.name}</strong>
+                                  <small>{formatFileSize(file.size)}</small>
+                                </span>
+                                <button
+                                  type="button"
+                                  className="ghost"
+                                  onClick={() => setMilestoneProofFiles((current) => ({
+                                    ...current,
+                                    [milestone.id]: (current[milestone.id] ?? []).filter((_, fileIndex) => fileIndex !== index),
+                                  }))}
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
                         <button
                           className="btn"
+                          style={{ marginTop: 10 }}
                           onClick={() => handleMilestoneSubmit(tx.id, milestone.id)}
                           disabled={submitMilestoneMutation.isPending}
                         >
@@ -4809,8 +4905,25 @@ const handleWalletWithdraw = async () => {
                               </div>
                               {submission.note ? <p style={{ margin: "6px 0 0" }}>{submission.note}</p> : null}
                               {submission.evidence.length ? (
-                                <div className="muted" style={{ marginTop: 6 }}>
-                                  Evidence: {submission.evidence.map((item) => item.fileName).join(", ")}
+                                <div className="milestone-proof-history">
+                                  <span className="muted">Proof files</span>
+                                  {submission.evidence.map((item) => (
+                                    <button
+                                      type="button"
+                                      className="milestone-proof-download"
+                                      key={item.id}
+                                      onClick={() => handleDownloadMilestoneProof(
+                                        tx,
+                                        milestone,
+                                        submission.id,
+                                        item.id,
+                                        item.fileName,
+                                      )}
+                                    >
+                                      <span>{item.fileName}</span>
+                                      <small>{formatFileSize(item.sizeBytes)} • Download</small>
+                                    </button>
+                                  ))}
                                 </div>
                               ) : null}
                               {submission.review ? (

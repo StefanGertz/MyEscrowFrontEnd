@@ -226,6 +226,7 @@ type MilestoneReviewPayload = MilestoneActionPayload & {
 
 type MilestoneSubmissionPayload = MilestoneActionPayload & {
   note: string;
+  files: File[];
 };
 
 type MilestoneChangeRequestPayload = MilestoneActionPayload & {
@@ -408,15 +409,19 @@ export function useRejectMilestone() {
 export function useSubmitMilestone() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ escrowId, milestoneId, note }: MilestoneSubmissionPayload) =>
-      fetchJSON<{ escrowId: string; milestoneId: number; reviewDeadline: string }>(
+    mutationFn: ({ escrowId, milestoneId, note, files }: MilestoneSubmissionPayload) => {
+      const formData = new FormData();
+      formData.append("note", note);
+      files.forEach((file) => formData.append("proofs", file, file.name));
+      return fetchJSON<{ escrowId: string; milestoneId: number; reviewDeadline: string }>(
         `/api/dashboard/escrows/${escrowId}/milestones/${milestoneId}/submit`,
         {
           method: "POST",
-          headers: idempotencyHeaders({ "Content-Type": "application/json" }),
-          body: JSON.stringify({ note }),
+          headers: idempotencyHeaders(),
+          body: formData,
         },
-      ),
+      );
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["dashboard", "escrows"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard", "overview"] });

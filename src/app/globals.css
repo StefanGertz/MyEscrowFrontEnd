@@ -1648,6 +1648,83 @@ select:focus {
   gap: 8px;
 }
 
+.milestone-proof-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 12px;
+  border: 1px dashed rgba(10, 166, 154, 0.45);
+  border-radius: 12px;
+  background: rgba(239, 253, 250, 0.72);
+  cursor: pointer;
+}
+
+.milestone-proof-picker__title {
+  color: var(--brand-600);
+  font-weight: 700;
+}
+
+.milestone-proof-picker__help {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.milestone-proof-picker input[type="file"] {
+  width: 100%;
+  margin-top: 3px;
+}
+
+.milestone-proof-list,
+.milestone-proof-history {
+  display: grid;
+  gap: 7px;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.milestone-proof-file,
+.milestone-proof-download {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 10px;
+  border: 1px solid rgba(10, 166, 154, 0.16);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.milestone-proof-file > span,
+.milestone-proof-download > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.milestone-proof-file small,
+.milestone-proof-download small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+}
+
+.milestone-proof-download {
+  width: 100%;
+  color: var(--brand-600);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.milestone-proof-download:hover {
+  border-color: rgba(10, 166, 154, 0.5);
+  background: rgba(239, 253, 250, 0.72);
+}
+
+.milestone-proof-download:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
 .milestone-chip {
   display: inline-flex;
   align-items: center;

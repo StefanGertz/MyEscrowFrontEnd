@@ -45,9 +45,9 @@ export async function proxyApiRequest(request: Request, path: string, options: P
   headers.delete("host");
   headers.delete("content-length");
 
-  let body: string | undefined;
+  let body: ArrayBuffer | undefined;
   if (request.method !== "GET" && request.method !== "HEAD") {
-    body = await request.text();
+    body = await request.arrayBuffer();
   }
 
   let latestResponse: NextResponse | null = null;
