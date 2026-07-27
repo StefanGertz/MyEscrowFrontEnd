@@ -155,6 +155,7 @@ type Transaction = {
   lifecycleStatus?: string;
   fundingStatus?: string;
   fundingMode?: "full" | "milestone" | null;
+  milestoneFundingSupported?: boolean;
   fundedAmount?: number;
   creatorRole?: "buyer" | "seller";
   createdAt?: string;
@@ -903,6 +904,7 @@ const mapEscrowsToTransactions = (
       lifecycleStatus,
       fundingStatus,
       fundingMode: record.fundingMode ?? (fundingStatus === "funded" ? "full" : null),
+      milestoneFundingSupported: Object.prototype.hasOwnProperty.call(record, "fundingMode"),
       fundedAmount: record.balances
         ? record.balances.fundedCents / 100
         : fundingStatus === "funded"
@@ -2593,6 +2595,16 @@ const findTransactionById = (id: number) => {
   };
 
   const handleFundMilestone = (tx: Transaction, milestone: TxMilestone) => {
+    if (liveDataEnabled && tx.milestoneFundingSupported === false) {
+      const errorMessage = "Milestone funding is waiting for the backend deployment to finish.";
+      setInlineMessage(`funding:${tx.id}`, errorMessage);
+      pushToast({
+        variant: "error",
+        title: "Milestone funding unavailable",
+        body: errorMessage,
+      });
+      return;
+    }
     const escrowId = tx.reference ?? `PO-${tx.id}`;
     confirm({
       title: `Fund ${milestone.title}?`,
@@ -3947,6 +3959,7 @@ const handleWalletWithdraw = async () => {
     const canApproveEscrow = !tx.isOwner && isAwaitingApproval;
     const canRequestMilestoneChanges = !tx.isOwner && (isAwaitingApproval || isChangesRequested);
     const canFundEscrow = isCurrentUserBuyer && isAwaitingFunding;
+    const canUseMilestoneFunding = tx.milestoneFundingSupported !== false;
     const walletShortfall = Math.max(tx.amount - walletBalanceDisplay, 0);
     const milestoneIsFunded = (milestone: TxMilestone) =>
       tx.fundingMode === "full"
@@ -4244,6 +4257,7 @@ const handleWalletWithdraw = async () => {
                     }}
                     disabled={
                       !canFundEscrow
+                      || !canUseMilestoneFunding
                       || !nextMilestoneToFund
                       || fundMilestoneMutation.isPending
                       || walletBalanceDisplay < (nextMilestoneToFund?.amount ?? 0)
@@ -4251,6 +4265,8 @@ const handleWalletWithdraw = async () => {
                   >
                     {fundMilestoneMutation.isPending
                       ? "Funding..."
+                      : !canUseMilestoneFunding
+                        ? "Backend update pending"
                       : canFundEscrow
                         ? "Start milestone funding"
                         : "Available after approval"}
@@ -4886,6 +4902,7 @@ const handleWalletWithdraw = async () => {
                 const isFunded = milestoneIsFunded(milestone);
                 const canFundThisMilestone =
                   isCurrentUserBuyer
+                  && canUseMilestoneFunding
                   && tx.fundingMode === "milestone"
                   && nextMilestoneToFund?.id === milestone.id
                   && !isFunded
