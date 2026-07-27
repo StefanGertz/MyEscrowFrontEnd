@@ -62,7 +62,6 @@ body {
   --shell-max-width: 960px;
 }
 
-.app[data-screen="create"],
 .app[data-screen="milestones"],
 .app[data-screen="agreement"],
 .app[data-screen="funding"] {
