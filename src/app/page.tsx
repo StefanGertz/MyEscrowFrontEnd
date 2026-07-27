@@ -2895,8 +2895,8 @@ const handleWalletWithdraw = async () => {
       <div className="tiles">
         <div className="tile alerts-tile">
           <div className="t-title">Alerts</div>
-          <div className="muted">Open items</div>
-          <div style={{ fontSize: 26, fontWeight: 800 }}>{openNotifications}</div>
+          <div className="muted alerts-tile__label">Open items</div>
+          <div className="alerts-tile__count" style={{ fontSize: 26, fontWeight: 800 }}>{openNotifications}</div>
           <button className="ghost alerts-tile__details-button" type="button" onClick={showAlertsPanel}>
             View details
           </button>
