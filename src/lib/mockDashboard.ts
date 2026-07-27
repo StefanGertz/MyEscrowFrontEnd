@@ -20,6 +20,15 @@ export type EscrowRecord = {
   counterpartyApproved: boolean;
   lifecycleStatus?: string;
   fundingStatus?: string;
+  fundingMode?: "full" | "milestone" | null;
+  balances?: {
+    currency: "USD";
+    fundedCents: number;
+    heldCents: number;
+    releasedCents: number;
+    refundedCents: number;
+    disputedCents: number;
+  };
   creatorRole?: "buyer" | "seller";
   createdAt?: string;
   approvedAt?: string;
@@ -78,6 +87,8 @@ export type EscrowRecord = {
     title: string;
     amount: string;
     status: "not_started" | "submitted" | "revision_requested" | "released" | "disputed" | "refunded" | "settled" | "cancelled";
+    fundingStatus?: "not_funded" | "funded";
+    fundedCents?: number;
     description?: string;
     deadline?: string;
     requestedTitle?: string;

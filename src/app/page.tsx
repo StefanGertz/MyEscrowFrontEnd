@@ -16,6 +16,7 @@ import {
   useDismissNotification,
   useDisputes,
   useFundEscrow,
+  useFundMilestone,
   useRejectEscrow,
   useRejectMilestone,
   useOpenMilestoneDispute,
@@ -104,6 +105,8 @@ type TxMilestone = {
   changeRequestNote?: string;
   changeRequestedAt?: string;
   status: "not_started" | "submitted" | "revision_requested" | "released" | "disputed" | "refunded" | "settled" | "cancelled";
+  fundingStatus?: "not_funded" | "funded";
+  fundedCents?: number;
   releasedAt?: string;
   rejectedAt?: string;
   reviewDeadline?: string;
@@ -151,6 +154,8 @@ type Transaction = {
   context: string;
   lifecycleStatus?: string;
   fundingStatus?: string;
+  fundingMode?: "full" | "milestone" | null;
+  fundedAmount?: number;
   creatorRole?: "buyer" | "seller";
   createdAt?: string;
   approvedAt?: string;
@@ -897,6 +902,12 @@ const mapEscrowsToTransactions = (
       context: record.stage || (approved ? "Milestones active" : "Approval pending"),
       lifecycleStatus,
       fundingStatus,
+      fundingMode: record.fundingMode ?? (fundingStatus === "funded" ? "full" : null),
+      fundedAmount: record.balances
+        ? record.balances.fundedCents / 100
+        : fundingStatus === "funded"
+          ? amountValue
+          : 0,
       creatorRole: record.creatorRole,
       createdAt: record.createdAt,
       approvedAt: record.approvedAt,
@@ -941,6 +952,8 @@ const mapEscrowsToTransactions = (
         changeRequestNote: milestone.changeRequestNote,
         changeRequestedAt: milestone.changeRequestedAt,
         status: milestone.status,
+        fundingStatus: milestone.fundingStatus,
+        fundedCents: milestone.fundedCents,
         releasedAt: milestone.releasedAt,
         rejectedAt: milestone.rejectedAt,
         reviewDeadline: milestone.reviewDeadline,
@@ -1087,6 +1100,7 @@ function MockExperienceHome({ searchParams }: HomeProps) {
   const acceptFundedCancellationMutation = useAcceptFundedCancellation();
   const cancelEscrowMutation = useCancelEscrow();
   const fundEscrowMutation = useFundEscrow();
+  const fundMilestoneMutation = useFundMilestone();
   const notificationsQuery = useNotifications();
   const notificationHistoryQuery = useNotificationHistory();
   const overviewQuery = useEscrowSummary();
@@ -2433,9 +2447,76 @@ const findTransactionById = (id: number) => {
       onConfirm: async () => {
         try {
           await fundEscrowMutation.mutateAsync({ escrowId });
+          if (!liveDataEnabled) {
+            updateTransaction(tx.id, (current) => ({
+              ...current,
+              status: "Active",
+              context: "Milestones active",
+              lifecycleStatus: "funded",
+              fundingStatus: "funded",
+              fundingMode: "full",
+              fundedAmount: current.amount,
+              milestones: current.milestones.map((milestone) => ({
+                ...milestone,
+                fundingStatus: "funded",
+                fundedCents: Math.round(milestone.amount * 100),
+              })),
+            }));
+            setWalletBalanceOverride({
+              userId: walletStateUserId,
+              balance: walletBalanceDisplay - tx.amount,
+            });
+          }
           setMessage("Escrow funded with dummy wallet funds.");
         } catch (error) {
           setMessage(error instanceof Error ? error.message : "Unable to fund escrow.");
+        }
+      },
+    });
+  };
+
+  const handleFundMilestone = (tx: Transaction, milestone: TxMilestone) => {
+    const escrowId = tx.reference ?? `PO-${tx.id}`;
+    confirm({
+      title: `Fund ${milestone.title}?`,
+      body: `This will move ${formatCurrency(milestone.amount)} from your MyEscrow test wallet into escrow for this milestone only. Future milestones stay unfunded.`,
+      confirmLabel: "Fund milestone",
+      onConfirm: async () => {
+        try {
+          await fundMilestoneMutation.mutateAsync({ escrowId, milestoneId: milestone.id });
+          if (!liveDataEnabled) {
+            updateTransaction(tx.id, (current) => {
+              const nextMilestones = current.milestones.map((item) =>
+                item.id === milestone.id
+                  ? {
+                      ...item,
+                      fundingStatus: "funded" as const,
+                      fundedCents: Math.round(item.amount * 100),
+                    }
+                  : item,
+              );
+              const fundedAmount = nextMilestones
+                .filter((item) => item.fundingStatus === "funded")
+                .reduce((total, item) => total + item.amount, 0);
+              return {
+                ...current,
+                status: "Active",
+                context: `${milestone.title} funded`,
+                lifecycleStatus: "funded",
+                fundingStatus: fundedAmount >= current.amount ? "funded" : "partially_funded",
+                fundingMode: "milestone",
+                fundedAmount,
+                milestones: nextMilestones,
+              };
+            });
+            setWalletBalanceOverride({
+              userId: walletStateUserId,
+              balance: walletBalanceDisplay - milestone.amount,
+            });
+          }
+          setMessage(`${milestone.title} funded. Future milestones remain unfunded until you fund them.`);
+        } catch (error) {
+          setMessage(error instanceof Error ? error.message : "Unable to fund milestone.");
         }
       },
     });
@@ -3712,6 +3793,23 @@ const handleWalletWithdraw = async () => {
     const canRequestMilestoneChanges = !tx.isOwner && (isAwaitingApproval || isChangesRequested);
     const canFundEscrow = isCurrentUserBuyer && isAwaitingFunding;
     const walletShortfall = Math.max(tx.amount - walletBalanceDisplay, 0);
+    const milestoneIsFunded = (milestone: TxMilestone) =>
+      tx.fundingMode === "full"
+      || (!tx.fundingMode && tx.status === "Active")
+      || milestone.fundingStatus === "funded"
+      || (milestone.fundedCents ?? 0) >= Math.round(milestone.amount * 100);
+    const terminalMilestoneStatuses: TxMilestone["status"][] = [
+      "released",
+      "refunded",
+      "settled",
+      "cancelled",
+    ];
+    const nextMilestoneToFund = tx.milestones.find(
+      (milestone) => !terminalMilestoneStatuses.includes(milestone.status),
+    );
+    const nextMilestoneShortfall = nextMilestoneToFund
+      ? Math.max(nextMilestoneToFund.amount - walletBalanceDisplay, 0)
+      : 0;
     const requestedAgreementMilestones = tx.milestones.filter((milestone) => milestone.changeRequestedAt);
     const hasAgreementChangeRequest = requestedAgreementMilestones.length > 0;
     const proposedAgreementTotal = requestedAgreementMilestones.reduce(
@@ -3808,6 +3906,18 @@ const handleWalletWithdraw = async () => {
                   {tx.status}
                 </span>
               </div>
+              {tx.fundingMode || tx.fundedAmount ? (
+                <div className="transaction-summary-field">
+                  <div className="muted">Funding</div>
+                  <div style={{ fontWeight: 700 }}>
+                    {tx.fundingMode === "milestone" ? "By milestone" : "Funded in full"}
+                  </div>
+                  <div className="muted" style={{ marginTop: 4 }}>
+                    {formatCurrency(tx.fundedAmount ?? (tx.fundingStatus === "funded" ? tx.amount : 0))} secured
+                    {tx.fundingMode === "milestone" ? ` of ${formatCurrency(tx.amount)}` : ""}
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
           <div style={{ marginTop: 12, textAlign: "right" }}>
@@ -3912,8 +4022,12 @@ const handleWalletWithdraw = async () => {
                   ? "Review the requested agreement changes below."
                 : canFundEscrow
                   ? walletShortfall > 0
-                    ? `Top up your wallet with ${formatCurrency(walletShortfall)} more before you can fund this escrow.`
-                    : "Move dummy wallet funds into escrow so milestone work can begin."
+                    ? nextMilestoneToFund && nextMilestoneShortfall === 0
+                      ? `You can fund the first milestone now, or top up ${formatCurrency(walletShortfall)} more to fund the entire escrow.`
+                      : nextMilestoneToFund
+                        ? `Top up ${formatCurrency(nextMilestoneShortfall)} to fund the first milestone, or ${formatCurrency(walletShortfall)} to fund the entire escrow.`
+                        : `Top up ${formatCurrency(walletShortfall)} to fund the entire escrow.`
+                    : "Choose whether to fund the entire escrow now or fund one milestone at a time."
                   : isAwaitingSignup
                     ? "This escrow is waiting for the counterparty to finish signup and verification."
                     : isCreatorSignatureRequired
@@ -3931,13 +4045,29 @@ const handleWalletWithdraw = async () => {
                   onClick={() => handleFundEscrow(tx)}
                   disabled={fundEscrowMutation.isPending || walletBalanceDisplay < tx.amount}
                 >
-                  {fundEscrowMutation.isPending ? "Funding..." : `Fund with dummy wallet (${formatCurrency(tx.amount)})`}
+                  {fundEscrowMutation.isPending ? "Funding..." : `Fund entire escrow (${formatCurrency(tx.amount)})`}
+                </button>
+              ) : null}
+              {canFundEscrow && nextMilestoneToFund ? (
+                <button
+                  className="ghost"
+                  onClick={() => handleFundMilestone(tx, nextMilestoneToFund)}
+                  disabled={
+                    fundMilestoneMutation.isPending
+                    || walletBalanceDisplay < nextMilestoneToFund.amount
+                  }
+                >
+                  {fundMilestoneMutation.isPending
+                    ? "Funding milestone..."
+                    : `Fund first milestone only (${formatCurrency(nextMilestoneToFund.amount)})`}
                 </button>
               ) : null}
               {canFundEscrow && walletBalanceDisplay < tx.amount ? (
                 <div className="muted" style={{ width: "100%" }}>
-                  Wallet balance: {formatCurrency(walletBalanceDisplay)}. Required: {formatCurrency(tx.amount)}. Top up
-                  your wallet before funding this escrow.
+                  Wallet balance: {formatCurrency(walletBalanceDisplay)}. Full funding requires {formatCurrency(tx.amount)}.
+                  {nextMilestoneToFund && walletBalanceDisplay >= nextMilestoneToFund.amount
+                    ? ` You can still start milestone funding with ${formatCurrency(nextMilestoneToFund.amount)}.`
+                    : " Top up your wallet before funding."}
                 </div>
               ) : null}
               {canCancelEscrow ? (
@@ -4521,6 +4651,13 @@ const handleWalletWithdraw = async () => {
             <div className="tx-list" style={{ marginTop: 12 }}>
               {tx.milestones.map((milestone) => {
                 const dispute = activeDisputes.find((item) => item.milestoneId === Number(milestone.id));
+                const isFunded = milestoneIsFunded(milestone);
+                const canFundThisMilestone =
+                  isCurrentUserBuyer
+                  && tx.fundingMode === "milestone"
+                  && nextMilestoneToFund?.id === milestone.id
+                  && !isFunded
+                  && ["not_started", "revision_requested"].includes(milestone.status);
                 return (
                 <div key={milestone.id} className="tx-item milestone-entry">
                   <div className="milestone-entry__top">
@@ -4557,6 +4694,11 @@ const handleWalletWithdraw = async () => {
                           Deadline {formatHistoryDate(milestone.deadline)}
                         </div>
                       ) : null}
+                      {tx.fundingMode === "milestone" ? (
+                        <div className="muted" style={{ marginTop: 4, fontWeight: 700 }}>
+                          {isFunded ? "Funds secured for this milestone" : "Not funded yet"}
+                        </div>
+                      ) : null}
                     </div>
                     <div style={{ textAlign: "right", fontWeight: 700 }}>
                       {milestone.amount === 0 && milestone.requestedAmount !== undefined ? formatCurrency(milestone.requestedAmount) : formatCurrency(milestone.amount)}
@@ -4577,6 +4719,26 @@ const handleWalletWithdraw = async () => {
                   <div className="milestone-actions">
                     {milestone.changeRequestedAt ? (
                       null
+                    ) : canFundThisMilestone ? (
+                      <div>
+                        <button
+                          className="btn"
+                          onClick={() => handleFundMilestone(tx, milestone)}
+                          disabled={
+                            fundMilestoneMutation.isPending
+                            || walletBalanceDisplay < milestone.amount
+                          }
+                        >
+                          {fundMilestoneMutation.isPending
+                            ? "Funding..."
+                            : `Fund milestone (${formatCurrency(milestone.amount)})`}
+                        </button>
+                        {walletBalanceDisplay < milestone.amount ? (
+                          <div className="muted" style={{ marginTop: 6 }}>
+                            Top up {formatCurrency(milestone.amount - walletBalanceDisplay)} to fund this milestone.
+                          </div>
+                        ) : null}
+                      </div>
                     ) : milestone.status === "submitted" && isCurrentUserBuyer ? (
                       <div style={{ width: "100%" }}>
                         <label className="field" style={{ marginBottom: 10 }}>
@@ -4608,6 +4770,12 @@ const handleWalletWithdraw = async () => {
                           </button>
                         </div>
                       </div>
+                    ) : tx.fundingMode === "milestone"
+                      && !isFunded
+                      && ["not_started", "revision_requested"].includes(milestone.status) ? (
+                      <span className="milestone-chip milestone-chip--not_started">
+                        {isCurrentUserBuyer ? "Funding follows the prior milestone" : "Awaiting buyer funding"}
+                      </span>
                     ) : ["not_started", "revision_requested"].includes(milestone.status)
                       && sameEmail(tx.sellerEmail, currentUser.email) ? (
                       <div style={{ width: "100%" }}>

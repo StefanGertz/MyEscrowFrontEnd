@@ -385,6 +385,7 @@ const buildMilestoneAction =
   };
 
 export const useApproveMilestone = buildMilestoneAction("approve");
+export const useFundMilestone = buildMilestoneAction("fund");
 
 export function useRejectMilestone() {
   const queryClient = useQueryClient();

@@ -8,6 +8,7 @@ import {
   useApproveEscrow,
   useRejectEscrow,
   useCancelEscrow,
+  useFundMilestone,
   useDismissNotification,
   useRequestMilestoneChanges,
   useApplyMilestoneChanges,
@@ -100,6 +101,22 @@ describe("approval flows", () => {
         escrowId: "111",
       });
       expect(response.status).toBe("cancelled");
+    });
+  });
+});
+
+describe("milestone funding", () => {
+  it("funds one milestone without using the full escrow funding route", async () => {
+    const wrapper = createWrapper();
+    const fundMilestoneHook = renderHook(() => useFundMilestone(), { wrapper });
+
+    await act(async () => {
+      const response = await fundMilestoneHook.result.current.mutateAsync({
+        escrowId: "PO-1001",
+        milestoneId: "12",
+      });
+      expect(response.escrowId).toBe("PO-1001");
+      expect(response.milestoneId).toBe(12);
     });
   });
 });
