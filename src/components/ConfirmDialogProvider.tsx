@@ -13,7 +13,7 @@ type ConfirmOptions = {
   body: string;
   confirmLabel?: string;
   cancelLabel?: string;
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<void>;
 };
 
 type ConfirmContextValue = {
@@ -24,21 +24,30 @@ const ConfirmDialogContext = createContext<ConfirmContextValue | null>(null);
 
 export function ConfirmDialogProvider({ children }: { children: ReactNode }) {
   const [dialog, setDialog] = useState<ConfirmOptions | null>(null);
+  const [isConfirming, setIsConfirming] = useState(false);
 
   const confirm = useCallback((options: ConfirmOptions) => {
+    setIsConfirming(false);
     setDialog(options);
   }, []);
 
   const closeDialog = useCallback(() => {
+    if (isConfirming) return;
     setDialog(null);
-  }, []);
+  }, [isConfirming]);
 
-  const handleConfirm = useCallback(() => {
-    if (dialog?.onConfirm) {
-      dialog.onConfirm();
+  const handleConfirm = useCallback(async () => {
+    if (!dialog?.onConfirm || isConfirming) {
+      return;
     }
-    closeDialog();
-  }, [dialog, closeDialog]);
+    setIsConfirming(true);
+    try {
+      await dialog.onConfirm();
+      setDialog(null);
+    } finally {
+      setIsConfirming(false);
+    }
+  }, [dialog, isConfirming]);
 
   return (
     <ConfirmDialogContext.Provider value={{ confirm }}>
@@ -49,11 +58,13 @@ export function ConfirmDialogProvider({ children }: { children: ReactNode }) {
             <h3>{dialog.title}</h3>
             <p className="muted">{dialog.body}</p>
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
-              <button className="ghost" onClick={closeDialog}>
+              <button className="ghost" onClick={closeDialog} disabled={isConfirming}>
                 {dialog.cancelLabel ?? "Cancel"}
               </button>
-              <button className="btn" onClick={handleConfirm}>
-                {dialog.confirmLabel ?? "Continue"}
+              <button className="btn" onClick={handleConfirm} disabled={isConfirming}>
+                {isConfirming
+                  ? `${dialog.confirmLabel ?? "Continue"}…`
+                  : dialog.confirmLabel ?? "Continue"}
               </button>
             </div>
           </div>

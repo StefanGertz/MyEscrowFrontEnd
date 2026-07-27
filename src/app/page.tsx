@@ -1035,7 +1035,8 @@ function MockExperienceHome({ searchParams }: HomeProps) {
   const [approvalPartyType, setApprovalPartyType] = useState<"individual" | "business">("individual");
   const [approvalBusiness, setApprovalBusiness] = useState<BusinessDetails>(emptyBusinessDetails);
   const [walletAmountInput, setWalletAmountInput] = useState("");
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessageState] = useState<string | null>(null);
+  const [messageLocation, setMessageLocation] = useState<string | null>(null);
   const [milestoneSubmissionNotes, setMilestoneSubmissionNotes] = useState<Record<string, string>>({});
   const [milestoneProofFiles, setMilestoneProofFiles] = useState<Record<string, File[]>>({});
   const [milestoneRevisionReasons, setMilestoneRevisionReasons] = useState<Record<string, string>>({});
@@ -1060,6 +1061,20 @@ function MockExperienceHome({ searchParams }: HomeProps) {
     name: defaultUser.name,
     email: defaultUser.email,
   });
+  const setMessage = (nextMessage: string | null) => {
+    setMessageState(nextMessage);
+    setMessageLocation(null);
+  };
+  const setInlineMessage = (location: string, nextMessage: string) => {
+    setMessageState(nextMessage);
+    setMessageLocation(location);
+  };
+  const renderInlineMessage = (location: string) =>
+    message && messageLocation === location ? (
+      <div className="field-warning" role="alert" aria-live="assertive">
+        {message}
+      </div>
+    ) : null;
   const profileIdentity: ProfileIdentity = user
     ? {
         id: user.id,
@@ -1521,7 +1536,7 @@ const findTransactionById = (id: number) => {
 
   const handleAddMilestone = () => {
     if (!milestoneInputs.title || !Number(milestoneInputs.amount)) {
-      setMessage("Provide a milestone title and amount.");
+      setInlineMessage("milestone-builder", "Provide a milestone title and amount.");
       return;
     }
     const nextId = editingMilestoneId ?? randomId();
@@ -1590,12 +1605,12 @@ const findTransactionById = (id: number) => {
 
   const handleAgreementSubmit = async () => {
     if (!agreementAccepted || !signatureCaptured) {
-      setMessage("Accept the agreement and confirm the signature to continue.");
+      setInlineMessage("agreement-submit", "Accept the agreement and confirm the signature to continue.");
       return;
     }
     const escrowAmount = Number(createForm.amount);
     if (!escrowAmount) {
-      setMessage("Enter an escrow amount before submitting.");
+      setInlineMessage("agreement-submit", "Enter an escrow amount before submitting.");
       return;
     }
     const responseTitle = createForm.title.trim() || (createForm.category ? `${createForm.category} escrow` : "New escrow");
@@ -1606,7 +1621,7 @@ const findTransactionById = (id: number) => {
       createForm.role === "buyer" ? "Seller review pending" : "Buyer review pending";
     const signatureDataUrl = signaturePadRef.current?.getDataUrl();
     if (!signatureDataUrl) {
-      setMessage("Please draw your signature before submitting.");
+      setInlineMessage("agreement-submit", "Please draw your signature before submitting.");
       return;
     }
     try {
@@ -1743,26 +1758,35 @@ const findTransactionById = (id: number) => {
       );
       navigate("dashboard");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to create escrow. Try again shortly.");
+      setInlineMessage(
+        "agreement-submit",
+        error instanceof Error ? error.message : "Unable to create escrow. Try again shortly.",
+      );
     }
   };
 
   const handleMilestoneDecision = (txId: number, milestoneId: string, decision: "approve" | "reject") => {
     const target = findTransactionById(txId);
     if (!target) {
-      setMessage("Transaction not found.");
+      setInlineMessage(`milestone-review:${milestoneId}`, "Transaction not found.");
       return;
     }
     if (sameEmail(currentUser.email, target.sellerEmail)) {
-      setMessage("Only the buyer can approve milestone releases.");
+      setInlineMessage(`milestone-review:${milestoneId}`, "Only the buyer can approve milestone releases.");
       return;
     }
     if (!target.counterpartyApproved) {
-      setMessage("Wait for the counterparty to approve the project before reviewing milestones.");
+      setInlineMessage(
+        `milestone-review:${milestoneId}`,
+        "Wait for the counterparty to approve the project before reviewing milestones.",
+      );
       return;
     }
     if (target.status !== "Active") {
-      setMessage("Milestones can only be approved once the escrow is active and funded.");
+      setInlineMessage(
+        `milestone-review:${milestoneId}`,
+        "Milestones can only be approved once the escrow is active and funded.",
+      );
       return;
     }
     if (liveDataEnabled) {
@@ -1775,7 +1799,10 @@ const findTransactionById = (id: number) => {
           } else {
             const reason = milestoneRevisionReasons[milestoneId]?.trim() ?? "";
             if (reason.length < 3) {
-              setMessage("Explain what the seller needs to revise before sending it back.");
+              setInlineMessage(
+                `milestone-review:${milestoneId}`,
+                "Explain what the seller needs to revise before sending it back.",
+              );
               return;
             }
             await rejectMilestoneMutation.mutateAsync({ escrowId, milestoneId, reason });
@@ -1787,7 +1814,10 @@ const findTransactionById = (id: number) => {
               : "Revision requested and the reason was saved in the submission history.",
           );
         } catch (error) {
-          setMessage(error instanceof Error ? error.message : `Unable to ${actionLabel} milestone.`);
+          setInlineMessage(
+            `milestone-review:${milestoneId}`,
+            error instanceof Error ? error.message : `Unable to ${actionLabel} milestone.`,
+          );
         }
       };
       if (decision === "approve") {
@@ -1883,13 +1913,33 @@ const findTransactionById = (id: number) => {
   const handleMilestoneSubmit = async (txId: number, milestoneId: string) => {
     const target = findTransactionById(txId);
     if (!target) {
-      setMessage("Transaction not found.");
+      setInlineMessage(`milestone-submission:${milestoneId}`, "Transaction not found.");
+      return;
+    }
+    const milestone = target.milestones.find((item) => item.id === milestoneId);
+    if (!milestone) {
+      setInlineMessage(`milestone-submission:${milestoneId}`, "Milestone not found.");
+      return;
+    }
+    const isFunded =
+      target.fundingMode === "full"
+      || (!target.fundingMode && target.status === "Active")
+      || milestone.fundingStatus === "funded"
+      || (milestone.fundedCents ?? 0) >= Math.round(milestone.amount * 100);
+    if (!isFunded) {
+      setInlineMessage(
+        `milestone-submission:${milestoneId}`,
+        "The buyer must fund this milestone before work or proof can be submitted.",
+      );
       return;
     }
     const note = milestoneSubmissionNotes[milestoneId]?.trim() ?? "";
     const files = milestoneProofFiles[milestoneId] ?? [];
     if (!note && files.length === 0) {
-      setMessage("Add a submission note or at least one proof file.");
+      setInlineMessage(
+        `milestone-submission:${milestoneId}`,
+        "Add a submission note or at least one proof file.",
+      );
       return;
     }
     if (liveDataEnabled) {
@@ -1900,7 +1950,10 @@ const findTransactionById = (id: number) => {
         setMilestoneProofFiles((current) => ({ ...current, [milestoneId]: [] }));
         setMessage("Work submitted for buyer review. Funds remain held until the buyer decides.");
       } catch (error) {
-        setMessage(error instanceof Error ? error.message : "Unable to submit milestone work.");
+        setInlineMessage(
+          `milestone-submission:${milestoneId}`,
+          error instanceof Error ? error.message : "Unable to submit milestone work.",
+        );
       }
       return;
     }
@@ -1957,12 +2010,12 @@ const findTransactionById = (id: number) => {
   const handleMilestoneProofSelection = (milestoneId: string, selected: FileList | null) => {
     const files = Array.from(selected ?? []);
     if (files.length > 10) {
-      setMessage("Upload no more than 10 proof files per submission.");
+      setInlineMessage(`milestone-submission:${milestoneId}`, "Upload no more than 10 proof files per submission.");
       return;
     }
     const oversized = files.find((file) => file.size > 25_000_000);
     if (oversized) {
-      setMessage(`${oversized.name} is larger than the 25 MB limit.`);
+      setInlineMessage(`milestone-submission:${milestoneId}`, `${oversized.name} is larger than the 25 MB limit.`);
       return;
     }
     setMilestoneProofFiles((current) => ({ ...current, [milestoneId]: files }));
@@ -1993,14 +2046,17 @@ const findTransactionById = (id: number) => {
       anchor.remove();
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to download this proof file.");
+      setInlineMessage(
+        `proof-download:${milestone.id}`,
+        error instanceof Error ? error.message : "Unable to download this proof file.",
+      );
     }
   };
 
   const handleOpenMilestoneDispute = async (tx: Transaction, milestoneId: string) => {
     const reason = milestoneDisputeReasons[milestoneId]?.trim() ?? "";
     if (reason.length < 10) {
-      setMessage("Describe the dispute in at least 10 characters.");
+      setInlineMessage(`milestone-dispute:${milestoneId}`, "Describe the dispute in at least 10 characters.");
       return;
     }
     try {
@@ -2012,14 +2068,17 @@ const findTransactionById = (id: number) => {
       setMilestoneDisputeReasons((current) => ({ ...current, [milestoneId]: "" }));
       setMessage("Dispute opened. Only this milestone's remaining funds are reserved.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to open the dispute.");
+      setInlineMessage(
+        `milestone-dispute:${milestoneId}`,
+        error instanceof Error ? error.message : "Unable to open the dispute.",
+      );
     }
   };
 
   const handleSubmitDisputeEvidence = async (disputeId: string) => {
     const note = disputeEvidenceNotes[disputeId]?.trim() ?? "";
     if (!note) {
-      setMessage("Add an evidence note before submitting.");
+      setInlineMessage(`dispute-evidence:${disputeId}`, "Add an evidence note before submitting.");
       return;
     }
     try {
@@ -2027,7 +2086,10 @@ const findTransactionById = (id: number) => {
       setDisputeEvidenceNotes((current) => ({ ...current, [disputeId]: "" }));
       setMessage("Evidence note added to the shared dispute history.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to add dispute evidence.");
+      setInlineMessage(
+        `dispute-evidence:${disputeId}`,
+        error instanceof Error ? error.message : "Unable to add dispute evidence.",
+      );
     }
   };
 
@@ -2036,7 +2098,10 @@ const findTransactionById = (id: number) => {
     const sellerAmount = Number(draft?.sellerAmount ?? "");
     const buyerAmount = Number(draft?.buyerAmount ?? "");
     if (!Number.isFinite(sellerAmount) || !Number.isFinite(buyerAmount) || sellerAmount < 0 || buyerAmount < 0) {
-      setMessage("Enter valid non-negative seller and buyer allocations.");
+      setInlineMessage(
+        `dispute-resolution:${disputeId}`,
+        "Enter valid non-negative seller and buyer allocations.",
+      );
       return;
     }
     try {
@@ -2048,7 +2113,10 @@ const findTransactionById = (id: number) => {
       });
       setMessage("Complete allocation proposed. The other party must accept it before money moves.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to propose the resolution.");
+      setInlineMessage(
+        `dispute-resolution:${disputeId}`,
+        error instanceof Error ? error.message : "Unable to propose the resolution.",
+      );
     }
   };
 
@@ -2057,7 +2125,10 @@ const findTransactionById = (id: number) => {
       await requestDisputeArbitrationMutation.mutateAsync({ disputeId });
       setMessage("Arbitration requested. The disputed funds remain reserved during review.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to request arbitration.");
+      setInlineMessage(
+        `dispute-actions:${disputeId}`,
+        error instanceof Error ? error.message : "Unable to request arbitration.",
+      );
     }
   };
 
@@ -2066,14 +2137,17 @@ const findTransactionById = (id: number) => {
       await resolveDisputeMutation.mutateAsync({ disputeId });
       setMessage("Resolution accepted. The frozen amount was fully allocated through the escrow ledger.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to accept the resolution.");
+      setInlineMessage(
+        `dispute-actions:${disputeId}`,
+        error instanceof Error ? error.message : "Unable to accept the resolution.",
+      );
     }
   };
 
   const handleRequestFundedCancellation = async (tx: Transaction) => {
     const draft = cancellationDrafts[tx.id] ?? { mode: "mutual" as const, reason: "" };
     if (draft.reason.trim().length < 10) {
-      setMessage("Explain the cancellation request in at least 10 characters.");
+      setInlineMessage(`cancellation:${tx.id}`, "Explain the cancellation request in at least 10 characters.");
       return;
     }
     try {
@@ -2086,7 +2160,10 @@ const findTransactionById = (id: number) => {
         ? "Mutual cancellation requested. No refund occurs until the other party accepts."
         : "Unilateral cancellation escalated for governed review. Funds remain held.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to request cancellation.");
+      setInlineMessage(
+        `cancellation:${tx.id}`,
+        error instanceof Error ? error.message : "Unable to request cancellation.",
+      );
     }
   };
 
@@ -2095,7 +2172,10 @@ const findTransactionById = (id: number) => {
       const result = await acceptFundedCancellationMutation.mutateAsync({ cancellationId });
       setMessage(`Cancellation accepted. ${formatCurrency(result.refundedCents / 100)} was returned to the buyer; disputed funds remain held.`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to accept cancellation.");
+      setInlineMessage(
+        `cancellation-action:${cancellationId}`,
+        error instanceof Error ? error.message : "Unable to accept cancellation.",
+      );
     }
   };
 
@@ -2155,19 +2235,22 @@ const findTransactionById = (id: number) => {
     if (!draftEscrowEdit) return;
     const amount = Number(draftEscrowEdit.amount);
     if (!draftEscrowEdit.title.trim() || !draftEscrowEdit.counterpartyEmail.trim() || !Number.isFinite(amount) || amount <= 0) {
-      setMessage("Title, counterparty email, and amount are required.");
+      setInlineMessage(`draft-edit:${tx.id}`, "Title, counterparty email, and amount are required.");
       return;
     }
     const invalidMilestone = draftEscrowEdit.milestones.find(
       (milestone) => !milestone.title.trim() || !Number.isFinite(Number(milestone.amount)) || Number(milestone.amount) <= 0,
     );
     if (invalidMilestone) {
-      setMessage("Every milestone needs a title and valid amount.");
+      setInlineMessage(`draft-edit:${tx.id}`, "Every milestone needs a title and valid amount.");
       return;
     }
     const total = draftEscrowEditTotal(draftEscrowEdit);
     if (Math.round(total * 100) !== Math.round(amount * 100)) {
-      setMessage(`Milestone amounts must add up to the escrow amount of ${formatCurrency(amount)}.`);
+      setInlineMessage(
+        `draft-edit:${tx.id}`,
+        `Milestone amounts must add up to the escrow amount of ${formatCurrency(amount)}.`,
+      );
       return;
     }
     const escrowId = tx.reference ?? `PO-${tx.id}`;
@@ -2190,7 +2273,10 @@ const findTransactionById = (id: number) => {
       setDraftEscrowEdit(null);
       setMessage("Proposal updated and invitation queued. Sign the latest agreement version to complete the update.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to update the draft escrow.");
+      setInlineMessage(
+        `draft-edit:${tx.id}`,
+        error instanceof Error ? error.message : "Unable to update the draft escrow.",
+      );
     }
   };
 
@@ -2256,13 +2342,14 @@ const findTransactionById = (id: number) => {
       (milestone) => !milestone.title.trim() || !Number.isFinite(Number(milestone.amount)) || Number(milestone.amount) <= 0,
     );
     if (invalidMilestone) {
-      setMessage("Every milestone needs a title and valid amount.");
+      setInlineMessage(`agreement-change:${tx.id}`, "Every milestone needs a title and valid amount.");
       return;
     }
     const total = agreementDraftTotal(agreementChangeDraft);
     if (Math.round(total * 100) !== Math.round(tx.amount * 100)) {
       const difference = total - tx.amount;
-      setMessage(
+      setInlineMessage(
+        `agreement-change:${tx.id}`,
         difference > 0
           ? `Milestone amounts exceed the escrow amount by ${formatCurrency(difference)}. Reduce one or more milestone amounts so the total equals ${formatCurrency(tx.amount)}.`
           : `Milestone amounts are short by ${formatCurrency(Math.abs(difference))}. Increase one or more milestone amounts so the total equals ${formatCurrency(tx.amount)}.`,
@@ -2287,7 +2374,10 @@ const findTransactionById = (id: number) => {
       setAgreementChangeDraft(null);
       setMessage("Requested agreement changes sent to the escrow creator.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to request agreement changes.");
+      setInlineMessage(
+        `agreement-change:${tx.id}`,
+        error instanceof Error ? error.message : "Unable to request agreement changes.",
+      );
     }
   };
 
@@ -2324,12 +2414,15 @@ const findTransactionById = (id: number) => {
         (milestone) => !milestone.title || !Number.isFinite(milestone.amount) || milestone.amount <= 0,
       );
       if (invalidMilestone) {
-        setMessage("Every proposed milestone needs a title and valid amount.");
+        setInlineMessage(`agreement-review:${tx.id}`, "Every proposed milestone needs a title and valid amount.");
         return;
       }
       const total = reviewMilestones.reduce((sum, milestone) => sum + milestone.amount, 0);
       if (Math.round(total * 100) !== Math.round(tx.amount * 100)) {
-        setMessage(`Milestone amounts must add up to the escrow amount of ${formatCurrency(tx.amount)}.`);
+        setInlineMessage(
+          `agreement-review:${tx.id}`,
+          `Milestone amounts must add up to the escrow amount of ${formatCurrency(tx.amount)}.`,
+        );
         return;
       }
     }
@@ -2346,7 +2439,10 @@ const findTransactionById = (id: number) => {
           : "The requested agreement changes were declined and the original agreement was kept.",
       );
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to complete the agreement review.");
+      setInlineMessage(
+        `agreement-review:${tx.id}`,
+        error instanceof Error ? error.message : "Unable to complete the agreement review.",
+      );
     }
   };
 
@@ -2354,11 +2450,11 @@ const findTransactionById = (id: number) => {
     const escrowId = tx.reference ?? `PO-${tx.id}`;
     const signatureDataUrl = approvalSignaturePadRef.current?.getDataUrl();
     if (!signatureDataUrl) {
-      setMessage("Draw your signature before approving the agreement.");
+      setInlineMessage(`approval:${tx.id}`, "Draw your signature before approving the agreement.");
       return;
     }
     if (approvalPartyType === "business" && !businessDetailsComplete(approvalBusiness)) {
-      setMessage("Enter the Business Name and Your Title before approving the escrow.");
+      setInlineMessage(`approval:${tx.id}`, "Enter the Business Name and Your Title before approving the escrow.");
       return;
     }
     const counterpartyParty: PartyIdentity = approvalPartyType === "business"
@@ -2373,14 +2469,17 @@ const findTransactionById = (id: number) => {
       setApprovalBusiness(emptyBusinessDetails());
       setMessage("Escrow approved. The buyer can now fund it with dummy wallet funds.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to approve escrow.");
+      setInlineMessage(
+        `approval:${tx.id}`,
+        error instanceof Error ? error.message : "Unable to approve escrow.",
+      );
     }
   };
 
   const handleSignCurrentAgreement = async (tx: Transaction) => {
     const signatureDataUrl = creatorSignaturePadRef.current?.getDataUrl();
     if (!signatureDataUrl) {
-      setMessage("Draw your signature before signing the corrected agreement.");
+      setInlineMessage(`creator-signature:${tx.id}`, "Draw your signature before signing the corrected agreement.");
       return;
     }
     try {
@@ -2393,7 +2492,10 @@ const findTransactionById = (id: number) => {
       setCreatorSignatureVersion((version) => version + 1);
       setMessage("The latest agreement version is signed and ready for the counterparty.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to sign the current agreement.");
+      setInlineMessage(
+        `creator-signature:${tx.id}`,
+        error instanceof Error ? error.message : "Unable to sign the current agreement.",
+      );
     }
   };
 
@@ -2402,7 +2504,10 @@ const findTransactionById = (id: number) => {
       await resendInvitationMutation.mutateAsync({ escrowId: tx.reference ?? `PO-${tx.id}` });
       setMessage("A fresh invitation has been queued for delivery.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to resend the invitation.");
+      setInlineMessage(
+        `invitation:${tx.id}`,
+        error instanceof Error ? error.message : "Unable to resend the invitation.",
+      );
     }
   };
 
@@ -2414,7 +2519,10 @@ const findTransactionById = (id: number) => {
       });
       setMessage("The invitation deadline was extended by seven days.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to extend the invitation.");
+      setInlineMessage(
+        `invitation:${tx.id}`,
+        error instanceof Error ? error.message : "Unable to extend the invitation.",
+      );
     }
   };
 
@@ -2424,7 +2532,10 @@ const findTransactionById = (id: number) => {
       await rejectEscrowMutation.mutateAsync({ escrowId });
       setMessage("Escrow rejected.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to reject escrow.");
+      setInlineMessage(
+        `approval:${tx.id}`,
+        error instanceof Error ? error.message : "Unable to reject escrow.",
+      );
     }
   };
 
@@ -2434,7 +2545,10 @@ const findTransactionById = (id: number) => {
       await cancelEscrowMutation.mutateAsync({ escrowId });
       setMessage("Escrow cancelled.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to cancel escrow.");
+      setInlineMessage(
+        `next-step:${tx.id}`,
+        error instanceof Error ? error.message : "Unable to cancel escrow.",
+      );
     }
   };
 
@@ -2469,7 +2583,10 @@ const findTransactionById = (id: number) => {
           }
           setMessage("Escrow funded with dummy wallet funds.");
         } catch (error) {
-          setMessage(error instanceof Error ? error.message : "Unable to fund escrow.");
+          setInlineMessage(
+            `funding:${tx.id}`,
+            error instanceof Error ? error.message : "Unable to fund escrow.",
+          );
         }
       },
     });
@@ -2515,8 +2632,22 @@ const findTransactionById = (id: number) => {
             });
           }
           setMessage(`${milestone.title} funded. Future milestones remain unfunded until you fund them.`);
+          pushToast({
+            variant: "success",
+            title: `${milestone.title} funded`,
+            body: "The seller can now submit work for this milestone.",
+          });
         } catch (error) {
-          setMessage(error instanceof Error ? error.message : "Unable to fund milestone.");
+          const errorMessage = error instanceof Error ? error.message : "Unable to fund milestone.";
+          setInlineMessage(
+            `funding:${tx.id}`,
+            errorMessage,
+          );
+          pushToast({
+            variant: "error",
+            title: "Milestone funding failed",
+            body: errorMessage,
+          });
         }
       },
     });
@@ -2525,7 +2656,7 @@ const findTransactionById = (id: number) => {
   const handleWalletTopup = async () => {
     const amount = Number(walletAmountInput);
     if (!amount || amount <= 0) {
-      setMessage("Enter a valid top-up amount.");
+      setInlineMessage("wallet-amount", "Enter a valid top-up amount.");
       return;
     }
     try {
@@ -2537,18 +2668,18 @@ const findTransactionById = (id: number) => {
       setWalletAmountInput("");
       setMessage("Wallet topped up.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to top up wallet.");
+      setInlineMessage("wallet-amount", error instanceof Error ? error.message : "Unable to top up wallet.");
     }
   };
 
 const handleWalletWithdraw = async () => {
     const amount = Number(walletAmountInput);
     if (!amount || amount <= 0) {
-      setMessage("Enter a valid withdrawal amount.");
+      setInlineMessage("wallet-amount", "Enter a valid withdrawal amount.");
       return;
     }
     if (amount > walletBalanceDisplay) {
-      setMessage("Not enough balance to withdraw.");
+      setInlineMessage("wallet-amount", "Not enough balance to withdraw.");
       return;
     }
     try {
@@ -2560,7 +2691,7 @@ const handleWalletWithdraw = async () => {
       setWalletAmountInput("");
       setMessage("Withdrawal requested.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to withdraw.");
+      setInlineMessage("wallet-amount", error instanceof Error ? error.message : "Unable to withdraw.");
     }
   };
 
@@ -3080,7 +3211,9 @@ const handleWalletWithdraw = async () => {
               <label htmlFor="walkthrough-amount">
                 Escrow amount <span aria-hidden="true">*</span>
               </label>
-              <div className="walkthrough-currency-input">
+              <div
+                className={`walkthrough-currency-input ${createPromptError ? "is-invalid" : ""}`}
+              >
                 <span aria-hidden="true">$</span>
                 <input
                   id="walkthrough-amount"
@@ -3088,13 +3221,21 @@ const handleWalletWithdraw = async () => {
                   inputMode="decimal"
                   value={formatCurrencyInput(createForm.amount).replace(/^\$/, "")}
                   placeholder="0.00"
+                  aria-invalid={Boolean(createPromptError)}
+                  aria-describedby={
+                    createPromptError
+                      ? "walkthrough-amount-help walkthrough-prompt-error"
+                      : "walkthrough-amount-help"
+                  }
                   autoFocus
                   onChange={(event) =>
                     updateCreateForm("amount", normalizeCurrencyInput(event.target.value))
                   }
                 />
               </div>
-              <small>This is the total the buyer will fund after both parties sign.</small>
+              <small id="walkthrough-amount-help">
+                This is the total the buyer will fund after both parties sign.
+              </small>
             </div>
           );
         case 5:
@@ -3182,7 +3323,7 @@ const handleWalletWithdraw = async () => {
             </div>
             <div className="walkthrough-answer">{renderPrompt()}</div>
             {createPromptError ? (
-              <div className="walkthrough-error" role="alert">
+              <div id="walkthrough-prompt-error" className="walkthrough-error" role="alert">
                 <span aria-hidden="true">!</span>
                 {createPromptError}
               </div>
@@ -3373,6 +3514,7 @@ const handleWalletWithdraw = async () => {
               </div>
             </div>
         </div>
+        {renderInlineMessage("milestone-builder")}
         <div className="form-field">
           <label className="muted" htmlFor="milestone-description">
             Milestone description
@@ -3556,7 +3698,12 @@ const handleWalletWithdraw = async () => {
             <SignaturePad
               ref={signaturePadRef}
               resetVersion={signatureVersion}
-              onSignedChange={setSignatureCaptured}
+              onSignedChange={(signed) => {
+                setSignatureCaptured(signed);
+                if (signed && agreementAccepted) {
+                  setMessage(null);
+                }
+              }}
             />
           </div>
           <div style={{ display: "flex", gap: 8, marginTop: 10, alignItems: "center" }}>
@@ -3572,7 +3719,13 @@ const handleWalletWithdraw = async () => {
           <input
             type="checkbox"
             checked={agreementAccepted}
-            onChange={(event) => setAgreementAccepted(event.target.checked)}
+            onChange={(event) => {
+              const accepted = event.target.checked;
+              setAgreementAccepted(accepted);
+              if (accepted && signatureCaptured) {
+                setMessage(null);
+              }
+            }}
           />
           I agree to the escrow terms
         </label>
@@ -3588,6 +3741,7 @@ const handleWalletWithdraw = async () => {
             {createEscrowMutation.isPending ? "Submitting..." : "Submit escrow"}
           </button>
         </div>
+        {renderInlineMessage("agreement-submit")}
       </div>
     </section>
   );
@@ -3609,6 +3763,7 @@ const handleWalletWithdraw = async () => {
           placeholder="$0.00"
           onChange={(event) => setWalletAmountInput(normalizeCurrencyInput(event.target.value))}
         />
+        {renderInlineMessage("wallet-amount")}
         <div className="wallet-actions">
           <button className="btn" onClick={handleWalletTopup} disabled={walletTopup.isPending}>
             {walletTopup.isPending ? "Processing..." : "Deposit"}
@@ -3979,6 +4134,7 @@ const handleWalletWithdraw = async () => {
                 </button>
               </div>
             ) : null}
+            {renderInlineMessage(`invitation:${tx.id}`)}
           </div>
         ) : null}
         {needsCreatorSignature ? (
@@ -4012,6 +4168,7 @@ const handleWalletWithdraw = async () => {
                 Clear
               </button>
             </div>
+            {renderInlineMessage(`creator-signature:${tx.id}`)}
           </div>
         ) : null}
         {isCurrentUserBuyer
@@ -4116,6 +4273,7 @@ const handleWalletWithdraw = async () => {
                   : ""}
               </p>
             ) : null}
+            {renderInlineMessage(`funding:${tx.id}`)}
           </div>
         ) : null}
         {(canFundEscrow || canCancelEscrow || canEditDraftEscrow || canRecoverInvitation || (tx.isOwner && isChangesRequested)) ? (
@@ -4152,6 +4310,7 @@ const handleWalletWithdraw = async () => {
                 </button>
               ) : null}
             </div>
+            {renderInlineMessage(`next-step:${tx.id}`)}
             {canEditDraftEscrow && draftEscrowEdit ? (
               <div className="agreement-change-card" style={{ marginTop: 14 }}>
                 <div className="agreement-change-card__heading proposal-edit-header">
@@ -4287,6 +4446,7 @@ const handleWalletWithdraw = async () => {
                     Cancel editing
                   </button>
                 </div>
+                {renderInlineMessage(`draft-edit:${tx.id}`)}
               </div>
             ) : null}
           </div>
@@ -4428,6 +4588,7 @@ const handleWalletWithdraw = async () => {
                   </button>
                   <button className="ghost" onClick={() => setAgreementChangeDraft(null)}>Cancel</button>
                 </div>
+                {renderInlineMessage(`agreement-change:${tx.id}`)}
               </>
             ) : null}
           </div>
@@ -4508,6 +4669,7 @@ const handleWalletWithdraw = async () => {
                 {rejectEscrowMutation.isPending ? "Rejecting..." : "Reject escrow"}
               </button>
             </div>
+            {renderInlineMessage(`approval:${tx.id}`)}
           </div>
         ) : null}
         {tx.isOwner && isChangesRequested && hasAgreementChangeRequest ? (
@@ -4613,6 +4775,7 @@ const handleWalletWithdraw = async () => {
                 Keep original agreement
               </button>
             </div>
+            {renderInlineMessage(`agreement-review:${tx.id}`)}
           </div>
         ) : null}
         {tx.lifecycleStatus === "funded" || tx.cancellation ? (
@@ -4639,6 +4802,7 @@ const handleWalletWithdraw = async () => {
                     {acceptFundedCancellationMutation.isPending ? "Refunding..." : "Accept cancellation and refund available funds"}
                   </button>
                 ) : null}
+                {renderInlineMessage(`cancellation-action:${tx.cancellation.id}`)}
                 {tx.cancellation.mode === "unilateral" ? (
                   <p className="muted" style={{ marginBottom: 0 }}>
                     Unilateral requests require governed review. All remaining funds stay held meanwhile.
@@ -4689,6 +4853,7 @@ const handleWalletWithdraw = async () => {
                 >
                   {requestFundedCancellationMutation.isPending ? "Requesting..." : "Request cancellation"}
                 </button>
+                {renderInlineMessage(`cancellation:${tx.id}`)}
               </div>
             )}
           </div>
@@ -4820,6 +4985,7 @@ const handleWalletWithdraw = async () => {
                             placeholder="Describe exactly what needs to change"
                           />
                         </label>
+                        {renderInlineMessage(`milestone-review:${milestone.id}`)}
                         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                           <button
                             className="btn"
@@ -4837,12 +5003,18 @@ const handleWalletWithdraw = async () => {
                           </button>
                         </div>
                       </div>
-                    ) : tx.fundingMode === "milestone"
-                      && !isFunded
+                    ) : !isFunded
                       && ["not_started", "revision_requested"].includes(milestone.status) ? (
-                      <span className="milestone-chip milestone-chip--not_started">
-                        {isCurrentUserBuyer ? "Funding follows the prior milestone" : "Awaiting buyer funding"}
-                      </span>
+                      <div>
+                        <span className="milestone-chip milestone-chip--not_started">
+                          {isCurrentUserBuyer
+                            ? tx.fundingMode === "milestone"
+                              ? "Funding follows the prior milestone"
+                              : "Fund this milestone to begin"
+                            : "Awaiting buyer funding"}
+                        </span>
+                        {renderInlineMessage(`milestone-submission:${milestone.id}`)}
+                      </div>
                     ) : ["not_started", "revision_requested"].includes(milestone.status)
                       && sameEmail(tx.sellerEmail, currentUser.email) ? (
                       <div style={{ width: "100%" }}>
@@ -4893,6 +5065,7 @@ const handleWalletWithdraw = async () => {
                             ))}
                           </div>
                         ) : null}
+                        {renderInlineMessage(`milestone-submission:${milestone.id}`)}
                         <button
                           className="btn"
                           style={{ marginTop: 10 }}
@@ -4942,6 +5115,7 @@ const handleWalletWithdraw = async () => {
                           placeholder="Explain the specific disagreement"
                         />
                       </label>
+                      {renderInlineMessage(`milestone-dispute:${milestone.id}`)}
                       <button
                         className="ghost"
                         style={{ marginTop: 8 }}
@@ -4997,6 +5171,7 @@ const handleWalletWithdraw = async () => {
                                   placeholder="Add facts, dates, or a summary of supporting material"
                                 />
                               </label>
+                              {renderInlineMessage(`dispute-evidence:${dispute.id}`)}
                               <button
                                 className="ghost"
                                 style={{ marginTop: 8 }}
@@ -5086,6 +5261,7 @@ const handleWalletWithdraw = async () => {
                                   />
                                 </label>
                               </div>
+                              {renderInlineMessage(`dispute-resolution:${dispute.id}`)}
                               <label className="field" style={{ marginTop: 8 }}>
                                 <span>Resolution note</span>
                                 <textarea
@@ -5121,6 +5297,7 @@ const handleWalletWithdraw = async () => {
                               ) : null}
                             </div>
                           )}
+                          {renderInlineMessage(`dispute-actions:${dispute.id}`)}
                         </>
                       ) : (
                         <p className="muted">Dispute details are unavailable. Refresh to try again.</p>
@@ -5178,6 +5355,7 @@ const handleWalletWithdraw = async () => {
                           </div>
                         ))}
                       </div>
+                      {renderInlineMessage(`proof-download:${milestone.id}`)}
                     </div>
                   ) : null}
                 </div>
@@ -5262,7 +5440,7 @@ const handleWalletWithdraw = async () => {
         onAlertsClick={handleAlertsClick}
       />
       <main ref={mainContentRef} className="app-main" tabIndex={-1}>
-        {message ? (
+        {message && !messageLocation ? (
           <div className="card" style={{ marginBottom: 12, borderLeft: "4px solid var(--accent-orange)" }}>
             <div className="muted">{message}</div>
           </div>

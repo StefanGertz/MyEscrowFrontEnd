@@ -376,11 +376,12 @@ const buildMilestoneAction =
             headers: idempotencyHeaders(),
           },
         ),
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ["dashboard", "escrows"] });
-        queryClient.invalidateQueries({ queryKey: ["dashboard", "overview"] });
-        queryClient.invalidateQueries({ queryKey: ["dashboard", "notifications"] });
-      },
+      onSuccess: () =>
+        Promise.all([
+          queryClient.invalidateQueries({ queryKey: ["dashboard", "escrows"] }),
+          queryClient.invalidateQueries({ queryKey: ["dashboard", "overview"] }),
+          queryClient.invalidateQueries({ queryKey: ["dashboard", "notifications"] }),
+        ]),
     });
   };
 
