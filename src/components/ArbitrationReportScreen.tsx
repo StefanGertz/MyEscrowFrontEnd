@@ -294,6 +294,10 @@ function ReportDocument({ report, accessLabel }: { report: ArbitrationReport; ac
         description="Original managed files included inside the downloadable PDF, in attachment order."
         count={report.exhibits.length}
       >
+        <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          Security notice: embedded originals are not malware-scanned. Treat every attachment as
+          untrusted and open it only with appropriate endpoint protection in a patched application.
+        </p>
         {report.exhibits.length ? (
           <ol className="space-y-3">
             {report.exhibits.map((exhibit, index) => (

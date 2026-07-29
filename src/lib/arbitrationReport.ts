@@ -83,8 +83,8 @@ export type ArbitrationReport = {
       submitter: ReportPerson;
       evidence: Array<ReportFileReference & {
         id: number;
-        exhibitId: string;
-        storageStatus: "managed";
+        exhibitId: string | null;
+        storageStatus: "managed" | "metadata_only";
         createdAt: string;
       }>;
       review?: {
@@ -159,11 +159,22 @@ export type ArbitrationExhibitLoader = (
   exhibit: ArbitrationExhibit,
 ) => Promise<ArrayBuffer | Uint8Array>;
 
-const date = (value?: string | null) =>
-  value ? new Date(value).toLocaleString() : "Not recorded";
+const date = (value?: string | null) => {
+  if (!value) return "Not recorded";
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime())
+    ? "Not recorded"
+    : parsed.toISOString();
+};
 
 const money = (cents: number, currency: string) =>
-  new Intl.NumberFormat(undefined, { style: "currency", currency }).format(cents / 100);
+  new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency,
+    currencyDisplay: "code",
+  }).format(cents / 100);
+
+const integer = (value: number) => new Intl.NumberFormat("en-US").format(value);
 
 const words = (value: string) => value.replaceAll("_", " ").replaceAll(".", " ");
 
@@ -396,7 +407,7 @@ function addExhibitCover(
   drawValue("Original filename", exhibit.fileName);
   drawValue("Evidence context", exhibit.context);
   drawValue("Submitted", `${exhibit.submittedBy.name} · ${date(exhibit.submittedAt)}`);
-  drawValue("File type and size", `${exhibit.contentType || "Unknown type"} · ${exhibit.sizeBytes.toLocaleString()} bytes`);
+  drawValue("File type and size", `${exhibit.contentType || "Unknown type"} · ${integer(exhibit.sizeBytes)} bytes`);
   drawValue("SHA-256", exhibit.sha256, true);
   drawValue("Embedded attachment name", embeddedName);
 
@@ -420,6 +431,24 @@ function addExhibitCover(
     });
     noteY -= 13;
   }
+  page.drawText(
+    `${report.reportId} | ${report.integritySha256.slice(0, 20)}...`,
+    {
+      x: margin,
+      y: 20,
+      size: 7,
+      font,
+      color: rgb(0.36, 0.43, 0.5),
+    },
+  );
+  const coverLabel = `Exhibit ${String(index + 1).padStart(3, "0")} cover`;
+  page.drawText(coverLabel, {
+    x: width - margin - font.widthOfTextAtSize(coverLabel, 7),
+    y: 20,
+    size: 7,
+    font,
+    color: rgb(0.36, 0.43, 0.5),
+  });
 }
 
 async function embedExhibits(
@@ -435,7 +464,7 @@ async function embedExhibits(
   const totalSize = report.exhibits.reduce((total, exhibit) => total + exhibit.sizeBytes, 0);
   if (totalSize > MAX_ARBITRATION_EXHIBIT_BYTES) {
     throw new Error(
-      `The ${report.exhibits.length} exhibits total ${totalSize.toLocaleString()} bytes, exceeding the 100 MB arbitration packet limit.`,
+      `The ${report.exhibits.length} exhibits total ${integer(totalSize)} bytes, exceeding the 100 MB arbitration packet limit.`,
     );
   }
   const exhibitIds = new Set<string>();
@@ -455,10 +484,24 @@ async function embedExhibits(
   pdf.setProducer("MyEscrow arbitration reporting");
   pdf.setKeywords(["arbitration", "escrow", "evidence", report.case.reference]);
   const generatedAt = new Date(report.generatedAt);
-  if (!Number.isNaN(generatedAt.getTime())) {
+  const hasValidGeneratedAt = !Number.isNaN(generatedAt.getTime());
+  if (hasValidGeneratedAt) {
     pdf.setCreationDate(generatedAt);
     pdf.setModificationDate(generatedAt);
   }
+  const attachmentDates = hasValidGeneratedAt
+    ? { creationDate: generatedAt, modificationDate: generatedAt }
+    : {};
+
+  await pdf.attach(
+    new TextEncoder().encode(JSON.stringify(report, null, 2)),
+    "Arbitration-Report-Data.json",
+    {
+      mimeType: "application/json",
+      description: `Machine-readable arbitration report data; canonical SHA-256 ${report.integritySha256}`,
+      ...attachmentDates,
+    },
+  );
 
   for (const [index, exhibit] of report.exhibits.entries()) {
     let loaded: ArrayBuffer | Uint8Array;
@@ -483,8 +526,7 @@ async function embedExhibits(
     await pdf.attach(bytes, embeddedName, {
       mimeType: exhibit.contentType || "application/octet-stream",
       description: `${exhibit.context}; SHA-256 ${exhibit.sha256}`,
-      creationDate: generatedAt,
-      modificationDate: generatedAt,
+      ...attachmentDates,
     });
     addExhibitCover(pdf, font, boldFont, report, exhibit, index, embeddedName);
   }
@@ -713,6 +755,10 @@ export async function buildArbitrationReportPdf(
   });
   line(
     "Each indexed exhibit is embedded in the downloaded PDF as an original-file attachment. Exhibit content is not parsed or imported into report pages; each original follows a visible metadata cover.",
+    { color: navy },
+  );
+  line(
+    "Arbitration-Report-Data.json is also attached so names, messages, and other report text remain available in their exact Unicode form.",
     { color: navy },
   );
 

@@ -113,11 +113,11 @@ export type EscrowRecord = {
       submitter: { id: string; name: string };
       evidence: Array<{
         id: number;
-        objectKey: string;
         fileName: string;
         contentType: string;
         sizeBytes: number;
         sha256: string;
+        storageStatus: "managed" | "metadata_only";
       }>;
       review?: {
         decision: string;

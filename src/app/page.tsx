@@ -129,11 +129,11 @@ type TxMilestone = {
     submitter: { id: string; name: string };
     evidence: Array<{
       id: number;
-      objectKey: string;
       fileName: string;
       contentType: string;
       sizeBytes: number;
       sha256: string;
+      storageStatus: "managed" | "metadata_only";
     }>;
     review?: {
       decision: string;
@@ -2050,11 +2050,11 @@ const findTransactionById = (id: number) => {
                   submitter: { id: currentUser.email, name: currentUser.name },
                   evidence: files.map((file, index) => ({
                     id: Date.now() + index,
-                    objectKey: `demo/${file.name}`,
                     fileName: file.name,
                     contentType: file.type,
                     sizeBytes: file.size,
                     sha256: "",
+                    storageStatus: "managed" as const,
                   })),
                 },
               ],
@@ -5803,7 +5803,7 @@ const handleWalletWithdraw = async () => {
                               {submission.evidence.length ? (
                                 <div className="milestone-proof-history">
                                   <span className="muted">Proof files</span>
-                                  {submission.evidence.map((item) => (
+                                  {submission.evidence.map((item) => item.storageStatus === "managed" ? (
                                     <button
                                       type="button"
                                       className="milestone-proof-download"
@@ -5819,6 +5819,11 @@ const handleWalletWithdraw = async () => {
                                       <span>{item.fileName}</span>
                                       <small>{formatFileSize(item.sizeBytes)} • Download</small>
                                     </button>
+                                  ) : (
+                                    <div className="milestone-proof-download" key={item.id}>
+                                      <span>{item.fileName}</span>
+                                      <small>{formatFileSize(item.sizeBytes)} • Legacy metadata only</small>
+                                    </div>
                                   ))}
                                 </div>
                               ) : null}
