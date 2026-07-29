@@ -78,6 +78,7 @@ import { previewStagedFunding } from "@/lib/stagedFunding";
 import { LiveDashboard } from "@/components/LiveDashboard";
 import { NotificationTimestamp } from "@/components/NotificationTimestamp";
 import { ChangePasswordModal } from "@/components/ChangePasswordModal";
+import { EscrowChat } from "@/components/EscrowChat";
 import type { EscrowRecord } from "@/lib/mockDashboard";
 
 type ScreenId =
@@ -996,6 +997,7 @@ function MockExperienceHome({ searchParams }: HomeProps) {
     amount: "",
     category: "Goods",
     description: "",
+    fundingMode: null as "full" | "milestone" | null,
     partyType: "individual" as "individual" | "business",
     business: emptyBusinessDetails(),
   });
@@ -1033,6 +1035,8 @@ function MockExperienceHome({ searchParams }: HomeProps) {
   const [milestoneRevisionReasons, setMilestoneRevisionReasons] = useState<Record<string, string>>({});
   const [milestoneDisputeReasons, setMilestoneDisputeReasons] = useState<Record<string, string>>({});
   const [disputeEvidenceNotes, setDisputeEvidenceNotes] = useState<Record<string, string>>({});
+  const [disputeEvidenceFiles, setDisputeEvidenceFiles] = useState<Record<string, File[]>>({});
+  const [disputeEvidenceInputVersions, setDisputeEvidenceInputVersions] = useState<Record<string, number>>({});
   const [disputeResolutionDrafts, setDisputeResolutionDrafts] = useState<Record<string, {
     sellerAmount: string;
     buyerAmount: string;
@@ -1112,6 +1116,8 @@ function MockExperienceHome({ searchParams }: HomeProps) {
   const notificationHistoryQuery = useNotificationHistory();
   const overviewQuery = useEscrowSummary();
   const escrowsQuery = useEscrows();
+  const fundingPlanSelectionSupported =
+    !liveDataEnabled || escrowsQuery.data?.fundingPlanSelectionSupported === true;
   const disputesQuery = useDisputes();
   const walletTransactionsQuery = useWalletTransactions(liveDataEnabled);
   const liveTransactions = liveDataEnabled
@@ -1353,12 +1359,19 @@ const agreementPreview = (() => {
   const amountValue = Number(createForm.amount) || 0;
   const descriptionValue = createForm.description.trim();
   const descriptionLine = descriptionValue ? `\nDescription: ${descriptionValue}` : "";
+  const fundingLine = `\nFunding plan: ${
+    createForm.fundingMode === "milestone"
+      ? "Flexible staged funding"
+      : createForm.fundingMode === "full"
+        ? "Full escrow funding"
+        : "Not selected"
+  }`;
   const creatorLabel = createForm.partyType === "business"
     ? `${createForm.business.legalName || "Business pending"}, represented by ${currentUser.name}${createForm.business.representativeTitle ? `, ${createForm.business.representativeTitle}` : ""}`
     : currentUser.name;
   const intro = `Buyer: ${createForm.role === "buyer" ? creatorLabel : createForm.counterpartyEmail || "Buyer pending"}\nSeller: ${
     createForm.role === "seller" ? creatorLabel : createForm.counterpartyEmail || "Seller pending"
-  }\nAmount: ${formatCurrency(amountValue)}${descriptionLine}`;
+  }\nAmount: ${formatCurrency(amountValue)}${fundingLine}${descriptionLine}`;
   if (!milestones.length) {
     return intro;
   }
@@ -1533,6 +1546,14 @@ const findTransactionById = (id: number) => {
 };
 
   const handleCreatePromptNext = () => {
+    if (createPromptStep === 6 && !fundingPlanSelectionSupported) {
+      setCreatePromptError(
+        escrowsQuery.isLoading
+          ? "Checking backend support for agreement funding plans."
+          : "Funding-plan selection is waiting for the backend deployment to finish.",
+      );
+      return;
+    }
     const promptError = validateEscrowDetailPrompt(createPromptStep, {
       partyType: createForm.partyType,
       business: createForm.business,
@@ -1543,6 +1564,7 @@ const findTransactionById = (id: number) => {
       amount: createForm.amount,
       description: createForm.description,
       descriptionSkipped,
+      fundingMode: createForm.fundingMode,
     });
     if (promptError) {
       setCreatePromptError(promptError);
@@ -1647,6 +1669,10 @@ const findTransactionById = (id: number) => {
       setInlineMessage("agreement-submit", "Enter an escrow amount before submitting.");
       return;
     }
+    if (!createForm.fundingMode) {
+      setInlineMessage("agreement-submit", "Choose a funding plan before submitting.");
+      return;
+    }
     const responseTitle = createForm.title.trim() || (createForm.category ? `${createForm.category} escrow` : "New escrow");
     const descriptionValue = createForm.description.trim();
     const approvalContext =
@@ -1663,6 +1689,7 @@ const findTransactionById = (id: number) => {
         title: responseTitle,
         counterpartyEmail: createForm.counterpartyEmail || "counterparty@example.com",
         amount: escrowAmount,
+        fundingMode: createForm.fundingMode,
         creatorRole: createForm.role,
         creatorParty: createForm.partyType === "business"
           ? { type: "business", business: createForm.business }
@@ -1670,7 +1697,16 @@ const findTransactionById = (id: number) => {
         category: createForm.category,
         description: descriptionValue || undefined,
         signatureDataUrl,
-        milestones: milestones.map((milestone) => ({
+        milestones: (milestones.length
+          ? milestones
+          : [{
+              id: randomId(),
+              title: responseTitle,
+              amount: escrowAmount,
+              description: descriptionValue || undefined,
+              deadline: undefined,
+            }]
+        ).map((milestone) => ({
           title: milestone.title,
           amount: milestone.amount,
           description: milestone.description || undefined,
@@ -1712,6 +1748,7 @@ const findTransactionById = (id: number) => {
         context: pendingContext,
         lifecycleStatus: requiresSignup ? "pending_counterparty_signup" : "pending_approval",
         fundingStatus: "not_funded",
+        fundingMode: createForm.fundingMode,
         creatorRole: createForm.role,
         createdAt: response.createdAt ?? timestamp,
         buyerSignatureDataUrl: createForm.role === "buyer" ? signatureDataUrl : undefined,
@@ -1772,6 +1809,7 @@ const findTransactionById = (id: number) => {
         amount: "",
         category: "Goods",
         description: "",
+        fundingMode: null,
         partyType: "individual",
         business: emptyBusinessDetails(),
       });
@@ -2052,6 +2090,10 @@ const findTransactionById = (id: number) => {
       setInlineMessage(`milestone-submission:${milestoneId}`, `${oversized.name} is larger than the 25 MB limit.`);
       return;
     }
+    if (files.reduce((total, file) => total + file.size, 0) > 100_000_000) {
+      setInlineMessage(`milestone-submission:${milestoneId}`, "Proof files may total no more than 100 MB.");
+      return;
+    }
     setMilestoneProofFiles((current) => ({ ...current, [milestoneId]: files }));
   };
 
@@ -2111,14 +2153,35 @@ const findTransactionById = (id: number) => {
 
   const handleSubmitDisputeEvidence = async (disputeId: string) => {
     const note = disputeEvidenceNotes[disputeId]?.trim() ?? "";
-    if (!note) {
-      setInlineMessage(`dispute-evidence:${disputeId}`, "Add an evidence note before submitting.");
+    const files = disputeEvidenceFiles[disputeId] ?? [];
+    if (!note && !files.length) {
+      setInlineMessage(`dispute-evidence:${disputeId}`, "Add an evidence note or at least one file before submitting.");
+      return;
+    }
+    if (files.length > 10) {
+      setInlineMessage(`dispute-evidence:${disputeId}`, "Upload no more than 10 evidence files at once.");
+      return;
+    }
+    const oversized = files.find((file) => file.size > 25_000_000);
+    if (oversized) {
+      setInlineMessage(`dispute-evidence:${disputeId}`, `${oversized.name} is larger than the 25 MB limit.`);
+      return;
+    }
+    if (files.reduce((total, file) => total + file.size, 0) > 100_000_000) {
+      setInlineMessage(`dispute-evidence:${disputeId}`, "Evidence files may total no more than 100 MB.");
       return;
     }
     try {
-      await submitDisputeEvidenceMutation.mutateAsync({ disputeId, note });
+      await submitDisputeEvidenceMutation.mutateAsync({ disputeId, note, files });
       setDisputeEvidenceNotes((current) => ({ ...current, [disputeId]: "" }));
-      setMessage("Evidence note added to the shared dispute history.");
+      setDisputeEvidenceFiles((current) => ({ ...current, [disputeId]: [] }));
+      setDisputeEvidenceInputVersions((current) => ({
+        ...current,
+        [disputeId]: (current[disputeId] ?? 0) + 1,
+      }));
+      setMessage(files.length
+        ? "Evidence files were stored and added to the shared dispute history."
+        : "Evidence note added to the shared dispute history.");
     } catch (error) {
       setInlineMessage(
         `dispute-evidence:${disputeId}`,
@@ -3392,6 +3455,57 @@ const handleWalletWithdraw = async () => {
               <small>This gives both parties shared context before you define payment milestones.</small>
             </div>
           );
+        case 6:
+          return (
+            <fieldset className="walkthrough-fieldset">
+              <legend className="sr-only">{prompt.title}</legend>
+              <div className="walkthrough-choice-grid">
+                {([
+                  {
+                    value: "full",
+                    title: "Fund the entire escrow",
+                    detail: "The buyer deposits the full agreement amount before work begins.",
+                    icon: "100%",
+                  },
+                  {
+                    value: "milestone",
+                    title: "Flexible staged funding",
+                    detail: "The buyer adds flexible deposits that secure milestones in order.",
+                    icon: "→",
+                  },
+                ] as const).map((option) => (
+                  <label
+                    key={option.value}
+                    className={`walkthrough-choice ${
+                      createForm.fundingMode === option.value ? "active" : ""
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="funding-mode"
+                      disabled={!fundingPlanSelectionSupported}
+                      checked={createForm.fundingMode === option.value}
+                      onChange={() => updateCreateForm("fundingMode", option.value)}
+                    />
+                    <span className="walkthrough-choice__icon" aria-hidden="true">
+                      {option.icon}
+                    </span>
+                    <span>
+                      <strong>{option.title}</strong>
+                      <small>{option.detail}</small>
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <p className="muted" style={{ margin: "12px 0 0" }}>
+                {fundingPlanSelectionSupported
+                  ? "This choice becomes part of the agreement both parties sign."
+                  : escrowsQuery.isLoading
+                    ? "Checking backend support..."
+                    : "Backend update pending. This agreement term will unlock after deployment."}
+              </p>
+            </fieldset>
+          );
       }
     };
 
@@ -3407,6 +3521,11 @@ const handleWalletWithdraw = async () => {
         ? "Scope added"
         : descriptionSkipped
           ? "Skipped"
+          : "Not answered",
+      createForm.fundingMode === "milestone"
+        ? "Flexible staged funding"
+        : createForm.fundingMode === "full"
+          ? "Full escrow funding"
           : "Not answered",
     ];
 
@@ -3472,7 +3591,7 @@ const handleWalletWithdraw = async () => {
                       setDescriptionSkipped(true);
                       setCreatePromptError(null);
                       setMessage(null);
-                      navigate("milestones");
+                      setCreatePromptStep(6);
                     }}
                   >
                     Skip for now
@@ -4129,6 +4248,8 @@ const handleWalletWithdraw = async () => {
     const canUseMilestoneFunding = tx.milestoneFundingSupported !== false;
     const canUseStagedFunding =
       !liveDataEnabled || tx.stagedFundingSupported !== false;
+    const hasSecuredFunds =
+      (tx.fundedAmount ?? 0) > 0 || tx.fundingStatus === "funded";
     const walletShortfall = Math.max(tx.amount - walletBalanceDisplay, 0);
     const remainingEscrowFunding = Math.max(0, tx.amount - (tx.fundedAmount ?? 0));
     const milestoneIsFunded = (milestone: TxMilestone) =>
@@ -4348,7 +4469,13 @@ const handleWalletWithdraw = async () => {
                   <div className="transaction-summary-field">
                     <div className="muted">Funding</div>
                     <div style={{ fontWeight: 700 }}>
-                      {tx.fundingMode === "milestone" ? "Funded in stages" : "Funded in full"}
+                      {tx.fundingMode === "milestone"
+                        ? hasSecuredFunds
+                          ? "Staged funding active"
+                          : "Staged funding agreed"
+                        : hasSecuredFunds
+                          ? "Funded in full"
+                          : "Full funding agreed"}
                     </div>
                     <div className="muted" style={{ marginTop: 4 }}>
                       {formatCurrency(tx.fundedAmount ?? (tx.fundingStatus === "funded" ? tx.amount : 0))} secured
@@ -4371,6 +4498,12 @@ const handleWalletWithdraw = async () => {
               </div>
             </div>
           </div>
+        </div>
+        <div style={{ marginTop: 12 }}>
+          <EscrowChat
+            escrowId={String(tx.reference ?? tx.id)}
+            counterpart={tx.counterpart}
+          />
         </div>
         {tx.invitation || tx.agreement ? (
           <div className="card agreement-invitation-card" style={{ marginTop: 12 }}>
@@ -4455,7 +4588,7 @@ const handleWalletWithdraw = async () => {
             {renderInlineMessage(`creator-signature:${tx.id}`)}
           </div>
         ) : null}
-        {isCurrentUserBuyer
+        {(isCurrentUserBuyer || Boolean(tx.fundingMode))
           && tx.milestones.length > 0
           && !["completed", "cancelled"].includes(tx.lifecycleStatus ?? "") ? (
           <div className="card funding-plan" style={{ marginTop: 12 }}>
@@ -4482,7 +4615,9 @@ const handleWalletWithdraw = async () => {
                 <span className="muted">
                   {tx.fundingMode === "milestone"
                     ? `${formatCurrency(tx.fundedAmount ?? 0)} of ${formatCurrency(tx.amount)} secured`
-                    : `${formatCurrency(tx.amount)} secured for all milestones`}
+                    : hasSecuredFunds
+                      ? `${formatCurrency(tx.amount)} secured for all milestones`
+                      : `${formatCurrency(tx.amount)} will be deposited after both parties sign`}
                 </span>
               </div>
             ) : (
@@ -4533,6 +4668,26 @@ const handleWalletWithdraw = async () => {
                 </article>
               </div>
             )}
+            {tx.fundingMode === "full" && tx.fundingStatus !== "funded" ? (
+              <button
+                className="btn"
+                style={{ marginTop: 12 }}
+                onClick={() => handleFundEscrow(tx)}
+                disabled={
+                  !canFundEscrow
+                  || fundEscrowMutation.isPending
+                  || walletBalanceDisplay < tx.amount
+                }
+              >
+                {fundEscrowMutation.isPending
+                  ? "Funding..."
+                  : canFundEscrow
+                    ? "Fund entire escrow"
+                    : isCurrentUserBuyer
+                      ? "Available after approval"
+                      : "Buyer funds after approval"}
+              </button>
+            ) : null}
             {tx.fundingMode === "milestone" ? stagedFundingControls : null}
             {!tx.fundingMode && !canFundEscrow ? (
               <p className="funding-plan__availability muted">
@@ -5448,7 +5603,10 @@ const handleWalletWithdraw = async () => {
                                       {evidence.submitter.name} • {formatDateTime(evidence.submittedAt)}
                                     </div>
                                     {evidence.references.length ? (
-                                      <div className="muted">Files: {evidence.references.map((item) => item.fileName).join(", ")}</div>
+                                      <div className="muted">
+                                        Files: {evidence.references.map((item) =>
+                                          `${item.fileName}${item.storageStatus === "managed" ? " (stored)" : " (metadata only)"}`).join(", ")}
+                                      </div>
                                     ) : null}
                                   </div>
                                 </div>
@@ -5458,7 +5616,7 @@ const handleWalletWithdraw = async () => {
                           {dispute.status !== "arbitration_requested" ? (
                             <>
                               <label className="field" style={{ marginTop: 10 }}>
-                                <span>Add evidence note</span>
+                                <span>Add evidence note (optional with files)</span>
                                 <textarea
                                   rows={2}
                                   value={disputeEvidenceNotes[dispute.id] ?? ""}
@@ -5469,6 +5627,25 @@ const handleWalletWithdraw = async () => {
                                   placeholder="Add facts, dates, or a summary of supporting material"
                                 />
                               </label>
+                              <label className="field" style={{ marginTop: 10 }}>
+                                <span>Evidence files</span>
+                                <input
+                                  key={`${dispute.id}-${disputeEvidenceInputVersions[dispute.id] ?? 0}`}
+                                  type="file"
+                                  multiple
+                                  accept=".pdf,.doc,.docx,.rtf,.xls,.xlsx,.heic,.heif,.jpg,.jpeg,.png,.webp,.csv,.txt"
+                                  onChange={(event) => {
+                                    const files = Array.from(event.target.files ?? []);
+                                    setDisputeEvidenceFiles((current) => ({ ...current, [dispute.id]: files }));
+                                  }}
+                                />
+                                <span className="muted">Up to 10 files, 25 MB each, 100 MB total.</span>
+                                {(disputeEvidenceFiles[dispute.id] ?? []).length ? (
+                                  <span className="muted">
+                                    Selected: {(disputeEvidenceFiles[dispute.id] ?? []).map((file) => file.name).join(", ")}
+                                  </span>
+                                ) : null}
+                              </label>
                               {renderInlineMessage(`dispute-evidence:${dispute.id}`)}
                               <button
                                 className="ghost"
@@ -5476,7 +5653,7 @@ const handleWalletWithdraw = async () => {
                                 onClick={() => handleSubmitDisputeEvidence(dispute.id)}
                                 disabled={submitDisputeEvidenceMutation.isPending}
                               >
-                                {submitDisputeEvidenceMutation.isPending ? "Adding..." : "Add evidence note"}
+                                {submitDisputeEvidenceMutation.isPending ? "Adding..." : "Add dispute evidence"}
                               </button>
                             </>
                           ) : null}
@@ -5492,6 +5669,15 @@ const handleWalletWithdraw = async () => {
                                     Requested {formatDateTime(dispute.arbitrationRequestedAt)}
                                   </div>
                                 ) : null}
+                                <button
+                                  className="ghost"
+                                  style={{ marginTop: 10 }}
+                                  onClick={() => router.push(
+                                    `/disputes/${encodeURIComponent(dispute.id)}/arbitration-report`,
+                                  )}
+                                >
+                                  View or download arbitration report
+                                </button>
                               </div>
                             </div>
                           ) : dispute.resolution ? (

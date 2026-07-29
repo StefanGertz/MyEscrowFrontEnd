@@ -5,9 +5,10 @@ export const escrowDetailPrompts = [
   { shortLabel: "Transaction", title: "What is this escrow for?" },
   { shortLabel: "Amount", title: "How much will be held in escrow?" },
   { shortLabel: "Scope", title: "What should the agreement cover?" },
+  { shortLabel: "Funding", title: "How will the buyer fund this escrow?" },
 ] as const;
 
-export type EscrowDetailPromptIndex = 0 | 1 | 2 | 3 | 4 | 5;
+export type EscrowDetailPromptIndex = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
 export type EscrowDetailAnswers = {
   partyType: "individual" | "business";
@@ -22,6 +23,7 @@ export type EscrowDetailAnswers = {
   amount: string;
   description: string;
   descriptionSkipped: boolean;
+  fundingMode: "full" | "milestone" | null;
 };
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -75,6 +77,10 @@ export function validateEscrowDetailPrompt(
 
   if (prompt === 5 && !answers.description.trim() && !answers.descriptionSkipped) {
     return "Add a short scope or choose “Skip for now”.";
+  }
+
+  if (prompt === 6 && !answers.fundingMode) {
+    return "Choose a funding plan to continue.";
   }
 
   return null;

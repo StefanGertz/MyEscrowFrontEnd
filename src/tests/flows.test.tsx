@@ -9,6 +9,8 @@ import {
   useRejectEscrow,
   useCancelEscrow,
   useFundMilestone,
+  useEscrowMessages,
+  useSendEscrowMessage,
   useDismissNotification,
   useRequestMilestoneChanges,
   useApplyMilestoneChanges,
@@ -62,6 +64,7 @@ describe("escrow flows", () => {
         title: "Integration escrow",
         counterpartyEmail: "northwind@example.com",
         amount: 75000,
+        fundingMode: "milestone",
         creatorRole: "buyer",
         creatorParty: { type: "individual" },
         category: "Services",
@@ -101,6 +104,31 @@ describe("approval flows", () => {
         escrowId: "111",
       });
       expect(response.status).toBe("cancelled");
+    });
+  });
+});
+
+describe("escrow chat", () => {
+  it("loads the party conversation and sends a new message", async () => {
+    const queryClient = createQueryClient();
+    const wrapper = createWrapper(queryClient);
+    const messagesHook = renderHook(() => useEscrowMessages("PO-1001"), { wrapper });
+
+    await waitFor(() => expect(messagesHook.result.current.isSuccess).toBe(true));
+    expect(messagesHook.result.current.data?.messages[0]).toEqual(expect.objectContaining({
+      body: "The delivery window works for me.",
+      sender: expect.objectContaining({ role: "seller" }),
+    }));
+
+    const sendHook = renderHook(() => useSendEscrowMessage("PO-1001"), { wrapper });
+    await act(async () => {
+      const response = await sendHook.result.current.mutateAsync({
+        body: "Great, I will keep updates in this thread.",
+      });
+      expect(response.message).toEqual(expect.objectContaining({
+        body: "Great, I will keep updates in this thread.",
+        sender: expect.objectContaining({ role: "buyer" }),
+      }));
     });
   });
 });

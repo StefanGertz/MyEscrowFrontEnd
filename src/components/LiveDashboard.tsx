@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { Header } from "@/components/Header";
 import { NotificationTimestamp } from "@/components/NotificationTimestamp";
+import { EscrowChat } from "@/components/EscrowChat";
 import { useAuth } from "@/components/AuthProvider";
 import { useToast } from "@/components/ToastProvider";
 import {
@@ -26,6 +27,7 @@ type EscrowFormState = {
   creatorRole: "buyer" | "seller";
   amount: string;
   description: string;
+  fundingMode: "full" | "milestone" | "";
 };
 
 export function LiveDashboard() {
@@ -46,8 +48,10 @@ export function LiveDashboard() {
     creatorRole: "buyer",
     amount: "",
     description: "",
+    fundingMode: "",
   });
   const [formError, setFormError] = useState<string | null>(null);
+  const [chatEscrowId, setChatEscrowId] = useState<string | null>(null);
 
   const notificationCount = notificationsQuery.data?.notifications.length ?? 0;
   const displayName = user?.name?.trim() || user?.email || "Your account";
@@ -61,6 +65,8 @@ export function LiveDashboard() {
   const latestAlertToken = latestNotificationSeenToken(notifications);
   const hasUnreadNotifications = Boolean(latestAlertToken && seenNotificationToken !== latestAlertToken);
   const escrows = escrowsQuery.data?.escrows ?? [];
+  const fundingPlanSelectionSupported =
+    escrowsQuery.data?.fundingPlanSelectionSupported === true;
 
   const totalHeld = summaryMetrics.find((metric) => metric.id === "held")?.value ?? "$0";
 
@@ -81,9 +87,15 @@ export function LiveDashboard() {
       !escrowForm.title ||
       !escrowForm.counterpartyEmail ||
       Number.isNaN(amountValue) ||
-      amountValue <= 0
+      amountValue <= 0 ||
+      !escrowForm.fundingMode ||
+      !fundingPlanSelectionSupported
     ) {
-      setFormError("Add a title, counterparty email, and positive amount.");
+      setFormError(
+        fundingPlanSelectionSupported
+          ? "Add a title, counterparty email, positive amount, and funding plan."
+          : "Funding-plan selection is waiting for the backend deployment to finish.",
+      );
       return;
     }
     try {
@@ -91,6 +103,7 @@ export function LiveDashboard() {
         title: escrowForm.title,
         counterpartyEmail: escrowForm.counterpartyEmail,
         amount: amountValue,
+        fundingMode: escrowForm.fundingMode,
         creatorRole: escrowForm.creatorRole,
         creatorParty: { type: "individual" },
         description: escrowForm.description || undefined,
@@ -107,6 +120,7 @@ export function LiveDashboard() {
         creatorRole: "buyer",
         amount: "",
         description: "",
+        fundingMode: "",
       });
       pushToast({ variant: "success", title: inviteMessage });
     } catch (error) {
@@ -206,11 +220,27 @@ export function LiveDashboard() {
                     <div style={{ textAlign: "right" }}>
                       <div>{escrow.amount}</div>
                       <div className="muted">{escrow.due}</div>
+                      <button
+                        className="ghost"
+                        type="button"
+                        style={{ marginTop: 8 }}
+                        onClick={() => setChatEscrowId((current) => current === escrow.id ? null : escrow.id)}
+                      >
+                        {chatEscrowId === escrow.id ? "Close chat" : "Open chat"}
+                      </button>
                     </div>
                   </li>
                 ))}
               </ul>
             )}
+            {chatEscrowId ? (
+              <div style={{ marginTop: 16 }}>
+                <EscrowChat
+                  escrowId={chatEscrowId}
+                  counterpart={escrows.find((escrow) => escrow.id === chatEscrowId)?.counterpart ?? "counterparty"}
+                />
+              </div>
+            ) : null}
           </div>
 
           <div className="card list-card" id="live-notifications">
@@ -261,6 +291,18 @@ export function LiveDashboard() {
                     <div style={{ textAlign: "right" }}>
                       <div>{dispute.amount}</div>
                       <div className="muted">{dispute.updated}</div>
+                      {dispute.status === "arbitration_requested" ? (
+                        <button
+                          type="button"
+                          className="ghost"
+                          style={{ marginTop: 8 }}
+                          onClick={() => router.push(
+                            `/disputes/${encodeURIComponent(dispute.id)}/arbitration-report`,
+                          )}
+                        >
+                          Arbitration report
+                        </button>
+                      ) : null}
                     </div>
                   </li>
                 ))}
@@ -323,6 +365,37 @@ export function LiveDashboard() {
                 onChange={(event) => setEscrowForm((prev) => ({ ...prev, amount: event.target.value }))}
                 placeholder="25000"
               />
+              <label className="muted" htmlFor="escrow-funding-mode">
+                Funding plan
+              </label>
+              <select
+                id="escrow-funding-mode"
+                value={escrowForm.fundingMode}
+                required
+                disabled={!fundingPlanSelectionSupported}
+                onChange={(event) =>
+                  setEscrowForm((prev) => ({
+                    ...prev,
+                    fundingMode:
+                      event.target.value === "milestone"
+                        ? "milestone"
+                        : event.target.value === "full"
+                          ? "full"
+                          : "",
+                  }))
+                }
+              >
+                <option value="">Choose a funding plan</option>
+                <option value="full">Fund the entire escrow</option>
+                <option value="milestone">Flexible staged funding</option>
+              </select>
+              <p className="muted" style={{ margin: 0 }}>
+                {fundingPlanSelectionSupported
+                  ? "This funding method becomes part of the agreement."
+                  : escrowsQuery.isLoading
+                    ? "Checking backend support..."
+                    : "Backend update pending."}
+              </p>
               <label className="muted" htmlFor="escrow-description">
                 Description (optional)
               </label>

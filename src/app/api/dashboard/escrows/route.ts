@@ -10,5 +10,6 @@ export function GET(request: Request) {
 
   return NextResponse.json({
     escrows: reviewEscrows,
+    fundingPlanSelectionSupported: true,
   });
 }

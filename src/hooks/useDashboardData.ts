@@ -53,6 +53,31 @@ type OverviewResponse = {
 
 type EscrowResponse = {
   escrows: EscrowRecord[];
+  fundingPlanSelectionSupported?: boolean;
+};
+
+export type EscrowChatMessage = {
+  id: number;
+  body: string;
+  createdAt: string;
+  sender: {
+    id: string;
+    name: string;
+    role: "buyer" | "seller";
+  };
+};
+
+export type EscrowChatResponse = {
+  escrowId: string;
+  participants: Array<{
+    id: string;
+    name: string;
+    role: "buyer" | "seller";
+  }>;
+  canSend: boolean;
+  unavailableReason: string | null;
+  messages: EscrowChatMessage[];
+  nextCursor: number | null;
 };
 
 type DisputesResponse = {
@@ -111,6 +136,47 @@ export function useEscrows() {
   return useQuery({
     queryKey: ["dashboard", "escrows"],
     queryFn: () => fetchJSON<EscrowResponse>("/api/dashboard/escrows"),
+  });
+}
+
+export function useEscrowMessages(escrowId: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: ["dashboard", "escrows", escrowId, "messages"],
+    queryFn: () => {
+      if (!escrowId) throw new Error("An escrow is required to load messages.");
+      return fetchJSON<EscrowChatResponse>(
+        `/api/dashboard/escrows/${encodeURIComponent(escrowId)}/messages`,
+      );
+    },
+    enabled: enabled && Boolean(escrowId),
+    retry: 2,
+    refetchInterval: 3_000,
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function useSendEscrowMessage(escrowId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ body }: { body: string }) => {
+      if (!escrowId) throw new Error("An escrow is required to send a message.");
+      return fetchJSON<{ escrowId: string; message: EscrowChatMessage }>(
+        `/api/dashboard/escrows/${encodeURIComponent(escrowId)}/messages`,
+        {
+          method: "POST",
+          headers: idempotencyHeaders({ "Content-Type": "application/json" }),
+          body: JSON.stringify({ body }),
+        },
+      );
+    },
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["dashboard", "escrows", escrowId, "messages"],
+        }),
+        queryClient.invalidateQueries({ queryKey: ["dashboard", "notifications"] }),
+      ]),
   });
 }
 
@@ -495,20 +561,35 @@ export function useOpenMilestoneDispute() {
 type DisputeEvidencePayload = {
   disputeId: string;
   note: string;
+  files: File[];
 };
 
 export function useSubmitDisputeEvidence() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ disputeId, note }: DisputeEvidencePayload) =>
-      fetchJSON<{ disputeId: string; evidenceSubmissionId: number }>(
+    mutationFn: ({ disputeId, note, files }: DisputeEvidencePayload) => {
+      if (files.length) {
+        const formData = new FormData();
+        if (note) formData.append("note", note);
+        files.forEach((file) => formData.append("evidence", file, file.name));
+        return fetchJSON<{ disputeId: string; evidenceSubmissionId: number }>(
+          `/api/dashboard/disputes/${disputeId}/evidence`,
+          {
+            method: "POST",
+            headers: idempotencyHeaders(),
+            body: formData,
+          },
+        );
+      }
+      return fetchJSON<{ disputeId: string; evidenceSubmissionId: number }>(
         `/api/dashboard/disputes/${disputeId}/evidence`,
         {
           method: "POST",
           headers: idempotencyHeaders({ "Content-Type": "application/json" }),
           body: JSON.stringify({ note }),
         },
-      ),
+      );
+    },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["dashboard", "disputes"] }),
   });
 }
@@ -719,6 +800,7 @@ type CreateEscrowPayload = {
   title: string;
   counterpartyEmail: string;
   amount: number;
+  fundingMode?: "full" | "milestone";
   creatorRole: "buyer" | "seller";
   creatorParty: PartyIdentity;
   category?: string;

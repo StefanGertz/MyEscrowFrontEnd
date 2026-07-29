@@ -179,19 +179,17 @@ function MetricDetails({ health, metric }: { health: Health; metric: MetricKey }
               <p className="font-bold">{formatMoney(record.amountFrozenCents)} frozen</p>
             </div>
             <p className="mt-2 text-xs text-slate-500">Requested: {formatDateTime(record.arbitrationRequestedAt)}</p>
-            {record.escrow ? <p className="mt-3 text-xs font-bold uppercase tracking-wide text-teal-700">View escrow details</p> : null}
+            <p className="mt-3 text-xs font-bold uppercase tracking-wide text-teal-700">Review arbitration record</p>
           </>
         );
-        return record.escrow ? (
+        return (
           <Link
             key={record.reference}
-            href={`/operations/escrows/${encodeURIComponent(record.escrow.reference)}`}
+            href={`/operations/disputes/${encodeURIComponent(record.reference)}`}
             className="block rounded-xl bg-slate-50 p-4 transition hover:bg-teal-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600"
           >
             {content}
           </Link>
-        ) : (
-          <article key={record.reference} className="rounded-xl bg-slate-50 p-4">{content}</article>
         );
       }) : null}
     </div>

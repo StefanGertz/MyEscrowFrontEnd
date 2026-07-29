@@ -72,6 +72,7 @@ export const handlers = [
       title: string;
       counterpartyEmail: string;
       amount: number;
+      fundingMode?: "full" | "milestone";
       description?: string;
     };
     return HttpResponse.json({
@@ -80,12 +81,45 @@ export const handlers = [
       description: body.description,
       counterpart: body.counterpartyEmail,
       amount: body.amount,
+      fundingMode: body.fundingMode,
       success: true,
       invitationStatus: "existing_user",
     });
   }),
   http.get(`${baseUrl}/api/dashboard/business-profile`, () => {
     return HttpResponse.json({ businessProfile: null });
+  }),
+  http.get(`${baseUrl}/api/dashboard/escrows/:id/messages`, ({ params }) => {
+    return HttpResponse.json({
+      escrowId: params.id,
+      participants: [
+        { id: "user-session", name: "Tester", role: "buyer" },
+        { id: "seller-1", name: "Seller", role: "seller" },
+      ],
+      canSend: true,
+      unavailableReason: null,
+      messages: [
+        {
+          id: 1,
+          body: "The delivery window works for me.",
+          createdAt: "2026-07-29T12:00:00.000Z",
+          sender: { id: "seller-1", name: "Seller", role: "seller" },
+        },
+      ],
+      nextCursor: null,
+    });
+  }),
+  http.post(`${baseUrl}/api/dashboard/escrows/:id/messages`, async ({ params, request }) => {
+    const body = (await request.json()) as { body: string };
+    return HttpResponse.json({
+      escrowId: params.id,
+      message: {
+        id: 2,
+        body: body.body,
+        createdAt: "2026-07-29T12:01:00.000Z",
+        sender: { id: "user-session", name: "Tester", role: "buyer" },
+      },
+    }, { status: 201 });
   }),
   http.post(`${baseUrl}/api/dashboard/escrows/:id/approve`, ({ params }) => {
     return HttpResponse.json({

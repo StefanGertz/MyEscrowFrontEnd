@@ -6,6 +6,7 @@ type CreatePayload = {
   title: string;
   counterpartyEmail: string;
   amount: number;
+  fundingMode?: "full" | "milestone";
   creatorRole: "buyer" | "seller";
   category?: string;
   description?: string;
@@ -34,6 +35,7 @@ export async function POST(request: NextRequest) {
     counterpart: body.counterpartyEmail,
     counterpartyEmail: body.counterpartyEmail,
     amount: body.amount,
+    fundingMode: body.fundingMode,
     creatorRole: body.creatorRole,
     category: body.category,
     milestones: body.milestones,

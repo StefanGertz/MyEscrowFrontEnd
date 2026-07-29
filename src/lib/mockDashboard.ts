@@ -38,6 +38,7 @@ export type EscrowRecord = {
   agreement?: {
     version: number;
     status: "current" | "locked" | "superseded";
+    fundingMode?: "full" | "milestone" | null;
     creatorSigned: boolean;
     counterpartySigned: boolean;
     lockedAt?: string;
@@ -164,11 +165,12 @@ export type DisputeTicket = {
     submittedAt: string;
     submitter: { id: string; name: string };
     references: Array<{
-      objectKey: string;
+      id?: string;
       fileName: string;
       contentType: string;
       sizeBytes: number;
       sha256: string;
+      storageStatus: "managed" | "metadata_only";
     }>;
   }>;
 };

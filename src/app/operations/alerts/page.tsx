@@ -234,13 +234,13 @@ export default function OperationsAlertsPage() {
                     <p className="font-bold">{money(record.amountFrozenCents)} frozen</p>
                   </div>
                   <p className="mt-2 text-xs text-slate-500">Requested: {date(record.arbitrationRequestedAt)}</p>
-                  {record.escrow ? <p className="mt-3 text-xs font-bold uppercase tracking-wide text-teal-700">View escrow details</p> : null}
+                  <p className="mt-3 text-xs font-bold uppercase tracking-wide text-teal-700">Review arbitration record</p>
                 </>
               );
-              return record.escrow ? (
-                <Link key={record.reference} href={`/operations/escrows/${encodeURIComponent(record.escrow.reference)}`} className={escrowCardClass}>{content}</Link>
-              ) : (
-                <article key={record.reference} className="rounded-xl bg-slate-50 p-4">{content}</article>
+              return (
+                <Link key={record.reference} href={`/operations/disputes/${encodeURIComponent(record.reference)}`} className={escrowCardClass}>
+                  {content}
+                </Link>
               );
             })}
           </AlertGroup>

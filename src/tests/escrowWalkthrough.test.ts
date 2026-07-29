@@ -14,6 +14,7 @@ const completeAnswers: EscrowDetailAnswers = {
   amount: "2500",
   description: "Design and deliver the approved website.",
   descriptionSkipped: false,
+  fundingMode: "milestone",
 };
 
 describe("escrow detail walkthrough validation", () => {
@@ -90,5 +91,15 @@ describe("escrow detail walkthrough validation", () => {
         descriptionSkipped: true,
       }),
     ).toBeNull();
+  });
+
+  it("requires an agreed funding plan", () => {
+    expect(
+      validateEscrowDetailPrompt(6, {
+        ...completeAnswers,
+        fundingMode: null,
+      }),
+    ).toBe("Choose a funding plan to continue.");
+    expect(validateEscrowDetailPrompt(6, completeAnswers)).toBeNull();
   });
 });
