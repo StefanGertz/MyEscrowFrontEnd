@@ -3751,9 +3751,9 @@ select:focus {
 
   .transaction-overview {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
-    align-items: stretch;
-    gap: 32px;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: 24px;
   }
 
   .transaction-parties {
@@ -3761,7 +3761,7 @@ select:focus {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     align-content: start;
     gap: 28px;
-    padding: 8px 0 8px 20px;
+    padding: 4px 0 4px 20px;
   }
 
   .transaction-party + .transaction-party { margin-top: 0; }
@@ -3769,23 +3769,24 @@ select:focus {
   .transaction-party .muted:last-child { overflow-wrap: anywhere; }
 
   .transaction-summary-rail {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 360px);
+    align-items: end;
+    gap: 16px;
   }
 
   .transaction-financial-summary {
     display: grid;
-    grid-template-columns: minmax(105px, .7fr) minmax(0, 1.3fr);
-    align-content: start;
-    gap: 16px 24px;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    align-items: start;
+    gap: 20px;
     padding: 20px 22px;
   }
 
   .transaction-financial-summary > .transaction-summary-field:first-child {
-    grid-column: 1 / -1;
-    padding-bottom: 16px;
-    border-bottom: 1px solid rgba(10,166,154,.14);
+    grid-column: auto;
+    padding-bottom: 0;
+    border-bottom: 0;
   }
 
   .transaction-download-action { margin-top: 0; }
@@ -3794,6 +3795,10 @@ select:focus {
     width: 100%;
     justify-content: center;
   }
+}
+
+@media (min-width: 769px) and (max-width: 1000px) {
+  .transaction-summary-rail { grid-template-columns: minmax(0, 1fr); }
 }
 .agreement-invitation-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .cancellation-card > strong { display: block; }
