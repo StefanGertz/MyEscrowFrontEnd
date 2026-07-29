@@ -3740,9 +3740,61 @@ select:focus {
 .transaction-hero-card > div:first-child > div:last-child { color: var(--brand-600); font-size: 25px !important; letter-spacing: -.025em; }
 .transaction-overview { margin-top: 20px; padding-top: 20px; border-top: 1px solid rgba(10,166,154,.12); }
 .transaction-parties { padding-left: 16px; border-left: 3px solid rgba(10,166,154,.22); }
+.transaction-party + .transaction-party { margin-top: 12px; }
+.transaction-summary-rail { min-width: 0; }
 .transaction-financial-summary { min-width: 180px; padding: 18px; border-radius: 15px; background: linear-gradient(135deg, #f0fbf9, #f8fdfc); text-align: left; }
 .transaction-financial-summary > div:first-child div:last-child { color: var(--brand-600); font-size: 22px; font-weight: 800 !important; }
 .transaction-download-action { margin-top: 12px; text-align: right; }
+
+@media (min-width: 769px) {
+  .transaction-hero-card { padding: 30px 32px; }
+
+  .transaction-overview {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
+    align-items: stretch;
+    gap: 32px;
+  }
+
+  .transaction-parties {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-content: start;
+    gap: 28px;
+    padding: 8px 0 8px 20px;
+  }
+
+  .transaction-party + .transaction-party { margin-top: 0; }
+  .transaction-party { min-width: 0; }
+  .transaction-party .muted:last-child { overflow-wrap: anywhere; }
+
+  .transaction-summary-rail {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .transaction-financial-summary {
+    display: grid;
+    grid-template-columns: minmax(105px, .7fr) minmax(0, 1.3fr);
+    align-content: start;
+    gap: 16px 24px;
+    padding: 20px 22px;
+  }
+
+  .transaction-financial-summary > .transaction-summary-field:first-child {
+    grid-column: 1 / -1;
+    padding-bottom: 16px;
+    border-bottom: 1px solid rgba(10,166,154,.14);
+  }
+
+  .transaction-download-action { margin-top: 0; }
+
+  .transaction-download-action .agreement-download-button {
+    width: 100%;
+    justify-content: center;
+  }
+}
 .agreement-invitation-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .cancellation-card > strong { display: block; }
 .cancellation-form { display: flex; flex-direction: column; gap: 16px; margin-top: 16px; }
@@ -4038,6 +4090,7 @@ select:focus {
   }
 
   .settings-stack > .setting-card:first-child { grid-column: auto; }
+  .transaction-summary-rail { width: 100%; }
   .transaction-financial-summary { width: 100%; grid-template-columns: 1fr 1fr; text-align: left; }
 
   .transaction-financial-summary > .transaction-summary-field:nth-child(3) {

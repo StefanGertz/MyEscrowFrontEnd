@@ -4120,75 +4120,79 @@ const handleWalletWithdraw = async () => {
           ) : null}
           <div className="transaction-overview">
             <div className="transaction-parties">
-              <div className="muted">Buyer</div>
-              <div style={{ fontWeight: 700 }}>{tx.buyer}</div>
-              {tx.buyerParty?.partyType === "business" ? (
-                <div className="muted" style={{ fontSize: 13, marginTop: 3 }}>
-                  Represented by {tx.buyerParty.representativeName}{tx.buyerParty.representativeTitle ? `, ${tx.buyerParty.representativeTitle}` : ""}
+              <div className="transaction-party">
+                <div className="muted">Buyer</div>
+                <div style={{ fontWeight: 700 }}>{tx.buyer}</div>
+                {tx.buyerParty?.partyType === "business" ? (
+                  <div className="muted" style={{ fontSize: 13, marginTop: 3 }}>
+                    Represented by {tx.buyerParty.representativeName}{tx.buyerParty.representativeTitle ? `, ${tx.buyerParty.representativeTitle}` : ""}
+                  </div>
+                ) : null}
+                <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
+                  {tx.buyerEmail}
                 </div>
-              ) : null}
-              <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
-                {tx.buyerEmail}
               </div>
-              <div className="muted" style={{ marginTop: 12 }}>
-                Seller
-              </div>
-              <div style={{ fontWeight: 700 }}>{tx.seller}</div>
-              {tx.sellerParty?.partyType === "business" ? (
-                <div className="muted" style={{ fontSize: 13, marginTop: 3 }}>
-                  Represented by {tx.sellerParty.representativeName}{tx.sellerParty.representativeTitle ? `, ${tx.sellerParty.representativeTitle}` : ""}
+              <div className="transaction-party">
+                <div className="muted">Seller</div>
+                <div style={{ fontWeight: 700 }}>{tx.seller}</div>
+                {tx.sellerParty?.partyType === "business" ? (
+                  <div className="muted" style={{ fontSize: 13, marginTop: 3 }}>
+                    Represented by {tx.sellerParty.representativeName}{tx.sellerParty.representativeTitle ? `, ${tx.sellerParty.representativeTitle}` : ""}
+                  </div>
+                ) : null}
+                <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
+                  {tx.sellerEmail}
                 </div>
-              ) : null}
-              <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
-                {tx.sellerEmail}
               </div>
             </div>
-            <div className="transaction-financial-summary">
-              <div className="transaction-summary-field">
-                <div className="muted">Amount</div>
-                <div style={{ fontWeight: 700 }}>{formatCurrency(tx.amount)}</div>
-              </div>
-              <div className="transaction-summary-field">
-                <div className="muted">Status</div>
-                <span
-                  className={`status-badge ${
-                    tx.status === "Complete"
-                      ? "status-released"
-                      : tx.status === "Active"
-                        ? "status-active"
-                        : tx.status === "Pending"
-                          ? "status-pending"
-                          : "status-active"
-                  }`}
-                >
-                  {tx.status}
-                </span>
-              </div>
-              {tx.fundingMode || tx.fundedAmount ? (
+            <div className="transaction-summary-rail">
+              <div className="transaction-financial-summary">
                 <div className="transaction-summary-field">
-                  <div className="muted">Funding</div>
-                  <div style={{ fontWeight: 700 }}>
-                    {tx.fundingMode === "milestone" ? "By milestone" : "Funded in full"}
-                  </div>
-                  <div className="muted" style={{ marginTop: 4 }}>
-                    {formatCurrency(tx.fundedAmount ?? (tx.fundingStatus === "funded" ? tx.amount : 0))} secured
-                    {tx.fundingMode === "milestone" ? ` of ${formatCurrency(tx.amount)}` : ""}
-                  </div>
+                  <div className="muted">Amount</div>
+                  <div style={{ fontWeight: 700 }}>{formatCurrency(tx.amount)}</div>
                 </div>
-              ) : null}
+                <div className="transaction-summary-field">
+                  <div className="muted">Status</div>
+                  <span
+                    className={`status-badge ${
+                      tx.status === "Complete"
+                        ? "status-released"
+                        : tx.status === "Active"
+                          ? "status-active"
+                          : tx.status === "Pending"
+                            ? "status-pending"
+                            : "status-active"
+                    }`}
+                  >
+                    {tx.status}
+                  </span>
+                </div>
+                {tx.fundingMode || tx.fundedAmount ? (
+                  <div className="transaction-summary-field">
+                    <div className="muted">Funding</div>
+                    <div style={{ fontWeight: 700 }}>
+                      {tx.fundingMode === "milestone" ? "By milestone" : "Funded in full"}
+                    </div>
+                    <div className="muted" style={{ marginTop: 4 }}>
+                      {formatCurrency(tx.fundedAmount ?? (tx.fundingStatus === "funded" ? tx.amount : 0))} secured
+                      {tx.fundingMode === "milestone" ? ` of ${formatCurrency(tx.amount)}` : ""}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+              <div className="transaction-download-action">
+                <button
+                  className="ghost agreement-download-button"
+                  onClick={() => {
+                    if (tx.counterpartyApproved) downloadAgreementPdf(tx);
+                  }}
+                  disabled={!tx.counterpartyApproved}
+                  title={tx.counterpartyApproved ? undefined : "Available after counterparty approval"}
+                >
+                  Download agreement (PDF)
+                </button>
+              </div>
             </div>
-          </div>
-          <div className="transaction-download-action">
-            <button
-              className="ghost agreement-download-button"
-              onClick={() => {
-                if (tx.counterpartyApproved) downloadAgreementPdf(tx);
-              }}
-              disabled={!tx.counterpartyApproved}
-              title={tx.counterpartyApproved ? undefined : "Available after counterparty approval"}
-            >
-              Download agreement (PDF)
-            </button>
           </div>
         </div>
         {tx.invitation || tx.agreement ? (
