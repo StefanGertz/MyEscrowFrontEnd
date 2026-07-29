@@ -105,12 +105,17 @@ export const handlers = [
       status: "cancelled",
     });
   }),
-  http.post(`${baseUrl}/api/dashboard/escrows/:id/milestones/:milestoneId/fund`, ({ params }) => {
+  http.post(`${baseUrl}/api/dashboard/escrows/:id/milestones/:milestoneId/fund`, async ({ params, request }) => {
+    const payload = await request.json() as { amount: number };
     return HttpResponse.json({
       success: true,
       escrowId: params.id,
       milestoneId: Number(params.milestoneId),
       fundingStatus: "partially_funded",
+      depositedCents: Math.round(payload.amount * 100),
+      fundedCents: Math.round(payload.amount * 100),
+      remainingCents: 0,
+      allocations: [],
     });
   }),
   http.post(`${baseUrl}/api/dashboard/escrows/:id/milestones/:milestoneId/request-changes`, ({ params }) => {

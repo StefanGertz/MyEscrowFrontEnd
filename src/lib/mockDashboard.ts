@@ -21,6 +21,7 @@ export type EscrowRecord = {
   lifecycleStatus?: string;
   fundingStatus?: string;
   fundingMode?: "full" | "milestone" | null;
+  stagedFundingSupported?: boolean;
   balances?: {
     currency: "USD";
     fundedCents: number;
@@ -87,7 +88,7 @@ export type EscrowRecord = {
     title: string;
     amount: string;
     status: "not_started" | "submitted" | "revision_requested" | "released" | "disputed" | "refunded" | "settled" | "cancelled";
-    fundingStatus?: "not_funded" | "funded";
+    fundingStatus?: "not_funded" | "partially_funded" | "funded";
     fundedCents?: number;
     description?: string;
     deadline?: string;

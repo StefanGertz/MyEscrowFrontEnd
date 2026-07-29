@@ -386,7 +386,45 @@ const buildMilestoneAction =
   };
 
 export const useApproveMilestone = buildMilestoneAction("approve");
-export const useFundMilestone = buildMilestoneAction("fund");
+
+type StagedFundingPayload = MilestoneActionPayload & {
+  amount: number;
+};
+
+export function useFundMilestone() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ escrowId, milestoneId, amount }: StagedFundingPayload) =>
+      fetchJSON<{
+        escrowId: string;
+        milestoneId: number;
+        depositedCents: number;
+        fundedCents: number;
+        remainingCents: number;
+        allocations: Array<{
+          milestoneId: number;
+          title: string;
+          amountCents: number;
+          fundedCents: number;
+          addedCents: number;
+          fundingStatus: "not_funded" | "partially_funded" | "funded";
+        }>;
+      }>(
+        `/api/dashboard/escrows/${escrowId}/milestones/${milestoneId}/fund`,
+        {
+          method: "POST",
+          headers: idempotencyHeaders({ "Content-Type": "application/json" }),
+          body: JSON.stringify({ amount }),
+        },
+      ),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["dashboard", "escrows"] }),
+        queryClient.invalidateQueries({ queryKey: ["dashboard", "overview"] }),
+        queryClient.invalidateQueries({ queryKey: ["dashboard", "notifications"] }),
+      ]),
+  });
+}
 
 export function useRejectMilestone() {
   const queryClient = useQueryClient();

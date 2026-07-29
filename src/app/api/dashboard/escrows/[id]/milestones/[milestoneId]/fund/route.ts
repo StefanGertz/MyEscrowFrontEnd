@@ -25,12 +25,18 @@ export async function POST(
   }
 
   await sleep(500);
+  const payload = await request.json().catch(() => ({})) as { amount?: number };
+  const depositedCents = Math.round(Math.max(0, payload.amount ?? 0) * 100);
 
   return NextResponse.json({
     success: true,
     escrowId: id,
     milestoneId: Number(milestoneId),
     fundingStatus: "partially_funded",
+    depositedCents,
+    fundedCents: depositedCents,
+    remainingCents: 0,
+    allocations: [],
     fundedAt: new Date().toISOString(),
   });
 }

@@ -105,7 +105,7 @@ describe("approval flows", () => {
   });
 });
 
-describe("milestone funding", () => {
+describe("staged funding", () => {
   it("funds one milestone without using the full escrow funding route", async () => {
     const wrapper = createWrapper();
     const fundMilestoneHook = renderHook(() => useFundMilestone(), { wrapper });
@@ -114,9 +114,11 @@ describe("milestone funding", () => {
       const response = await fundMilestoneHook.result.current.mutateAsync({
         escrowId: "PO-1001",
         milestoneId: "12",
+        amount: 1_000,
       });
       expect(response.escrowId).toBe("PO-1001");
       expect(response.milestoneId).toBe(12);
+      expect(response.depositedCents).toBe(100_000);
     });
   });
 });
