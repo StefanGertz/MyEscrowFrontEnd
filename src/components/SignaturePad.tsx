@@ -23,6 +23,11 @@ export const SignaturePad = forwardRef<SignaturePadHandle, SignaturePadProps>(
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const isDrawingRef = useRef(false);
     const hasDrawnRef = useRef(false);
+    const onSignedChangeRef = useRef(onSignedChange);
+
+    useEffect(() => {
+      onSignedChangeRef.current = onSignedChange;
+    }, [onSignedChange]);
 
     const resizeCanvas = useCallback(() => {
       const canvas = canvasRef.current;
@@ -45,8 +50,8 @@ export const SignaturePad = forwardRef<SignaturePadHandle, SignaturePadProps>(
       context.fillStyle = "#ffffff";
       context.fillRect(0, 0, canvas.width, canvas.height);
       hasDrawnRef.current = false;
-      onSignedChange(false);
-    }, [onSignedChange]);
+      onSignedChangeRef.current(false);
+    }, []);
 
     useImperativeHandle(ref, () => ({
       clear: () => clearCanvas(),
@@ -108,7 +113,7 @@ export const SignaturePad = forwardRef<SignaturePadHandle, SignaturePadProps>(
       context.stroke();
       if (!hasDrawnRef.current) {
         hasDrawnRef.current = true;
-        onSignedChange(true);
+        onSignedChangeRef.current(true);
       }
       event.preventDefault();
     };
