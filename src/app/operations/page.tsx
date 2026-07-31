@@ -16,6 +16,7 @@ type Health = {
     duplicateCommandAttempts: number;
     disputesApproaching: number;
     arbitrationRequested: number;
+    cancellationReviews?: number;
   };
   alerts: string[];
   latestReconciliation?: {
@@ -89,6 +90,22 @@ type Health = {
       arbitrationRequestedAt?: string | null;
       escrow?: { reference: string; title: string } | null;
     }>;
+    cancellationReviews?: Array<{
+      reference: string;
+      mode: string;
+      status: string;
+      reason: string;
+      requestedAt: string;
+      escalatedAt?: string | null;
+      requestedBy: { name: string; email: string };
+      escrow: {
+        reference: string;
+        title: string;
+        amountCents: number;
+        lifecycleStatus: string;
+        fundingStatus: string;
+      };
+    }>;
   };
 };
 
@@ -100,6 +117,7 @@ const metricLabels: Record<MetricKey, string> = {
   agedEscrows: "Aged active escrows",
   disputesApproaching: "Disputes near deadline",
   arbitrationRequested: "Arbitration",
+  cancellationReviews: "Cancellation review",
   duplicateCommands: "Safe command replays",
 };
 
@@ -108,7 +126,7 @@ const formatMoney = (value: number) => new Intl.NumberFormat(undefined, { style:
 const formatStatus = (value: string) => value.replaceAll("_", " ");
 
 function MetricDetails({ health, metric }: { health: Health; metric: MetricKey }) {
-  const records = health.details[metric];
+  const records = health.details[metric] ?? [];
   if (records.length === 0) {
     return <p className="mt-4 text-slate-600">No records currently contribute to this metric.</p>;
   }
@@ -192,6 +210,26 @@ function MetricDetails({ health, metric }: { health: Health; metric: MetricKey }
           </Link>
         );
       }) : null}
+      {metric === "cancellationReviews" ? (health.details.cancellationReviews ?? []).map((record) => (
+        <Link
+          key={record.reference}
+          href={`/operations/escrows/${encodeURIComponent(record.escrow.reference)}`}
+          className="block rounded-xl bg-amber-50 p-4 transition hover:bg-amber-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-600"
+          aria-label={`Review cancellation ${record.reference} for ${record.escrow.title}`}
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="font-bold">{record.escrow.title} · {record.escrow.reference}</p>
+              <p className="mt-1 text-sm capitalize text-slate-700">{formatStatus(record.mode)} cancellation · {formatStatus(record.status)}</p>
+              <p className="mt-1 text-sm text-slate-600">Requested by {record.requestedBy.name || record.requestedBy.email}</p>
+            </div>
+            <p className="font-bold">{formatMoney(record.escrow.amountCents)}</p>
+          </div>
+          <p className="mt-3 text-sm text-amber-950">{record.reason}</p>
+          <p className="mt-2 text-xs text-slate-500">Requested: {formatDateTime(record.requestedAt)}</p>
+          <p className="mt-3 text-xs font-bold uppercase tracking-wide text-teal-700">Inspect escrow</p>
+        </Link>
+      )) : null}
     </div>
   );
 }
@@ -313,6 +351,7 @@ export default function OperationsPage() {
         { key: "agedEscrows", label: metricLabels.agedEscrows, value: health.counts.agedEscrows },
         { key: "disputesApproaching", label: metricLabels.disputesApproaching, value: health.counts.disputesApproaching },
         { key: "arbitrationRequested", label: metricLabels.arbitrationRequested, value: health.counts.arbitrationRequested },
+        { key: "cancellationReviews", label: metricLabels.cancellationReviews, value: health.counts.cancellationReviews ?? 0 },
         { key: "duplicateCommands", label: metricLabels.duplicateCommands, value: health.counts.duplicateCommandAttempts },
       ]
     : [];
@@ -350,7 +389,7 @@ export default function OperationsPage() {
 
         {health ? (
           <>
-            <section className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-6">
+            <section className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
               {metrics.map((metric) => (
                 <button
                   key={metric.key}

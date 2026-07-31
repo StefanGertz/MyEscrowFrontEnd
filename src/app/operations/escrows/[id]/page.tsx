@@ -81,6 +81,33 @@ export default function OperationsEscrowPage() {
               ))}
             </section>
 
+            {escrow.cancellation ? (
+              <section className="mt-6 rounded-2xl border border-amber-300 bg-amber-50 p-6 shadow-sm">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-bold uppercase tracking-[0.16em] text-amber-800">Governed review</p>
+                    <h2 className="mt-1 text-xl font-bold text-amber-950">Cancellation and refunds</h2>
+                  </div>
+                  <span className="rounded-full bg-amber-200 px-3 py-1 text-sm font-bold capitalize text-amber-950">
+                    {label(escrow.cancellation.status)}
+                  </span>
+                </div>
+                <dl className="mt-5 grid gap-4 sm:grid-cols-2">
+                  <div><dt className="text-sm text-amber-800">Path</dt><dd className="mt-1 font-bold capitalize">{label(escrow.cancellation.mode)} cancellation</dd></div>
+                  <div><dt className="text-sm text-amber-800">Requested</dt><dd className="mt-1 font-bold">{date(escrow.cancellation.requestedAt)}</dd></div>
+                </dl>
+                <div className="mt-5 rounded-xl border border-amber-200 bg-white/70 p-4">
+                  <p className="text-sm font-bold text-amber-900">Reason</p>
+                  <p className="mt-1 text-slate-800">{escrow.cancellation.reason}</p>
+                </div>
+                {escrow.cancellation.mode === "unilateral" ? (
+                  <p className="mt-4 text-sm text-amber-900">
+                    Funds remain held while this request awaits authorized review. No automatic payout or refund is permitted.
+                  </p>
+                ) : null}
+              </section>
+            ) : null}
+
             <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
               <h2 className="text-xl font-bold">Agreement</h2>
               {escrow.agreement ? (

@@ -15,6 +15,7 @@ type Health = {
     agedEscrows: number;
     disputesApproaching: number;
     arbitrationRequested: number;
+    cancellationReviews?: number;
   };
   latestReconciliation?: {
     status: string;
@@ -73,6 +74,22 @@ type Health = {
       amountFrozenCents: number;
       arbitrationRequestedAt?: string | null;
       escrow?: { reference: string; title: string } | null;
+    }>;
+    cancellationReviews?: Array<{
+      reference: string;
+      mode: string;
+      status: string;
+      reason: string;
+      requestedAt: string;
+      escalatedAt?: string | null;
+      requestedBy: { name: string; email: string };
+      escrow: {
+        reference: string;
+        title: string;
+        amountCents: number;
+        lifecycleStatus: string;
+        fundingStatus: string;
+      };
     }>;
   };
 };
@@ -243,6 +260,30 @@ export default function OperationsAlertsPage() {
                 </Link>
               );
             })}
+          </AlertGroup>
+        ) : null}
+
+        {health && (health.counts.cancellationReviews ?? 0) > 0 ? (
+          <AlertGroup title="Cancellation review">
+            {(health.details.cancellationReviews ?? []).map((record) => (
+              <Link
+                key={record.reference}
+                href={`/operations/escrows/${encodeURIComponent(record.escrow.reference)}`}
+                className="block rounded-xl bg-amber-50 p-4 transition hover:bg-amber-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-600"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-bold">{record.escrow.title} · {record.escrow.reference}</p>
+                    <p className="mt-1 text-sm capitalize text-slate-700">{label(record.mode)} cancellation · {label(record.status)}</p>
+                    <p className="mt-1 text-sm text-slate-600">Requested by {record.requestedBy.name || record.requestedBy.email}</p>
+                  </div>
+                  <p className="font-bold">{money(record.escrow.amountCents)}</p>
+                </div>
+                <p className="mt-3 text-sm text-amber-950">{record.reason}</p>
+                <p className="mt-2 text-xs text-slate-500">Requested: {date(record.requestedAt)}</p>
+                <p className="mt-3 text-xs font-bold uppercase tracking-wide text-teal-700">Inspect escrow details</p>
+              </Link>
+            ))}
           </AlertGroup>
         ) : null}
 
