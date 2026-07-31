@@ -4400,23 +4400,97 @@ const handleWalletWithdraw = async () => {
         </button>
       </div>
     ) : null;
+    const showFundingPlan =
+      (isCurrentUserBuyer || Boolean(tx.fundingMode))
+      && tx.milestones.length > 0
+      && !["completed", "cancelled"].includes(tx.lifecycleStatus ?? "")
+      && (
+        !tx.fundingMode
+        || Boolean(stagedFundingControls)
+        || (tx.fundingMode === "full" && tx.fundingStatus !== "funded")
+      );
+    const milestonesNeedAttention =
+      tx.lifecycleStatus === "funded"
+      && tx.milestones.some((milestone) =>
+        milestone.status === "disputed"
+        || (isCurrentUserBuyer && milestone.status === "submitted")
+        || (
+          sameEmail(tx.sellerEmail, currentUser.email)
+          && milestoneIsFunded(milestone)
+          && ["not_started", "revision_requested"].includes(milestone.status)
+        ),
+      );
     return (
       <section className="screen active transaction-screen app-content-page">
-        <div className="compact-page-header"><div><p className="compact-page-header__eyebrow">Escrow details</p><h2>Transaction</h2></div></div>
-        <div className="card transaction-hero-card">
-          <div style={{ marginBottom: 12 }}>
-            <div className="muted">Title</div>
-            <div style={{ fontSize: 18, fontWeight: 800 }}>{tx.title}</div>
+        <div className="compact-page-header transaction-page-header">
+          <div>
+            <p className="compact-page-header__eyebrow">
+              Escrow {tx.reference ?? `#${tx.id}`}
+            </p>
+            <h2>{tx.title}</h2>
+            <p>{isCurrentUserBuyer ? "Buyer" : "Seller"} view · {tx.counterpart}</p>
           </div>
-          {tx.description ? (
-            <div style={{ marginBottom: 12 }}>
-              <div className="muted">Description</div>
-              <p className="muted" style={{ marginTop: 4, whiteSpace: "pre-line" }}>
-                {tx.description}
-              </p>
+        </div>
+        <div className="card transaction-hero-card">
+          <div className="transaction-summary-rail">
+            <div className="transaction-financial-summary">
+              <div className="transaction-summary-field">
+                <div className="muted">Amount</div>
+                <div style={{ fontWeight: 700 }}>{formatCurrency(tx.amount)}</div>
+              </div>
+              <div className="transaction-summary-field">
+                <div className="muted">Status</div>
+                <span
+                  className={`status-badge ${
+                    tx.status === "Complete"
+                      ? "status-released"
+                      : tx.status === "Active"
+                        ? "status-active"
+                        : tx.status === "Pending"
+                          ? "status-pending"
+                          : "status-active"
+                  }`}
+                >
+                  {tx.status}
+                </span>
+              </div>
+              {tx.fundingMode || tx.fundedAmount ? (
+                <div className="transaction-summary-field">
+                  <div className="muted">Funding</div>
+                  <div style={{ fontWeight: 700 }}>
+                    {tx.fundingMode === "milestone"
+                      ? hasSecuredFunds
+                        ? "Staged funding active"
+                        : "Staged funding agreed"
+                      : hasSecuredFunds
+                        ? "Funded in full"
+                        : "Full funding agreed"}
+                  </div>
+                  <div className="muted" style={{ marginTop: 4 }}>
+                    {formatCurrency(tx.fundedAmount ?? (tx.fundingStatus === "funded" ? tx.amount : 0))} secured
+                    {tx.fundingMode === "milestone" ? ` of ${formatCurrency(tx.amount)}` : ""}
+                  </div>
+                </div>
+              ) : null}
             </div>
-          ) : null}
-          <div className="transaction-overview">
+            <div className="transaction-download-action">
+              <button
+                className="ghost agreement-download-button"
+                onClick={() => {
+                  if (tx.counterpartyApproved) downloadAgreementPdf(tx);
+                }}
+                disabled={!tx.counterpartyApproved}
+                title={tx.counterpartyApproved ? undefined : "Available after counterparty approval"}
+              >
+                Download agreement
+              </button>
+            </div>
+          </div>
+          <details className="transaction-inline-disclosure">
+            <summary>
+              <span>Buyer and seller</span>
+              <small>{tx.buyer} · {tx.seller}</small>
+            </summary>
             <div className="transaction-parties">
               <div className="transaction-party">
                 <div className="muted">Buyer</div>
@@ -4443,72 +4517,41 @@ const handleWalletWithdraw = async () => {
                 </div>
               </div>
             </div>
-            <div className="transaction-summary-rail">
-              <div className="transaction-financial-summary">
-                <div className="transaction-summary-field">
-                  <div className="muted">Amount</div>
-                  <div style={{ fontWeight: 700 }}>{formatCurrency(tx.amount)}</div>
-                </div>
-                <div className="transaction-summary-field">
-                  <div className="muted">Status</div>
-                  <span
-                    className={`status-badge ${
-                      tx.status === "Complete"
-                        ? "status-released"
-                        : tx.status === "Active"
-                          ? "status-active"
-                          : tx.status === "Pending"
-                            ? "status-pending"
-                            : "status-active"
-                    }`}
-                  >
-                    {tx.status}
-                  </span>
-                </div>
-                {tx.fundingMode || tx.fundedAmount ? (
-                  <div className="transaction-summary-field">
-                    <div className="muted">Funding</div>
-                    <div style={{ fontWeight: 700 }}>
-                      {tx.fundingMode === "milestone"
-                        ? hasSecuredFunds
-                          ? "Staged funding active"
-                          : "Staged funding agreed"
-                        : hasSecuredFunds
-                          ? "Funded in full"
-                          : "Full funding agreed"}
-                    </div>
-                    <div className="muted" style={{ marginTop: 4 }}>
-                      {formatCurrency(tx.fundedAmount ?? (tx.fundingStatus === "funded" ? tx.amount : 0))} secured
-                      {tx.fundingMode === "milestone" ? ` of ${formatCurrency(tx.amount)}` : ""}
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-              <div className="transaction-download-action">
-                <button
-                  className="ghost agreement-download-button"
-                  onClick={() => {
-                    if (tx.counterpartyApproved) downloadAgreementPdf(tx);
-                  }}
-                  disabled={!tx.counterpartyApproved}
-                  title={tx.counterpartyApproved ? undefined : "Available after counterparty approval"}
-                >
-                  Download agreement (PDF)
-                </button>
-              </div>
-            </div>
+          </details>
+          {tx.description ? (
+            <details className="transaction-inline-disclosure">
+              <summary><span>Description</span></summary>
+              <p className="muted transaction-description">{tx.description}</p>
+            </details>
+          ) : null}
+        </div>
+        <details className="card transaction-disclosure transaction-chat-disclosure" style={{ marginTop: 12 }}>
+          <summary className="transaction-disclosure__summary">
+            <span>Messages</span>
+            <small>Conversation with {tx.counterpart}</small>
+          </summary>
+          <div className="transaction-disclosure__body">
+            <EscrowChat
+              escrowId={String(tx.reference ?? tx.id)}
+              counterpart={tx.counterpart}
+            />
           </div>
-        </div>
-        <div style={{ marginTop: 12 }}>
-          <EscrowChat
-            escrowId={String(tx.reference ?? tx.id)}
-            counterpart={tx.counterpart}
-          />
-        </div>
+        </details>
         {tx.invitation || tx.agreement ? (
-          <div className="card agreement-invitation-card" style={{ marginTop: 12 }}>
-            <strong>Agreement and invitation</strong>
-            <div className="transaction-overview agreement-invitation-summary" style={{ marginTop: 12 }}>
+          <details
+            className="card agreement-invitation-card transaction-disclosure"
+            style={{ marginTop: 12 }}
+            open={canRecoverInvitation || undefined}
+          >
+            <summary className="transaction-disclosure__summary">
+              <span>Agreement and invitation</span>
+              <small>
+                {tx.agreement ? `Version ${tx.agreement.version}` : "Agreement pending"}
+                {tx.invitation ? ` · ${tx.invitation.status}` : ""}
+              </small>
+            </summary>
+            <div className="transaction-disclosure__body">
+            <div className="transaction-overview agreement-invitation-summary">
               {tx.agreement ? (
                 <div className="transaction-summary-field">
                   <div className="muted">Agreement version</div>
@@ -4552,7 +4595,8 @@ const handleWalletWithdraw = async () => {
               </div>
             ) : null}
             {renderInlineMessage(`invitation:${tx.id}`)}
-          </div>
+            </div>
+          </details>
         ) : null}
         {needsCreatorSignature ? (
           <div className="card" style={{ marginTop: 12 }}>
@@ -4588,9 +4632,7 @@ const handleWalletWithdraw = async () => {
             {renderInlineMessage(`creator-signature:${tx.id}`)}
           </div>
         ) : null}
-        {(isCurrentUserBuyer || Boolean(tx.fundingMode))
-          && tx.milestones.length > 0
-          && !["completed", "cancelled"].includes(tx.lifecycleStatus ?? "") ? (
+        {showFundingPlan ? (
           <div className="card funding-plan" style={{ marginTop: 12 }}>
             <div className="funding-plan__header">
               <div>
@@ -4886,9 +4928,13 @@ const handleWalletWithdraw = async () => {
         tx.milestones.length &&
         !(canRequestMilestoneChanges && agreementChangeDraft) &&
         !(tx.isOwner && isChangesRequested && hasAgreementChangeRequest) ? (
-          <div className="card" style={{ marginTop: 12 }}>
-            <strong>Agreement milestones</strong>
-            <div className="tx-list" style={{ marginTop: 12 }}>
+          <details className="card transaction-section-disclosure" style={{ marginTop: 12 }}>
+            <summary className="transaction-disclosure__summary">
+              <span>Agreement milestones</span>
+              <small>{tx.milestones.length} milestone{tx.milestones.length === 1 ? "" : "s"} · {formatCurrency(tx.amount)}</small>
+            </summary>
+            <div className="transaction-section-disclosure__body">
+            <div className="tx-list">
               {tx.milestones
                 .filter((milestone) => milestone.amount > 0 || !milestone.changeRequestedAt)
                 .map((milestone) => (
@@ -4912,7 +4958,8 @@ const handleWalletWithdraw = async () => {
                   </div>
                 ))}
             </div>
-          </div>
+            </div>
+          </details>
         ) : null}
         {canRequestMilestoneChanges ? (
           <div className="card agreement-change-card" style={{ marginTop: 12 }}>
@@ -5210,10 +5257,18 @@ const handleWalletWithdraw = async () => {
           </div>
         ) : null}
         {tx.lifecycleStatus === "funded" || tx.cancellation ? (
-          <div className="card cancellation-card" style={{ marginTop: 12 }}>
-            <strong>Cancellation and refunds</strong>
+          <details
+            className="card cancellation-card transaction-section-disclosure"
+            style={{ marginTop: 12 }}
+            open={Boolean(tx.cancellation) || undefined}
+          >
+            <summary className="transaction-disclosure__summary">
+              <span>Cancellation and refunds</span>
+              <small>{tx.cancellation ? tx.cancellation.status : "View options"}</small>
+            </summary>
+            <div className="transaction-section-disclosure__body">
             {tx.cancellation ? (
-              <div style={{ marginTop: 10 }}>
+              <div>
                 <div className="milestone-warning">
                   <strong style={{ textTransform: "capitalize" }}>{tx.cancellation.mode} cancellation — {tx.cancellation.status}</strong>
                   <p style={{ margin: "6px 0 0" }}>{tx.cancellation.reason}</p>
@@ -5286,15 +5341,22 @@ const handleWalletWithdraw = async () => {
                 {renderInlineMessage(`cancellation:${tx.id}`)}
               </div>
             )}
-          </div>
+            </div>
+          </details>
         ) : null}
         {tx.milestones.length && !isAwaitingApproval && !isChangesRequested ? (
-          <div className="card" style={{ marginTop: 12 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <strong>Milestones</strong>
-            </div>
+          <details
+            className="card transaction-section-disclosure"
+            style={{ marginTop: 12 }}
+            open={milestonesNeedAttention || undefined}
+          >
+            <summary className="transaction-disclosure__summary">
+              <span>Milestones</span>
+              <small>{tx.milestones.length} milestone{tx.milestones.length === 1 ? "" : "s"}</small>
+            </summary>
+            <div className="transaction-section-disclosure__body">
             {!canReviewMilestones ? (
-              <div className="muted" style={{ marginTop: 8 }}>
+              <div className="muted transaction-section-note">
                 {tx.status === "Complete"
                   ? "All milestones have been released. This escrow is complete."
                   : isAwaitingSignup
@@ -5851,14 +5913,17 @@ const handleWalletWithdraw = async () => {
                 );
               })}
             </div>
-          </div>
+            </div>
+          </details>
         ) : null}
         {tx.timeline.length ? (
-          <div className="card" style={{ marginTop: 12 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <strong>Timeline</strong>
-            </div>
-            <div className="tx-list" style={{ marginTop: 12 }}>
+          <details className="card transaction-section-disclosure" style={{ marginTop: 12 }}>
+            <summary className="transaction-disclosure__summary">
+              <span>Timeline</span>
+              <small>{tx.timeline.length} event{tx.timeline.length === 1 ? "" : "s"}</small>
+            </summary>
+            <div className="transaction-section-disclosure__body">
+            <div className="tx-list">
               {[...tx.timeline]
                 .sort(
                   (a, b) =>
@@ -5874,7 +5939,8 @@ const handleWalletWithdraw = async () => {
                 </div>
               ))}
             </div>
-          </div>
+            </div>
+          </details>
         ) : null}
         <div style={{ marginTop: 12 }}>
           <button className="ghost" onClick={() => navigate("dashboard")}>

@@ -3802,19 +3802,106 @@ select:focus {
 
 /* Transaction detail */
 .transaction-screen > .card { border-color: var(--section-border); box-shadow: var(--section-shadow); }
-.transaction-hero-card { position: relative; padding: 24px; overflow: hidden; border-top: 4px solid #0aa69a !important; }
-.transaction-hero-card > div:first-child .muted { color: #087c78; font-size: 10px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; }
-.transaction-hero-card > div:first-child > div:last-child { color: var(--brand-600); font-size: 25px !important; letter-spacing: -.025em; }
+.transaction-page-header { margin-bottom: 14px; padding: 20px 24px; }
+.transaction-page-header h2 { margin: 5px 0 3px; font-size: clamp(24px, 3vw, 31px); }
+.transaction-page-header div > p:last-child { margin-top: 4px; font-size: 13px; }
+.transaction-hero-card { position: relative; padding: 20px; overflow: hidden; border-top: 4px solid #0aa69a !important; }
 .transaction-overview { margin-top: 20px; padding-top: 20px; border-top: 1px solid rgba(10,166,154,.12); }
-.transaction-parties { padding-left: 16px; border-left: 3px solid rgba(10,166,154,.22); }
+.transaction-parties { padding: 16px 0 2px; }
 .transaction-party + .transaction-party { margin-top: 12px; }
 .transaction-summary-rail { min-width: 0; }
-.transaction-financial-summary { min-width: 180px; padding: 18px; border-radius: 15px; background: linear-gradient(135deg, #f0fbf9, #f8fdfc); text-align: left; }
+.transaction-financial-summary { min-width: 180px; padding: 16px 18px; border-radius: 15px; background: linear-gradient(135deg, #f0fbf9, #f8fdfc); text-align: left; }
 .transaction-financial-summary > div:first-child div:last-child { color: var(--brand-600); font-size: 22px; font-weight: 800 !important; }
 .transaction-download-action { margin-top: 12px; text-align: right; }
 
+.transaction-inline-disclosure {
+  border-top: 1px solid rgba(10,166,154,.12);
+}
+
+.transaction-inline-disclosure:first-of-type { margin-top: 16px; }
+
+.transaction-inline-disclosure > summary,
+.transaction-disclosure__summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 18px;
+  align-items: center;
+  gap: 10px;
+  color: var(--brand-600);
+  cursor: pointer;
+  list-style: none;
+}
+
+.transaction-inline-disclosure > summary { min-height: 48px; }
+.transaction-inline-disclosure > summary::-webkit-details-marker,
+.transaction-disclosure__summary::-webkit-details-marker { display: none; }
+
+.transaction-inline-disclosure > summary::after,
+.transaction-disclosure__summary::after {
+  grid-column: 3;
+  color: #078c83;
+  content: "⌄";
+  font-size: 18px;
+  line-height: 1;
+  text-align: center;
+  transform: translateY(-2px);
+  transition: transform 140ms ease;
+}
+
+.transaction-inline-disclosure[open] > summary::after,
+.transaction-disclosure[open] > .transaction-disclosure__summary::after,
+.transaction-section-disclosure[open] > .transaction-disclosure__summary::after {
+  transform: rotate(180deg) translateY(2px);
+}
+
+.transaction-inline-disclosure > summary > span,
+.transaction-disclosure__summary > span { font-weight: 800; }
+
+.transaction-inline-disclosure > summary > small,
+.transaction-disclosure__summary > small {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.transaction-description {
+  margin: 0;
+  padding: 0 0 16px;
+  line-height: 1.5;
+  white-space: pre-line;
+}
+
+.transaction-disclosure,
+.transaction-section-disclosure {
+  padding: 0 !important;
+  overflow: hidden;
+}
+
+.transaction-disclosure__summary { padding: 17px 20px; }
+
+.transaction-disclosure__body,
+.transaction-section-disclosure__body { padding: 0 20px 20px; }
+
+.transaction-disclosure .transaction-overview {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.transaction-section-note { margin-bottom: 12px; }
+
+.transaction-chat-disclosure .transaction-disclosure__body { padding: 0; }
+.transaction-chat-disclosure .escrow-chat-card {
+  border: 0 !important;
+  border-radius: 0;
+  box-shadow: none;
+}
+
 @media (min-width: 769px) {
-  .transaction-hero-card { padding: 30px 32px; }
+  .transaction-hero-card { padding: 20px 22px; }
 
   .transaction-overview {
     display: grid;
@@ -3828,7 +3915,7 @@ select:focus {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     align-content: start;
     gap: 28px;
-    padding: 4px 0 4px 20px;
+    padding: 16px 0 4px;
   }
 
   .transaction-party + .transaction-party { margin-top: 0; }
@@ -3847,7 +3934,7 @@ select:focus {
     grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
     align-items: start;
     gap: 20px;
-    padding: 20px 22px;
+    padding: 16px 20px;
   }
 
   .transaction-financial-summary > .transaction-summary-field:first-child {
@@ -4332,8 +4419,28 @@ select:focus {
   }
 
   .settings-stack > .setting-card:first-child { grid-column: auto; }
+  .transaction-page-header {
+    margin-bottom: 10px;
+    padding: 16px 18px;
+  }
+
+  .transaction-page-header h2 {
+    margin-top: 4px;
+    font-size: 23px;
+    line-height: 1.15;
+  }
+
+  .transaction-page-header div > p:last-child { font-size: 12px; }
+  .transaction-hero-card { padding: 14px; }
   .transaction-summary-rail { width: 100%; }
-  .transaction-financial-summary { width: 100%; grid-template-columns: 1fr 1fr; text-align: left; }
+  .transaction-hero-card .transaction-financial-summary {
+    width: 100%;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 0;
+    padding: 14px;
+    text-align: left;
+  }
 
   .transaction-financial-summary > .transaction-summary-field:nth-child(3) {
     grid-column: 1 / -1;
@@ -4346,6 +4453,27 @@ select:focus {
     width: 100%;
     justify-content: center;
   }
+
+  .transaction-inline-disclosure:first-of-type { margin-top: 12px; }
+
+  .transaction-inline-disclosure > summary {
+    min-height: 46px;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) 18px;
+  }
+
+  .transaction-inline-disclosure > summary > small { text-align: right; }
+  .transaction-parties { padding-top: 12px; }
+
+  .transaction-disclosure__summary {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr) 18px;
+    padding: 15px 16px;
+  }
+
+  .transaction-disclosure__summary > small { text-align: right; }
+  .transaction-disclosure__body,
+  .transaction-section-disclosure__body { padding: 0 16px 16px; }
+
+  .transaction-screen .funding-plan__header > div > .muted { display: none; }
 
   .agreement-invitation-summary {
     flex-direction: column;
@@ -4375,6 +4503,7 @@ select:focus {
   }
 
   .compact-page-header { padding: 21px; border-radius: 17px; }
+  .transaction-page-header { padding: 16px 18px; }
 }
 
 @media (max-width: 560px) {
@@ -4419,4 +4548,6 @@ select:focus {
   .walkthrough-actions {
     padding-top: 28px;
   }
+
+  .agreement-invitation-actions { grid-template-columns: 1fr; }
 }
