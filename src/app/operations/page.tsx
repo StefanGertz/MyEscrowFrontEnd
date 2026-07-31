@@ -259,7 +259,7 @@ async function readJson<T>(response: Response): Promise<T> {
 
 export default function OperationsPage() {
   const router = useRouter();
-  const { isAuthenticated, isHydrating, logout } = useAuth();
+  const { isAuthenticated, isHydrating } = useAuth();
   const [health, setHealth] = useState<Health | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [error, setError] = useState("");
@@ -291,11 +291,6 @@ export default function OperationsPage() {
       setIsRefreshing(false);
     }
   }, []);
-
-  const handleLogout = () => {
-    logout();
-    router.replace("/operations/login");
-  };
 
   useEffect(() => {
     if (isHydrating) return;
@@ -366,13 +361,6 @@ export default function OperationsPage() {
             <p className="mt-2 text-slate-600">Failed work is visible, permissioned, audited, and safe to retry.</p>
           </div>
           <div className="flex flex-wrap gap-3">
-            <button
-              type="button"
-              className="rounded-xl border border-slate-300 bg-white px-5 py-3 font-bold text-slate-700 hover:bg-slate-100"
-              onClick={handleLogout}
-            >
-              Log out
-            </button>
             <button
               type="button"
               className="rounded-xl bg-teal-300 px-5 py-3 font-bold text-slate-900 disabled:cursor-wait disabled:opacity-60"

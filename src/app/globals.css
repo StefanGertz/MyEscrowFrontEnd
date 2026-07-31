@@ -137,6 +137,46 @@ body {
   letter-spacing: 0;
 }
 
+.operations-shell {
+  min-height: 100vh;
+  background: #f8fafc;
+}
+
+.operations-toolbar {
+  z-index: 40;
+}
+
+.operations-brand-copy {
+  display: grid;
+  line-height: 1.05;
+}
+
+.operations-brand-copy strong {
+  font-size: 15px;
+}
+
+.operations-brand-copy small {
+  margin-top: 4px;
+  color: #0f766e;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+
+.operations-toolbar .icon-btn[aria-current="page"] {
+  border-color: rgba(10, 166, 154, .42);
+  background: rgba(10, 166, 154, .12);
+  color: #087c78;
+}
+
+.operations-toolbar .operations-logout:hover,
+.operations-toolbar .operations-logout:focus-visible {
+  border-color: rgba(180, 35, 24, .2);
+  background: rgba(180, 35, 24, .06);
+  color: #9f261d;
+}
+
 .splash-screen {
   position: fixed;
   inset: 0;
