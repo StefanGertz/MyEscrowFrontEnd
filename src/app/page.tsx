@@ -72,7 +72,7 @@ import {
 } from "@/lib/escrowWalkthrough";
 import { useConfirmDialog } from "@/components/ConfirmDialogProvider";
 import { jsPDF } from "jspdf";
-import { apiFetch } from "@/lib/apiClient";
+import { apiFetchDirect } from "@/lib/apiClient";
 import { findTransactionByToken } from "@/lib/transactionRouting";
 import {
   parseArchivedTransactionTokens,
@@ -84,6 +84,7 @@ import { NotificationTimestamp } from "@/components/NotificationTimestamp";
 import { ChangePasswordModal } from "@/components/ChangePasswordModal";
 import { EscrowChat } from "@/components/EscrowChat";
 import { CustomerPortalBoundary } from "@/components/CustomerPortalBoundary";
+import { MilestoneProofPicker } from "@/components/MilestoneProofPicker";
 import type { EscrowRecord } from "@/lib/mockDashboard";
 import {
   ESCROW_CREATION_DRAFT_SCHEMA_VERSION,
@@ -2766,7 +2767,7 @@ const findTransactionById = (id: number) => {
   ) => {
     try {
       const escrowId = tx.reference ?? `PO-${tx.id}`;
-      const response = await apiFetch(
+      const response = await apiFetchDirect(
         `/api/dashboard/escrows/${escrowId}/milestones/${milestone.id}/submissions/${submissionId}/evidence/${evidenceId}`,
       );
       if (!response.ok) {
@@ -6340,41 +6341,14 @@ const handleWalletWithdraw = async () => {
                             placeholder="Summarize the completed work for the buyer"
                           />
                         </label>
-                        <label className="milestone-proof-picker">
-                          <span className="milestone-proof-picker__title">Proof of completion</span>
-                          <span className="milestone-proof-picker__help">
-                            Add receipts, photos, PDFs, Word files, spreadsheets, or text files.
-                          </span>
-                          <input
-                            type="file"
-                            multiple
-                            accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf,text/plain,text/csv,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/rtf"
-                            onChange={(event) => handleMilestoneProofSelection(milestone.id, event.target.files)}
-                          />
-                          <span className="milestone-proof-picker__help">Up to 10 files, 25 MB each.</span>
-                        </label>
-                        {(milestoneProofFiles[milestone.id] ?? []).length ? (
-                          <div className="milestone-proof-list" aria-label="Selected proof files">
-                            {(milestoneProofFiles[milestone.id] ?? []).map((file, index) => (
-                              <div className="milestone-proof-file" key={`${file.name}-${file.lastModified}-${index}`}>
-                                <span>
-                                  <strong>{file.name}</strong>
-                                  <small>{formatFileSize(file.size)}</small>
-                                </span>
-                                <button
-                                  type="button"
-                                  className="ghost"
-                                  onClick={() => setMilestoneProofFiles((current) => ({
-                                    ...current,
-                                    [milestone.id]: (current[milestone.id] ?? []).filter((_, fileIndex) => fileIndex !== index),
-                                  }))}
-                                >
-                                  Remove
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        ) : null}
+                        <MilestoneProofPicker
+                          files={milestoneProofFiles[milestone.id] ?? []}
+                          onSelect={(files) => handleMilestoneProofSelection(milestone.id, files)}
+                          onRemove={(index) => setMilestoneProofFiles((current) => ({
+                            ...current,
+                            [milestone.id]: (current[milestone.id] ?? []).filter((_, fileIndex) => fileIndex !== index),
+                          }))}
+                        />
                         {renderInlineMessage(`milestone-submission:${milestone.id}`)}
                         <button
                           className="btn"

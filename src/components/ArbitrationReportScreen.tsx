@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
-import { apiFetch } from "@/lib/apiClient";
+import { apiFetch, apiFetchDirect } from "@/lib/apiClient";
 import {
   agreementIdentityText,
   agreementMilestone,
@@ -440,7 +440,7 @@ export function ArbitrationReportScreen({
     setIsPreparingPdf(true);
     try {
       await downloadArbitrationReportPdf(report, async (exhibit) => {
-        const response = await apiFetch(
+        const response = await apiFetchDirect(
           `/api/arbitration/disputes/${encodeURIComponent(report.case.reference)}/exhibits/${encodeURIComponent(exhibit.id)}`,
           { cache: "no-store" },
         );

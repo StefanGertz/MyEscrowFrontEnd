@@ -35,3 +35,25 @@ export function apiFetch(input: string, init?: RequestInit) {
   const normalizedPath = input.startsWith("/") ? input : `/${input}`;
   return fetch(`${normalizedBase}${normalizedPath}`, requestInit);
 }
+
+/**
+ * Sends large request/response bodies straight to the configured API instead of
+ * passing them through a Next.js route handler. Vercel Functions have a fixed
+ * payload ceiling that is lower than the evidence limits enforced by Fastify.
+ */
+export function apiFetchDirect(input: string, init?: RequestInit) {
+  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+  const isAbsoluteUrl = /^https?:\/\//i.test(input);
+  const isInternalApiRoute = input.startsWith("/api/");
+  const isTestEnv = process.env.NODE_ENV === "test";
+  const shouldUseMocks = isInternalApiRoute && mocksEnabled && !isTestEnv;
+  const requestInit = applyAuthHeaders(init);
+
+  if (!baseUrl || isAbsoluteUrl || shouldUseMocks) {
+    return fetch(input, requestInit);
+  }
+
+  const normalizedBase = baseUrl.replace(/\/$/, "");
+  const normalizedPath = input.startsWith("/") ? input : `/${input}`;
+  return fetch(`${normalizedBase}${normalizedPath}`, requestInit);
+}

@@ -7,7 +7,7 @@ import type {
   SummaryMetric,
   TimelineEvent,
 } from "@/lib/mockDashboard";
-import { apiFetch } from "@/lib/apiClient";
+import { apiFetch, apiFetchDirect } from "@/lib/apiClient";
 import {
   parseEscrowCreationDraftData,
   parseStoredEscrowCreationDraft,
@@ -37,8 +37,14 @@ const parseErrorMessage = async (response: Response) => {
   return raw;
 };
 
-const fetchJSON = async <T>(input: string, init?: RequestInit): Promise<T> => {
-  const response = await apiFetch(input, init);
+type ApiFetcher = (input: string, init?: RequestInit) => Promise<Response>;
+
+const fetchJSON = async <T>(
+  input: string,
+  init?: RequestInit,
+  fetcher: ApiFetcher = apiFetch,
+): Promise<T> => {
+  const response = await fetcher(input, init);
   if (!response.ok) {
     throw new Error(await parseErrorMessage(response));
   }
@@ -648,6 +654,7 @@ export function useSubmitMilestone() {
           headers: idempotencyHeaders(),
           body: formData,
         },
+        apiFetchDirect,
       );
     },
     onSuccess: () => {
@@ -701,6 +708,7 @@ export function useSubmitDisputeEvidence() {
             headers: idempotencyHeaders(),
             body: formData,
           },
+          apiFetchDirect,
         );
       }
       return fetchJSON<{ disputeId: string; evidenceSubmissionId: number }>(
