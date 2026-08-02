@@ -1,8 +1,30 @@
 import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
 import { resolveSessionExpiresAt } from "@/lib/sessionExpiry";
+import {
+  parseEscrowCreationDraftData,
+  type StoredEscrowCreationDraft,
+} from "@/lib/escrowCreationDraft";
 
 const baseUrl = "https://staging-api.myescrow.example/v1";
+
+let agreementDraft: StoredEscrowCreationDraft | null = null;
+let agreementDraftRevision = 0;
+let agreementDraftStateExists = false;
+
+export const resetAgreementDraftFixture = () => {
+  agreementDraft = null;
+  agreementDraftRevision = 0;
+  agreementDraftStateExists = false;
+};
+
+const agreementDraftResponseValue = () => {
+  if (!agreementDraft) return null;
+  const draft: Partial<StoredEscrowCreationDraft> = { ...agreementDraft };
+  delete draft.serverRevision;
+  delete draft.hasLocalChanges;
+  return draft;
+};
 
 const sessionResponse = (email: string) => ({
   token: "test-token",
@@ -72,9 +94,25 @@ export const handlers = [
       title: string;
       counterpartyEmail: string;
       amount: number;
+      draftRevision?: number;
       fundingMode?: "full" | "milestone";
       description?: string;
     };
+    if (!agreementDraftStateExists) {
+      if (body.draftRevision !== undefined && body.draftRevision !== 0) {
+        return HttpResponse.json({ error: "The agreement draft changed in another session." }, { status: 409 });
+      }
+      agreementDraftRevision = 1;
+      agreementDraftStateExists = true;
+    } else if (
+      (agreementDraft && body.draftRevision !== agreementDraftRevision)
+      || (body.draftRevision !== undefined && body.draftRevision !== agreementDraftRevision)
+    ) {
+      return HttpResponse.json({ error: "The agreement draft changed in another session." }, { status: 409 });
+    } else {
+      agreementDraftRevision += 1;
+    }
+    agreementDraft = null;
     return HttpResponse.json({
       escrowId: 55555,
       title: body.title,
@@ -85,6 +123,61 @@ export const handlers = [
       success: true,
       invitationStatus: "existing_user",
     });
+  }),
+  http.get(`${baseUrl}/api/dashboard/agreement-draft`, () => {
+    return HttpResponse.json({
+      draft: agreementDraftResponseValue(),
+      revision: agreementDraftRevision,
+    });
+  }),
+  http.put(`${baseUrl}/api/dashboard/agreement-draft`, async ({ request }) => {
+    const body = await request.json() as { baseRevision?: unknown; draft?: unknown };
+    const draftInput = parseEscrowCreationDraftData(body.draft);
+    if (!Number.isSafeInteger(body.baseRevision) || (body.baseRevision as number) < 0 || !draftInput) {
+      return HttpResponse.json({ error: "The agreement draft payload was invalid." }, { status: 400 });
+    }
+    if (body.baseRevision !== agreementDraftRevision) {
+      return HttpResponse.json({ error: "The agreement draft changed in another session." }, { status: 409 });
+    }
+    const updatedAt = new Date().toISOString();
+    agreementDraftRevision += 1;
+    agreementDraftStateExists = true;
+    agreementDraft = {
+      ...draftInput,
+      createdAt: agreementDraft?.createdAt ?? updatedAt,
+      updatedAt,
+      serverRevision: agreementDraftRevision,
+      hasLocalChanges: false,
+    };
+    return HttpResponse.json({
+      draft: agreementDraftResponseValue(),
+      revision: agreementDraftRevision,
+    });
+  }),
+  http.delete(`${baseUrl}/api/dashboard/agreement-draft`, async ({ request }) => {
+    const body = await request.json() as { baseRevision?: unknown };
+    if (!Number.isSafeInteger(body.baseRevision) || (body.baseRevision as number) < 0) {
+      return HttpResponse.json({ error: "The agreement draft payload was invalid." }, { status: 400 });
+    }
+    if (!agreementDraftStateExists) {
+      if (body.baseRevision !== 0) {
+        return HttpResponse.json({ error: "The agreement draft changed in another session." }, { status: 409 });
+      }
+      agreementDraftRevision = 1;
+      agreementDraftStateExists = true;
+    } else if (
+      !agreementDraft
+      && (body.baseRevision === agreementDraftRevision
+        || (body.baseRevision as number) + 1 === agreementDraftRevision)
+    ) {
+      return HttpResponse.json({ success: true, draft: null, revision: agreementDraftRevision });
+    } else if (body.baseRevision === agreementDraftRevision && agreementDraft) {
+      agreementDraftRevision += 1;
+    } else {
+      return HttpResponse.json({ error: "The agreement draft changed in another session." }, { status: 409 });
+    }
+    agreementDraft = null;
+    return HttpResponse.json({ success: true, draft: null, revision: agreementDraftRevision });
   }),
   http.get(`${baseUrl}/api/dashboard/business-profile`, () => {
     return HttpResponse.json({ businessProfile: null });

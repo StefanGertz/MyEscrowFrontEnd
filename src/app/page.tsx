@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useMemo, useRef, useState } from "react";
+import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
@@ -14,7 +14,9 @@ import {
   type CreateEscrowResponse,
   useCreateEscrow,
   useDismissNotification,
+  useDeleteEscrowCreationDraft,
   useDisputes,
+  useEscrowCreationDraft,
   useFundEscrow,
   useFundMilestone,
   useRejectEscrow,
@@ -25,6 +27,7 @@ import {
   useProposeDisputeResolution,
   useResolveDispute,
   useRequestFundedCancellation,
+  useSaveEscrowCreationDraft,
   useAcceptFundedCancellation,
   useSubmitCancellationInformation,
   useResendInvitation,
@@ -82,6 +85,20 @@ import { ChangePasswordModal } from "@/components/ChangePasswordModal";
 import { EscrowChat } from "@/components/EscrowChat";
 import { CustomerPortalBoundary } from "@/components/CustomerPortalBoundary";
 import type { EscrowRecord } from "@/lib/mockDashboard";
+import {
+  ESCROW_CREATION_DRAFT_SCHEMA_VERSION,
+  clearEscrowCreationDraftCache,
+  clearEscrowCreationDraftConflictCache,
+  createStoredEscrowCreationDraft,
+  hasMeaningfulEscrowCreationDraft,
+  parseEscrowCreationDraftData,
+  readEscrowCreationDraftCache,
+  readEscrowCreationDraftConflictCache,
+  writeEscrowCreationDraftCache,
+  writeEscrowCreationDraftConflictCache,
+  type EscrowCreationDraftData,
+  type StoredEscrowCreationDraft,
+} from "@/lib/escrowCreationDraft";
 
 type ScreenId =
   | "welcome"
@@ -204,6 +221,26 @@ const emptyBusinessDetails = (): BusinessDetails => ({
   representativeTitle: "",
 });
 
+const emptyEscrowCreationForm = () => ({
+  role: "buyer" as "buyer" | "seller",
+  counterpartyEmail: "",
+  counterpartyEmailConfirmation: "",
+  title: "",
+  amount: "",
+  category: "Goods",
+  description: "",
+  fundingMode: null as "full" | "milestone" | null,
+  partyType: "individual" as "individual" | "business",
+  business: emptyBusinessDetails(),
+});
+
+const emptyMilestoneInputs = () => ({
+  title: "",
+  amount: "",
+  description: "",
+  deadline: "",
+});
+
 const businessDetailsComplete = (details: BusinessDetails) =>
   Object.values(details).every((value) => value.trim().length >= 2);
 
@@ -310,19 +347,79 @@ type HomeProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
-function EscrowWizardHeader({ currentStep, title, description }: {
+type DraftSaveStatus = "idle" | "saving" | "saved" | "error";
+
+function EscrowWizardHeader({
+  currentStep,
+  title,
+  description,
+  draftSaveStatus,
+  hasDraftConflict,
+  onSaveAndExit,
+  onDiscard,
+  onUseLocalDraft,
+  onUseServerDraft,
+}: {
   currentStep: 1 | 2 | 3;
   title: string;
   description: string;
+  draftSaveStatus: DraftSaveStatus;
+  hasDraftConflict: boolean;
+  onSaveAndExit: () => void;
+  onDiscard: () => void;
+  onUseLocalDraft: () => void;
+  onUseServerDraft: () => void;
 }) {
   const steps = ["Details", "Milestones", "Agreement"];
+  const saveStatus =
+    draftSaveStatus === "saving"
+      ? "Saving draft…"
+      : draftSaveStatus === "saved"
+        ? "Draft saved"
+        : draftSaveStatus === "error"
+          ? "Saved on this device; account sync will retry"
+          : "Changes save automatically";
   return (
     <div className="wizard-header">
-      <div className="wizard-header__copy">
-        <span className="wizard-header__eyebrow">Create escrow</span>
-        <h2>{title}</h2>
-        <p>{description}</p>
+      <div className="wizard-header__top">
+        <div className="wizard-header__copy">
+          <span className="wizard-header__eyebrow">Create escrow</span>
+          <h2>{title}</h2>
+          <p>{description}</p>
+        </div>
+        <div className="wizard-draft-actions">
+          <span className="wizard-draft-status" role="status" aria-live="polite">
+            {saveStatus}
+          </span>
+          <div>
+            <button
+              type="button"
+              className="wizard-draft-button"
+              onClick={onSaveAndExit}
+              disabled={hasDraftConflict}
+              title={hasDraftConflict ? "Resolve the draft conflict first." : undefined}
+            >
+              Save &amp; exit
+            </button>
+            <button type="button" className="wizard-discard-button" onClick={onDiscard}>
+              Discard
+            </button>
+          </div>
+        </div>
       </div>
+      {hasDraftConflict ? (
+        <div className="wizard-draft-conflict" role="alert">
+          <span>A newer draft was saved elsewhere. That version is loaded.</span>
+          <div>
+            <button type="button" className="wizard-draft-button" onClick={onUseServerDraft}>
+              Continue with loaded copy
+            </button>
+            <button type="button" className="wizard-draft-button" onClick={onUseLocalDraft}>
+              Use this device&apos;s copy
+            </button>
+          </div>
+        </div>
+      ) : null}
       <ol className="wizard-progress" aria-label={`Step ${currentStep} of 3`}>
         {steps.map((step, index) => {
           const stepNumber = index + 1;
@@ -355,6 +452,14 @@ const screenIds: ScreenId[] = [
   "settings",
   "transaction",
 ];
+
+type CreationScreen = "create" | "milestones" | "agreement";
+
+const isCreationScreen = (screen: ScreenId): screen is CreationScreen =>
+  screen === "create" || screen === "milestones" || screen === "agreement";
+
+const creationDraftFingerprint = (draft: EscrowCreationDraftData) =>
+  JSON.stringify(parseEscrowCreationDraftData(draft));
 
 const pickQueryValue = (value: string | string[] | undefined) =>
   Array.isArray(value) ? value[0] : value;
@@ -991,27 +1096,36 @@ function MockExperienceHome({ searchParams }: HomeProps) {
     userId: string;
     entries: WalletHistoryEntry[];
   } | null>(null);
-  const [createForm, setCreateForm] = useState({
-    role: "buyer" as "buyer" | "seller",
-    counterpartyEmail: "",
-    counterpartyEmailConfirmation: "",
-    title: "",
-    amount: "",
-    category: "Goods",
-    description: "",
-    fundingMode: null as "full" | "milestone" | null,
-    partyType: "individual" as "individual" | "business",
-    business: emptyBusinessDetails(),
-  });
+  const [createForm, setCreateForm] = useState(emptyEscrowCreationForm);
   const [createPromptStep, setCreatePromptStep] = useState<EscrowDetailPromptIndex>(0);
   const [createPromptError, setCreatePromptError] = useState<string | null>(null);
   const [descriptionSkipped, setDescriptionSkipped] = useState(false);
   const createPromptHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const [milestones, setMilestones] = useState<DraftMilestone[]>([]);
-  const [milestoneInputs, setMilestoneInputs] = useState({ title: "", amount: "", description: "", deadline: "" });
+  const [milestoneInputs, setMilestoneInputs] = useState(emptyMilestoneInputs);
   const milestoneDeadlineRef = useRef<HTMLInputElement | null>(null);
   const [editingMilestoneId, setEditingMilestoneId] = useState<string | null>(null);
   const [milestoneWarning, setMilestoneWarning] = useState<string | null>(null);
+  const [draftHydratedUserId, setDraftHydratedUserId] = useState<string | null>(null);
+  const [hasCreationDraft, setHasCreationDraft] = useState(false);
+  const [draftSaveStatus, setDraftSaveStatus] = useState<DraftSaveStatus>("idle");
+  const [creationSubmitting, setCreationSubmitting] = useState(false);
+  const [conflictingLocalDraft, setConflictingLocalDraft] = useState<StoredEscrowCreationDraft | null>(null);
+  const [lastCreationScreen, setLastCreationScreen] = useState<CreationScreen>(
+    isCreationScreen(initialScreen) ? initialScreen : "create",
+  );
+  const draftSnapshotRef = useRef<EscrowCreationDraftData | null>(null);
+  const draftLoadedFromCacheRef = useRef<{
+    userId: string;
+    draft: StoredEscrowCreationDraft | null;
+  } | null>(null);
+  const draftAutosaveTimeoutRef = useRef<number | null>(null);
+  const draftSaveQueueRef = useRef<Promise<unknown>>(Promise.resolve());
+  const draftLocalRevisionRef = useRef(0);
+  const draftServerRevisionRef = useRef(0);
+  const draftHydrationBaselineRef = useRef<string | null>(null);
+  const draftReconciledServerTokenRef = useRef<{ userId: string; token: string } | null>(null);
+  const draftSubmissionInProgressRef = useRef(false);
   const [milestoneReviewDrafts, setMilestoneReviewDrafts] = useState<Record<string, MilestoneReviewDraft>>({});
   const [agreementChangeDraft, setAgreementChangeDraft] = useState<AgreementChangeDraft | null>(null);
   const [draftEscrowEdit, setDraftEscrowEdit] = useState<DraftEscrowEditDraft | null>(null);
@@ -1092,6 +1206,13 @@ function MockExperienceHome({ searchParams }: HomeProps) {
     useNotificationSeenToken(profileIdentity.id);
 
   const createEscrowMutation = useCreateEscrow();
+  const creationDraftQuery = useEscrowCreationDraft(
+    Boolean(user && isAuthenticated && !isHydrating),
+  );
+  const saveCreationDraftMutation = useSaveEscrowCreationDraft();
+  const deleteCreationDraftMutation = useDeleteEscrowCreationDraft();
+  const saveCreationDraft = saveCreationDraftMutation.mutateAsync;
+  const deleteCreationDraft = deleteCreationDraftMutation.mutateAsync;
   const businessProfileQuery = useBusinessProfile();
   const dismissNotificationMutation = useDismissNotification();
   const approveEscrowMutation = useApproveEscrow();
@@ -1389,6 +1510,26 @@ const agreementPreview = (() => {
   return `${intro}\n\nMilestones:\n${detail}`;
 })();
 
+const creationDraftSnapshot = useMemo<EscrowCreationDraftData>(() => ({
+  schemaVersion: ESCROW_CREATION_DRAFT_SCHEMA_VERSION,
+  screen: isCreationScreen(activeScreen) ? activeScreen : lastCreationScreen,
+  createPromptStep,
+  descriptionSkipped,
+  createForm,
+  milestones,
+  milestoneInputs,
+  editingMilestoneId,
+}), [
+  activeScreen,
+  createForm,
+  createPromptStep,
+  descriptionSkipped,
+  editingMilestoneId,
+  lastCreationScreen,
+  milestoneInputs,
+  milestones,
+]);
+
 const navActiveId = useMemo<ScreenId>(() => {
   if (["milestones", "agreement"].includes(activeScreen)) {
     return "create";
@@ -1399,9 +1540,31 @@ const navActiveId = useMemo<ScreenId>(() => {
   return activeScreen;
 }, [activeScreen]);
 
-  const navigate = (screen: ScreenId, pushHistory = true) => {
+  const navigate = (screen: ScreenId, pushHistory = true, preserveCreationDraft = true) => {
+    if (
+      preserveCreationDraft
+      && isCreationScreen(activeScreen)
+      && !isCreationScreen(screen)
+      && !draftSubmissionInProgressRef.current
+      && !conflictingLocalDraft
+    ) {
+      const snapshot = draftSnapshotRef.current;
+      if (snapshot && (hasCreationDraft || hasMeaningfulEscrowCreationDraft(snapshot))) {
+        const cached = cacheCreationDraft(snapshot);
+        if (cached) {
+          if (draftAutosaveTimeoutRef.current) {
+            window.clearTimeout(draftAutosaveTimeoutRef.current);
+            draftAutosaveTimeoutRef.current = null;
+          }
+          void queueCreationDraftSave(snapshot, cached.revision).catch(() => undefined);
+        }
+      }
+    }
     if (screen !== activeScreen && (screen === "settings" || activeScreen === "settings")) {
       setProfileFormDraft({ userId: profileIdentity.id, ...savedProfile });
+    }
+    if (isCreationScreen(screen)) {
+      setLastCreationScreen(screen);
     }
     setActiveScreen(screen);
     setMessage(null);
@@ -1453,9 +1616,471 @@ const recordWalletHistory = (type: WalletHistoryEntry["type"], amount: number) =
   });
 };
 
-const resetSignaturePad = () => {
+const resetSignaturePad = useCallback(() => {
   setSignatureCaptured(false);
   setSignatureVersion((prev) => prev + 1);
+}, []);
+
+const resetCreationFlow = useCallback(() => {
+  setCreateForm(emptyEscrowCreationForm());
+  setCreatePromptStep(0);
+  setCreatePromptError(null);
+  setDescriptionSkipped(false);
+  setMilestones([]);
+  setMilestoneInputs(emptyMilestoneInputs());
+  setEditingMilestoneId(null);
+  setMilestoneWarning(null);
+  setAgreementAccepted(false);
+  resetSignaturePad();
+}, [resetSignaturePad]);
+
+const restoreCreationFlowFromDraft = useCallback((draft: StoredEscrowCreationDraft) => {
+  draftHydrationBaselineRef.current = creationDraftFingerprint(draft);
+  setCreateForm({
+    ...draft.createForm,
+    business: { ...draft.createForm.business },
+  });
+  setCreatePromptStep(draft.createPromptStep as EscrowDetailPromptIndex);
+  setCreatePromptError(null);
+  setDescriptionSkipped(draft.descriptionSkipped);
+  setMilestones(draft.milestones.map((milestone) => ({ ...milestone })));
+  setMilestoneInputs({ ...draft.milestoneInputs });
+  setEditingMilestoneId(draft.editingMilestoneId);
+  setMilestoneWarning(null);
+  setLastCreationScreen(draft.screen);
+  setAgreementAccepted(false);
+  setSignatureCaptured(false);
+  setSignatureVersion((version) => version + 1);
+}, []);
+
+const queueCreationDraftSave = useCallback((
+  snapshot: EscrowCreationDraftData,
+  localRevision: number,
+  allowDuringSubmission = false,
+) => {
+  const operation = draftSaveQueueRef.current
+    .catch(() => undefined)
+    .then(async () => {
+      if (draftSubmissionInProgressRef.current && !allowDuringSubmission) {
+        return null;
+      }
+      try {
+        const savedState = await saveCreationDraft({
+          baseRevision: draftServerRevisionRef.current,
+          draft: snapshot,
+        });
+        const savedDraft = savedState.draft;
+        if (!savedDraft) {
+          throw new Error("The agreement draft save response was invalid.");
+        }
+        draftServerRevisionRef.current = savedState.revision;
+        if (draftLocalRevisionRef.current === localRevision) {
+          if (user?.id) {
+            writeEscrowCreationDraftCache(user.id, savedDraft);
+          }
+          setDraftSaveStatus("saved");
+        } else if (user?.id && draftSnapshotRef.current) {
+          const rebasedDraft = createStoredEscrowCreationDraft(
+            draftSnapshotRef.current,
+            savedDraft,
+            undefined,
+            savedState.revision,
+            true,
+          );
+          if (rebasedDraft) {
+            writeEscrowCreationDraftCache(user.id, rebasedDraft);
+          }
+        }
+        return savedDraft;
+      } catch (error) {
+        if (draftLocalRevisionRef.current === localRevision) {
+          setDraftSaveStatus("error");
+        }
+        throw error;
+      }
+    });
+  draftSaveQueueRef.current = operation.then(
+    () => undefined,
+    () => undefined,
+  );
+  return operation;
+}, [saveCreationDraft, user?.id]);
+
+const cacheCreationDraft = useCallback((snapshot: EscrowCreationDraftData) => {
+  if (!user?.id) return null;
+  const storedDraft = writeEscrowCreationDraftCache(
+    user.id,
+    snapshot,
+    undefined,
+    draftServerRevisionRef.current,
+  );
+  const revision = draftLocalRevisionRef.current + 1;
+  draftLocalRevisionRef.current = revision;
+  setHasCreationDraft(true);
+  setDraftSaveStatus(storedDraft ? "saving" : "error");
+  return { storedDraft, revision };
+}, [user?.id]);
+
+useEffect(() => {
+  draftSnapshotRef.current = creationDraftSnapshot;
+}, [creationDraftSnapshot]);
+
+useEffect(() => {
+  if (!user?.id || isHydrating || !isAuthenticated) return;
+  if (draftLoadedFromCacheRef.current?.userId === user.id) return;
+
+  if (draftAutosaveTimeoutRef.current) {
+    window.clearTimeout(draftAutosaveTimeoutRef.current);
+    draftAutosaveTimeoutRef.current = null;
+  }
+  draftSubmissionInProgressRef.current = false;
+  draftLocalRevisionRef.current = 0;
+  draftServerRevisionRef.current = 0;
+  draftHydrationBaselineRef.current = null;
+  draftReconciledServerTokenRef.current = null;
+  setDraftHydratedUserId(null);
+  setDraftSaveStatus("idle");
+  setConflictingLocalDraft(null);
+
+  const localDraft = readEscrowCreationDraftCache(user.id);
+  draftLoadedFromCacheRef.current = { userId: user.id, draft: localDraft };
+  if (localDraft) {
+    draftServerRevisionRef.current = localDraft.serverRevision;
+    restoreCreationFlowFromDraft(localDraft);
+    setHasCreationDraft(true);
+    setDraftSaveStatus("saved");
+  } else {
+    resetCreationFlow();
+    setHasCreationDraft(false);
+    setLastCreationScreen(isCreationScreen(initialScreen) ? initialScreen : "create");
+  }
+}, [
+  initialScreen,
+  isAuthenticated,
+  isHydrating,
+  resetCreationFlow,
+  restoreCreationFlowFromDraft,
+  user?.id,
+]);
+
+useEffect(() => {
+  if (!user?.id) return;
+  const cachedLoad = draftLoadedFromCacheRef.current;
+  if (cachedLoad?.userId !== user.id) return;
+  if (creationDraftQuery.isError) {
+    if (draftHydratedUserId !== user.id) {
+      setDraftHydratedUserId(user.id);
+      setDraftSaveStatus("error");
+      setConflictingLocalDraft(readEscrowCreationDraftConflictCache(user.id));
+    }
+    return;
+  }
+
+  const serverState = creationDraftQuery.data;
+  if (!serverState) return;
+  if (serverState.revision < draftServerRevisionRef.current) {
+    if (draftHydratedUserId !== user.id) setDraftHydratedUserId(user.id);
+    return;
+  }
+  const serverToken = `${serverState.revision}:${serverState.draft?.updatedAt ?? "deleted"}`;
+  if (
+    draftReconciledServerTokenRef.current?.userId === user.id
+    && draftReconciledServerTokenRef.current.token === serverToken
+  ) {
+    if (draftHydratedUserId !== user.id) setDraftHydratedUserId(user.id);
+    return;
+  }
+
+  const firstHydration = draftHydratedUserId !== user.id;
+  const latestLocalDraft = readEscrowCreationDraftCache(user.id);
+  const serverDraft = serverState.draft;
+  let selectedDraft: StoredEscrowCreationDraft | null = serverDraft;
+  let shouldSyncLocalDraft = false;
+  let nextConflictingLocalDraft = serverDraft
+    ? readEscrowCreationDraftConflictCache(user.id)
+    : null;
+
+  if (latestLocalDraft) {
+    if (latestLocalDraft.serverRevision === serverState.revision) {
+      if (!serverDraft || latestLocalDraft.hasLocalChanges) {
+        selectedDraft = latestLocalDraft;
+        shouldSyncLocalDraft = latestLocalDraft.hasLocalChanges;
+      }
+    } else if (!serverDraft) {
+      // A newer server tombstone represents an explicit discard or completed agreement.
+      selectedDraft = null;
+    } else if (latestLocalDraft.hasLocalChanges) {
+      // Do not silently overwrite an active draft saved by another session.
+      nextConflictingLocalDraft = latestLocalDraft;
+      writeEscrowCreationDraftConflictCache(user.id, latestLocalDraft);
+    }
+  }
+
+  if (!serverDraft) clearEscrowCreationDraftConflictCache(user.id);
+
+  draftServerRevisionRef.current = serverState.revision;
+  draftReconciledServerTokenRef.current = { userId: user.id, token: serverToken };
+  setConflictingLocalDraft(nextConflictingLocalDraft);
+  if (selectedDraft) {
+    restoreCreationFlowFromDraft(selectedDraft);
+    writeEscrowCreationDraftCache(user.id, selectedDraft);
+    draftLoadedFromCacheRef.current = { userId: user.id, draft: selectedDraft };
+    setHasCreationDraft(true);
+    setDraftSaveStatus(shouldSyncLocalDraft ? "saving" : "saved");
+    setLastCreationScreen(selectedDraft.screen);
+
+    const shouldResumeRoute = (
+      firstHydration
+      && (!initialScreenQuery || isCreationScreen(initialScreen))
+    ) || (
+      !firstHydration
+      && isCreationScreen(activeScreen)
+      && activeScreen !== selectedDraft.screen
+      && selectedDraft === serverDraft
+      && !nextConflictingLocalDraft
+    );
+    if (shouldResumeRoute) {
+      setActiveScreen(selectedDraft.screen);
+      const nextUrl = `/?screen=${selectedDraft.screen}`;
+      window.history.replaceState({ screen: selectedDraft.screen }, "", nextUrl);
+    }
+
+    if (shouldSyncLocalDraft) {
+      const revision = draftLocalRevisionRef.current + 1;
+      draftLocalRevisionRef.current = revision;
+      void queueCreationDraftSave(selectedDraft, revision).catch(() => undefined);
+    }
+  } else {
+    clearEscrowCreationDraftCache(user.id);
+    draftLoadedFromCacheRef.current = { userId: user.id, draft: null };
+    draftHydrationBaselineRef.current = null;
+    setHasCreationDraft(false);
+    setDraftSaveStatus("idle");
+    resetCreationFlow();
+    if (
+      (firstHydration && (initialScreen === "milestones" || initialScreen === "agreement"))
+      || (!firstHydration && isCreationScreen(activeScreen) && activeScreen !== "create")
+    ) {
+      setActiveScreen("create");
+      setLastCreationScreen("create");
+      window.history.replaceState({ screen: "create" }, "", "/?screen=create");
+    }
+  }
+  setDraftHydratedUserId(user.id);
+}, [
+  creationDraftQuery.data,
+  creationDraftQuery.isError,
+  activeScreen,
+  draftHydratedUserId,
+  initialScreen,
+  initialScreenQuery,
+  queueCreationDraftSave,
+  resetCreationFlow,
+  restoreCreationFlowFromDraft,
+  user?.id,
+]);
+
+useEffect(() => {
+  if (
+    !user?.id
+    || draftHydratedUserId !== user.id
+    || !isCreationScreen(activeScreen)
+    || draftSubmissionInProgressRef.current
+    || conflictingLocalDraft
+    || (
+      !hasCreationDraft
+      && !hasMeaningfulEscrowCreationDraft(creationDraftSnapshot)
+    )
+  ) {
+    return;
+  }
+
+  const snapshotFingerprint = creationDraftFingerprint(creationDraftSnapshot);
+  if (draftHydrationBaselineRef.current !== null) {
+    if (draftHydrationBaselineRef.current === snapshotFingerprint) return;
+    draftHydrationBaselineRef.current = null;
+  }
+
+  const cached = cacheCreationDraft(creationDraftSnapshot);
+  if (!cached) return;
+  if (draftAutosaveTimeoutRef.current) {
+    window.clearTimeout(draftAutosaveTimeoutRef.current);
+  }
+  draftAutosaveTimeoutRef.current = window.setTimeout(() => {
+    draftAutosaveTimeoutRef.current = null;
+    void queueCreationDraftSave(creationDraftSnapshot, cached.revision).catch(() => undefined);
+  }, 700);
+
+  return () => {
+    if (draftAutosaveTimeoutRef.current) {
+      window.clearTimeout(draftAutosaveTimeoutRef.current);
+      draftAutosaveTimeoutRef.current = null;
+    }
+  };
+}, [
+  activeScreen,
+  cacheCreationDraft,
+  conflictingLocalDraft,
+  creationDraftSnapshot,
+  draftHydratedUserId,
+  hasCreationDraft,
+  queueCreationDraftSave,
+  user?.id,
+]);
+
+useEffect(() => {
+  if (!user?.id) return;
+  const preserveLatestDraft = () => {
+    const snapshot = draftSnapshotRef.current;
+    if (!snapshot || draftSubmissionInProgressRef.current || conflictingLocalDraft) return;
+    if (!hasCreationDraft && !hasMeaningfulEscrowCreationDraft(snapshot)) return;
+    writeEscrowCreationDraftCache(
+      user.id,
+      snapshot,
+      undefined,
+      draftServerRevisionRef.current,
+    );
+  };
+  const handleVisibilityChange = () => {
+    if (document.visibilityState === "hidden") preserveLatestDraft();
+  };
+  window.addEventListener("pagehide", preserveLatestDraft);
+  document.addEventListener("visibilitychange", handleVisibilityChange);
+  return () => {
+    window.removeEventListener("pagehide", preserveLatestDraft);
+    document.removeEventListener("visibilitychange", handleVisibilityChange);
+  };
+}, [conflictingLocalDraft, hasCreationDraft, user?.id]);
+
+const saveCreationDraftAndExit = async () => {
+  if (conflictingLocalDraft) {
+    pushToast({
+      variant: "error",
+      title: "Choose which draft copy to use before saving and exiting.",
+    });
+    return;
+  }
+  const snapshot = draftSnapshotRef.current;
+  if (!snapshot || !user?.id) return;
+
+  if (draftAutosaveTimeoutRef.current) {
+    window.clearTimeout(draftAutosaveTimeoutRef.current);
+    draftAutosaveTimeoutRef.current = null;
+  }
+  const cached = cacheCreationDraft(snapshot);
+  if (!cached) return;
+
+  try {
+    await queueCreationDraftSave(snapshot, cached.revision, true);
+    pushToast({ variant: "success", title: "Draft saved. You can continue it any time." });
+  } catch {
+    if (!cached.storedDraft) {
+      pushToast({
+        variant: "error",
+        title: "This draft could not be saved. Keep this page open and try again.",
+      });
+      return;
+    }
+    pushToast({
+      variant: "info",
+      title: "Draft saved on this device. Account sync will retry when you return.",
+    });
+  }
+  navigate("dashboard", true, false);
+};
+
+const discardCreationDraft = () => {
+  confirm({
+    title: "Discard this draft?",
+    body: "Your saved answers and milestones will be permanently removed. No agreement has been sent yet.",
+    confirmLabel: "Discard draft",
+    onConfirm: async () => {
+      draftSubmissionInProgressRef.current = true;
+      if (draftAutosaveTimeoutRef.current) {
+        window.clearTimeout(draftAutosaveTimeoutRef.current);
+        draftAutosaveTimeoutRef.current = null;
+      }
+      await draftSaveQueueRef.current.catch(() => undefined);
+      try {
+        const deletedState = await deleteCreationDraft(draftServerRevisionRef.current);
+        draftServerRevisionRef.current = deletedState.revision;
+      } catch {
+        draftSubmissionInProgressRef.current = false;
+        pushToast({
+          variant: "error",
+          title: "The draft could not be discarded. Nothing was removed.",
+        });
+        return;
+      }
+
+      if (user?.id) {
+        clearEscrowCreationDraftCache(user.id);
+        clearEscrowCreationDraftConflictCache(user.id);
+        draftLoadedFromCacheRef.current = { userId: user.id, draft: null };
+      }
+      draftLocalRevisionRef.current = 0;
+      draftHydrationBaselineRef.current = null;
+      setHasCreationDraft(false);
+      setDraftSaveStatus("idle");
+      setConflictingLocalDraft(null);
+      setLastCreationScreen("create");
+      resetCreationFlow();
+      navigate("welcome", true, false);
+      draftSubmissionInProgressRef.current = false;
+      pushToast({ variant: "info", title: "Draft discarded." });
+    },
+  });
+};
+
+const useConflictingDeviceDraft = () => {
+  if (!user?.id || !conflictingLocalDraft || !creationDraftQuery.data?.draft) return;
+  const rebasedDraft = createStoredEscrowCreationDraft(
+    conflictingLocalDraft,
+    creationDraftQuery.data.draft,
+    undefined,
+    draftServerRevisionRef.current,
+    true,
+  );
+  if (!rebasedDraft) return;
+  setActiveScreen(rebasedDraft.screen);
+  window.history.replaceState(
+    { screen: rebasedDraft.screen },
+    "",
+    `/?screen=${rebasedDraft.screen}`,
+  );
+  restoreCreationFlowFromDraft(rebasedDraft);
+  writeEscrowCreationDraftCache(user.id, rebasedDraft);
+  setHasCreationDraft(true);
+  setDraftSaveStatus("saving");
+  const revision = draftLocalRevisionRef.current + 1;
+  draftLocalRevisionRef.current = revision;
+  void queueCreationDraftSave(rebasedDraft, revision)
+    .then(() => {
+      clearEscrowCreationDraftConflictCache(user.id);
+      setConflictingLocalDraft(null);
+    })
+    .catch(() => setConflictingLocalDraft(conflictingLocalDraft));
+};
+
+const useLoadedServerDraft = () => {
+  if (!user?.id) return;
+  const loadedScreen = creationDraftQuery.data?.draft?.screen;
+  if (loadedScreen) {
+    setActiveScreen(loadedScreen);
+    setLastCreationScreen(loadedScreen);
+    window.history.replaceState(
+      { screen: loadedScreen },
+      "",
+      `/?screen=${loadedScreen}`,
+    );
+  }
+  clearEscrowCreationDraftConflictCache(user.id);
+  setConflictingLocalDraft(null);
+  setDraftSaveStatus("saved");
+};
+
+const beginOrResumeCreation = () => {
+  navigate(hasCreationDraft ? lastCreationScreen : "create");
 };
 
 const openMilestoneDeadlinePicker = () => {
@@ -1511,6 +2136,9 @@ useEffect(() => {
       email: savedProfile.email,
     });
     setActiveScreen(screenFromState);
+    if (isCreationScreen(screenFromState)) {
+      setLastCreationScreen(screenFromState);
+    }
     if (screenFromState === "transaction" && txFromState) {
       setSelectedTransactionToken(txFromState);
       setSelectedTransaction(findTransactionByToken(visibleTransactionsRef.current, txFromState));
@@ -1588,7 +2216,7 @@ const findTransactionById = (id: number) => {
     setCreatePromptError(null);
     setMessage(null);
     if (createPromptStep === 0) {
-      navigate("welcome");
+      void saveCreationDraftAndExit();
       return;
     }
     setCreatePromptStep((createPromptStep - 1) as EscrowDetailPromptIndex);
@@ -1612,7 +2240,7 @@ const findTransactionById = (id: number) => {
         },
       ]),
     );
-    setMilestoneInputs({ title: "", amount: "", description: "", deadline: "" });
+    setMilestoneInputs(emptyMilestoneInputs());
     setEditingMilestoneId(null);
     setMilestoneWarning(null);
     setMessage(null);
@@ -1638,7 +2266,7 @@ const findTransactionById = (id: number) => {
   const handleRemoveMilestone = (id: string) => {
     setMilestones((prev) => prev.filter((item) => item.id !== id));
     if (editingMilestoneId === id) {
-      setMilestoneInputs({ title: "", amount: "", description: "", deadline: "" });
+      setMilestoneInputs(emptyMilestoneInputs());
       setEditingMilestoneId(null);
     }
     setMilestoneWarning(null);
@@ -1664,6 +2292,13 @@ const findTransactionById = (id: number) => {
   };
 
   const handleAgreementSubmit = async () => {
+    if (draftSubmissionInProgressRef.current || createEscrowMutation.isPending) {
+      return;
+    }
+    if (conflictingLocalDraft) {
+      setInlineMessage("agreement-submit", "Resolve the draft conflict before submitting.");
+      return;
+    }
     if (!agreementAccepted || !signatureCaptured) {
       setInlineMessage("agreement-submit", "Accept the agreement and confirm the signature to continue.");
       return;
@@ -1688,7 +2323,31 @@ const findTransactionById = (id: number) => {
       setInlineMessage("agreement-submit", "Please draw your signature before submitting.");
       return;
     }
+    draftSubmissionInProgressRef.current = true;
+    setCreationSubmitting(true);
+    if (draftAutosaveTimeoutRef.current) {
+      window.clearTimeout(draftAutosaveTimeoutRef.current);
+      draftAutosaveTimeoutRef.current = null;
+    }
+    const latestDraft = draftSnapshotRef.current;
+    if (latestDraft) {
+      const cached = cacheCreationDraft(latestDraft);
+      if (cached) {
+        try {
+          await queueCreationDraftSave(latestDraft, cached.revision, true);
+        } catch {
+          draftSubmissionInProgressRef.current = false;
+          setCreationSubmitting(false);
+          setInlineMessage(
+            "agreement-submit",
+            "Your draft changed in another session or could not be synced. Reload it before submitting.",
+          );
+          return;
+        }
+      }
+    }
     try {
+      const submittedDraftRevision = draftServerRevisionRef.current;
       const response: CreateEscrowResponse = await createEscrowMutation.mutateAsync({
         title: responseTitle,
         counterpartyEmail: createForm.counterpartyEmail || "counterparty@example.com",
@@ -1701,6 +2360,7 @@ const findTransactionById = (id: number) => {
         category: createForm.category,
         description: descriptionValue || undefined,
         signatureDataUrl,
+        draftRevision: submittedDraftRevision,
         milestones: (milestones.length
           ? milestones
           : [{
@@ -1717,6 +2377,7 @@ const findTransactionById = (id: number) => {
           deadline: milestone.deadline ? new Date(`${milestone.deadline}T00:00:00.000Z`).toISOString() : undefined,
         })),
       });
+      draftServerRevisionRef.current = submittedDraftRevision + 1;
       const inviteStatus = response.invitationStatus ?? "existing_user";
       const requiresSignup = inviteStatus === "signup_required" || inviteStatus === "verification_required";
       const counterpartyName = response.counterpart ?? createForm.counterpartyEmail;
@@ -1805,26 +2466,18 @@ const findTransactionById = (id: number) => {
         ],
       };
       setTransactions((prev) => [newTx, ...prev]);
-      setCreateForm({
-        role: "buyer",
-        counterpartyEmail: "",
-        counterpartyEmailConfirmation: "",
-        title: "",
-        amount: "",
-        category: "Goods",
-        description: "",
-        fundingMode: null,
-        partyType: "individual",
-        business: emptyBusinessDetails(),
-      });
-      setCreatePromptStep(0);
-      setCreatePromptError(null);
-      setDescriptionSkipped(false);
-      setMilestones([]);
-      setMilestoneInputs({ title: "", amount: "", description: "", deadline: "" });
-      setEditingMilestoneId(null);
-      setAgreementAccepted(false);
-      resetSignaturePad();
+      if (user?.id) {
+        clearEscrowCreationDraftCache(user.id);
+        clearEscrowCreationDraftConflictCache(user.id);
+        draftLoadedFromCacheRef.current = { userId: user.id, draft: null };
+      }
+      draftLocalRevisionRef.current = 0;
+      setHasCreationDraft(false);
+      setDraftSaveStatus("idle");
+      setConflictingLocalDraft(null);
+      setCreationSubmitting(false);
+      setLastCreationScreen("create");
+      resetCreationFlow();
       setMessage(
         inviteStatus === "signup_required"
           ? "Invitation sent. Funding can continue after the counterparty creates and verifies an account."
@@ -1832,8 +2485,11 @@ const findTransactionById = (id: number) => {
             ? "Invitation sent. Funding can continue after the counterparty verifies their account."
             : "Escrow drafted. Funding will start after both parties sign.",
       );
-      navigate("dashboard");
+      navigate("dashboard", true, false);
+      draftSubmissionInProgressRef.current = false;
     } catch (error) {
+      draftSubmissionInProgressRef.current = false;
+      setCreationSubmitting(false);
       setInlineMessage(
         "agreement-submit",
         error instanceof Error ? error.message : "Unable to create escrow. Try again shortly.",
@@ -2997,8 +3653,8 @@ const handleWalletWithdraw = async () => {
             Create an agreement, protect the payment, and release funds only when the work is done.
           </p>
           <div className="home-actions">
-            <button className="btn home-primary-action" onClick={() => navigate("create")}>
-              Create an escrow <span aria-hidden="true">→</span>
+            <button className="btn home-primary-action" onClick={beginOrResumeCreation}>
+              {hasCreationDraft ? "Resume your draft" : "Create an escrow"} <span aria-hidden="true">→</span>
             </button>
             <button className="home-text-action" onClick={() => navigate("dashboard")}>
               Open dashboard
@@ -3325,6 +3981,7 @@ const handleWalletWithdraw = async () => {
                     <input
                       id="walkthrough-business-name"
                       value={createForm.business.legalName}
+                      maxLength={200}
                       autoComplete="organization"
                       onChange={(event) => {
                         setCreateForm((current) => ({
@@ -3342,6 +3999,7 @@ const handleWalletWithdraw = async () => {
                     <input
                       id="walkthrough-business-title"
                       value={createForm.business.representativeTitle}
+                      maxLength={200}
                       placeholder="Director, owner, officer…"
                       autoComplete="organization-title"
                       onChange={(event) => {
@@ -3371,6 +4029,7 @@ const handleWalletWithdraw = async () => {
                   id="walkthrough-counterparty-email"
                   type="email"
                   value={createForm.counterpartyEmail}
+                  maxLength={320}
                   placeholder="counterparty@example.com"
                   autoComplete="email"
                   autoFocus
@@ -3386,6 +4045,7 @@ const handleWalletWithdraw = async () => {
                   id="walkthrough-counterparty-email-confirmation"
                   type="email"
                   value={createForm.counterpartyEmailConfirmation}
+                  maxLength={320}
                   placeholder="Enter the email again"
                   autoComplete="off"
                   onChange={(event) =>
@@ -3407,6 +4067,7 @@ const handleWalletWithdraw = async () => {
                   id="walkthrough-title"
                   type="text"
                   value={createForm.title}
+                  maxLength={200}
                   placeholder="e.g., Northwind onboarding kit"
                   autoFocus
                   onChange={(event) => updateCreateForm("title", event.target.value)}
@@ -3470,6 +4131,7 @@ const handleWalletWithdraw = async () => {
                 id="walkthrough-description"
                 rows={5}
                 value={createForm.description}
+                maxLength={10_000}
                 placeholder="Describe what is being provided, the expected outcome, and any important boundaries."
                 autoFocus
                 onChange={(event) => {
@@ -3560,8 +4222,18 @@ const handleWalletWithdraw = async () => {
           currentStep={1}
           title="Create a new transaction"
           description="We'll guide you through one decision at a time."
+          draftSaveStatus={draftSaveStatus}
+          hasDraftConflict={Boolean(conflictingLocalDraft)}
+          onSaveAndExit={() => void saveCreationDraftAndExit()}
+          onDiscard={discardCreationDraft}
+          onUseLocalDraft={useConflictingDeviceDraft}
+          onUseServerDraft={useLoadedServerDraft}
         />
-        <div className="walkthrough-layout">
+        <div
+          className="walkthrough-layout"
+          inert={conflictingLocalDraft ? true : undefined}
+          aria-disabled={Boolean(conflictingLocalDraft)}
+        >
           <form
             className="card walkthrough-card"
             onSubmit={(event) => {
@@ -3585,7 +4257,7 @@ const handleWalletWithdraw = async () => {
             </div>
             <p className="walkthrough-save-note">
               <span aria-hidden="true">✓</span>
-              Your answers are saved as you go. You&apos;ll review everything before the escrow is sent.
+              Your answers are saved as you go. Nothing is sent until you review and sign.
             </p>
             <div className="walkthrough-prompt">
               <span className="walkthrough-prompt__label">{prompt.shortLabel}</span>
@@ -3605,7 +4277,7 @@ const handleWalletWithdraw = async () => {
             ) : null}
             <div className="walkthrough-actions">
               <button type="button" className="ghost" onClick={handleCreatePromptBack}>
-                {createPromptStep === 0 ? "Cancel" : "Back"}
+                {createPromptStep === 0 ? "Save & exit" : "Back"}
               </button>
               <div>
                 {createPromptStep === 5 && !createForm.description.trim() ? (
@@ -3694,8 +4366,23 @@ const handleWalletWithdraw = async () => {
 
     return (
       <section className="screen active wizard-screen">
-        <EscrowWizardHeader currentStep={2} title="Build the milestones" description="Break the agreement into clear, reviewable deliverables." />
-        <div className="card" style={{ marginBottom: 12 }}>
+        <EscrowWizardHeader
+          currentStep={2}
+          title="Build the milestones"
+          description="Break the agreement into clear, reviewable deliverables."
+          draftSaveStatus={draftSaveStatus}
+          hasDraftConflict={Boolean(conflictingLocalDraft)}
+          onSaveAndExit={() => void saveCreationDraftAndExit()}
+          onDiscard={discardCreationDraft}
+          onUseLocalDraft={useConflictingDeviceDraft}
+          onUseServerDraft={useLoadedServerDraft}
+        />
+        <div
+          className="card"
+          style={{ marginBottom: 12 }}
+          inert={conflictingLocalDraft ? true : undefined}
+          aria-disabled={Boolean(conflictingLocalDraft)}
+        >
           <h3 style={{ marginBottom: 8 }}>How funds are released</h3>
           <div className="flow-grid">
             <details className="flow-block flow-explainer">
@@ -3708,7 +4395,11 @@ const handleWalletWithdraw = async () => {
             </details>
           </div>
         </div>
-        <div className="card">
+        <div
+          className="card"
+          inert={conflictingLocalDraft ? true : undefined}
+          aria-disabled={Boolean(conflictingLocalDraft)}
+        >
           <div className="muted">Milestone builder</div>
           <p className="muted" style={{ margin: "4px 0 8px", fontSize: 13 }}>
             Add payout checkpoints that should match your escrow amount.
@@ -3731,6 +4422,7 @@ const handleWalletWithdraw = async () => {
                 id="milestone-title"
                 type="text"
                 value={milestoneInputs.title}
+                maxLength={200}
                 onChange={(event) =>
                   setMilestoneInputs((prev) => ({ ...prev, title: event.target.value }))
                 }
@@ -3798,6 +4490,7 @@ const handleWalletWithdraw = async () => {
             id="milestone-description"
             rows={3}
             value={milestoneInputs.description}
+            maxLength={5_000}
             placeholder="Explain what unlocks this payout"
             onChange={(event) =>
               setMilestoneInputs((prev) => ({ ...prev, description: event.target.value }))
@@ -3899,8 +4592,8 @@ const handleWalletWithdraw = async () => {
             </>
           )}
           <div style={{ marginTop: 12, display: "flex", gap: 8, justifyContent: "flex-end" }}>
-            <button className="ghost" onClick={() => navigate("welcome")}>
-              Cancel
+            <button className="ghost" onClick={() => void saveCreationDraftAndExit()}>
+              Save &amp; exit
             </button>
             <button className="ghost" onClick={() => navigate("create")}>
               Back
@@ -3921,11 +4614,26 @@ const handleWalletWithdraw = async () => {
 
   const renderAgreement = () => (
     <section className="screen active wizard-screen agreement-screen">
-      <EscrowWizardHeader currentStep={3} title="Review and sign" description="Confirm the terms before sending the agreement." />
+      <EscrowWizardHeader
+        currentStep={3}
+        title="Review and sign"
+        description="Confirm the terms before sending the agreement."
+        draftSaveStatus={draftSaveStatus}
+        hasDraftConflict={Boolean(conflictingLocalDraft)}
+        onSaveAndExit={() => void saveCreationDraftAndExit()}
+        onDiscard={discardCreationDraft}
+        onUseLocalDraft={useConflictingDeviceDraft}
+        onUseServerDraft={useLoadedServerDraft}
+      />
       <p className="muted wizard-helper-copy">
         Funding happens after both parties agree to the terms, so no deposits are needed right now.
       </p>
-      <div className="card" style={{ marginBottom: 12 }}>
+      <div
+        className="card"
+        style={{ marginBottom: 12 }}
+        inert={conflictingLocalDraft ? true : undefined}
+        aria-disabled={Boolean(conflictingLocalDraft)}
+      >
         <div className="form-field">
           <label className="muted">Agreement preview</label>
           <div className="agreement-preview-text">{agreementPreview}</div>
@@ -4005,15 +4713,18 @@ const handleWalletWithdraw = async () => {
           I agree to the escrow terms
         </label>
         <div style={{ marginTop: 12, display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <button className="ghost" onClick={() => void saveCreationDraftAndExit()}>
+            Save &amp; exit
+          </button>
           <button className="ghost" onClick={() => navigate("milestones")}>
             Back
           </button>
           <button
             className="btn"
             onClick={handleAgreementSubmit}
-            disabled={createEscrowMutation.isPending}
+            disabled={creationSubmitting || createEscrowMutation.isPending}
           >
-            {createEscrowMutation.isPending ? "Submitting..." : "Submit escrow"}
+            {creationSubmitting || createEscrowMutation.isPending ? "Submitting..." : "Submit escrow"}
           </button>
         </div>
         {renderInlineMessage("agreement-submit")}
@@ -6036,6 +6747,13 @@ const handleWalletWithdraw = async () => {
   };
 
   const renderScreen = () => {
+    if (isCreationScreen(activeScreen) && user?.id && draftHydratedUserId !== user.id) {
+      return (
+        <section className="screen active wizard-screen">
+          <div className="card" role="status">Restoring your saved draft…</div>
+        </section>
+      );
+    }
     switch (activeScreen) {
       case "dashboard":
         return renderDashboard();
@@ -6073,8 +6791,8 @@ const handleWalletWithdraw = async () => {
         activeScreen={activeScreen}
         notificationCount={openNotifications}
         hasUnreadNotifications={hasUnreadNotifications}
-        primaryLabel="New escrow"
-        onPrimaryClick={() => navigate("create")}
+        primaryLabel={hasCreationDraft ? "Resume draft" : "New escrow"}
+        onPrimaryClick={beginOrResumeCreation}
         onBrandClick={() => navigate("welcome")}
         onSettingsClick={() => navigate("settings")}
         onLogoutClick={handleLogout}
@@ -6095,9 +6813,9 @@ const handleWalletWithdraw = async () => {
               <button
                 key={item.id}
                 className={navActiveId === item.id ? "active" : ""}
-                onClick={() => navigate(item.id)}
+                onClick={() => item.id === "create" ? beginOrResumeCreation() : navigate(item.id)}
               >
-                {item.label}
+                {item.id === "create" && hasCreationDraft ? "Resume" : item.label}
               </button>
             ))}
           </nav>

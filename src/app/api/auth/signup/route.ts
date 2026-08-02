@@ -30,11 +30,12 @@ export async function POST(request: Request) {
   if (partyType === "business" && (!business?.legalName || !business?.representativeTitle)) {
     return NextResponse.json({ error: "Business name and title are required." }, { status: 400 });
   }
+  const userId = randomId();
   return NextResponse.json({
-    token: "mock-token",
+    token: `mock-token:${userId}`,
     expiresAt: resolveSessionExpiresAt(),
     user: {
-      id: randomId(),
+      id: userId,
       name: name.trim(),
       email: email.trim().toLowerCase(),
       role: "customer",

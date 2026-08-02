@@ -8,6 +8,12 @@ import type {
   TimelineEvent,
 } from "@/lib/mockDashboard";
 import { apiFetch } from "@/lib/apiClient";
+import {
+  parseEscrowCreationDraftData,
+  parseStoredEscrowCreationDraft,
+  type EscrowCreationDraftData,
+  type EscrowCreationDraftServerState,
+} from "@/lib/escrowCreationDraft";
 
 const parseErrorMessage = async (response: Response) => {
   const raw = await response.text();
@@ -120,6 +126,122 @@ type DraftEscrowUpdatePayload = {
     deadline?: string;
   }>;
 };
+
+export const escrowCreationDraftQueryKey = ["dashboard", "agreement-draft"] as const;
+
+const parseEscrowCreationDraftResponse = (value: unknown) => {
+  if (
+    typeof value !== "object"
+    || value === null
+    || !("draft" in value)
+    || !("revision" in value)
+  ) {
+    throw new Error("The agreement draft response was invalid.");
+  }
+  const { draft: rawDraft, revision } = value as { draft: unknown; revision: unknown };
+  if (!Number.isSafeInteger(revision) || (revision as number) < 0) {
+    throw new Error("The agreement draft response was invalid.");
+  }
+  if (rawDraft === null) {
+    return { draft: null, revision: revision as number } satisfies EscrowCreationDraftServerState;
+  }
+  const draft = parseStoredEscrowCreationDraft(rawDraft, revision as number);
+  if (!draft) {
+    throw new Error("The agreement draft response was invalid.");
+  }
+  return { draft, revision: revision as number } satisfies EscrowCreationDraftServerState;
+};
+
+export async function fetchEscrowCreationDraft() {
+  const response = await fetchJSON<unknown>("/api/dashboard/agreement-draft");
+  return parseEscrowCreationDraftResponse(response);
+}
+
+export async function saveEscrowCreationDraft({
+  baseRevision,
+  draft,
+}: {
+  baseRevision: number;
+  draft: EscrowCreationDraftData;
+}) {
+  const parsedDraft = parseEscrowCreationDraftData(draft);
+  if (!parsedDraft || !Number.isSafeInteger(baseRevision) || baseRevision < 0) {
+    throw new Error("The agreement draft could not be saved because it was invalid.");
+  }
+  const response = await fetchJSON<unknown>("/api/dashboard/agreement-draft", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ baseRevision, draft: parsedDraft }),
+  });
+  const savedState = parseEscrowCreationDraftResponse(response);
+  if (!savedState.draft) {
+    throw new Error("The agreement draft save response was invalid.");
+  }
+  return savedState;
+}
+
+export async function deleteEscrowCreationDraft(baseRevision: number) {
+  if (!Number.isSafeInteger(baseRevision) || baseRevision < 0) {
+    throw new Error("The agreement draft could not be discarded because its revision was invalid.");
+  }
+  const response = await fetchJSON<unknown>("/api/dashboard/agreement-draft", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ baseRevision }),
+  });
+  return parseEscrowCreationDraftResponse(response);
+}
+
+export function useEscrowCreationDraft(enabled = true) {
+  return useQuery<EscrowCreationDraftServerState>({
+    queryKey: escrowCreationDraftQueryKey,
+    queryFn: fetchEscrowCreationDraft,
+    enabled,
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function useSaveEscrowCreationDraft() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: saveEscrowCreationDraft,
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: escrowCreationDraftQueryKey, exact: true });
+    },
+    onSuccess: (state) => {
+      queryClient.setQueryData<EscrowCreationDraftServerState>(
+        escrowCreationDraftQueryKey,
+        state,
+      );
+    },
+    onError: () => queryClient.invalidateQueries({
+      queryKey: escrowCreationDraftQueryKey,
+      exact: true,
+    }),
+  });
+}
+
+export function useDeleteEscrowCreationDraft() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: deleteEscrowCreationDraft,
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: escrowCreationDraftQueryKey, exact: true });
+    },
+    onSuccess: (state) => {
+      queryClient.setQueryData<EscrowCreationDraftServerState>(
+        escrowCreationDraftQueryKey,
+        state,
+      );
+    },
+    onError: () => queryClient.invalidateQueries({
+      queryKey: escrowCreationDraftQueryKey,
+      exact: true,
+    }),
+  });
+}
 
 export function useEscrowSummary() {
   return useQuery({
@@ -825,6 +947,7 @@ type CreateEscrowPayload = {
   category?: string;
   description?: string;
   signatureDataUrl?: string;
+  draftRevision?: number;
   milestones?: Array<{
     title: string;
     amount: number;
@@ -853,10 +976,15 @@ export function useCreateEscrow() {
         body: JSON.stringify(payload),
       }),
     onSuccess: () => {
+      queryClient.removeQueries({ queryKey: escrowCreationDraftQueryKey });
       queryClient.invalidateQueries({ queryKey: ["dashboard", "overview"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard", "escrows"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard", "business-profile"] });
     },
+    onError: () => queryClient.invalidateQueries({
+      queryKey: escrowCreationDraftQueryKey,
+      exact: true,
+    }),
   });
 }
 

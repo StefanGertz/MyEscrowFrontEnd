@@ -29,7 +29,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid email or password." }, { status: 401 });
   }
   return NextResponse.json({
-    token: "mock-token",
+    token: `mock-token:${defaultUser.id}`,
     expiresAt: resolveSessionExpiresAt(),
     user: defaultUser,
   });
