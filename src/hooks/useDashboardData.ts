@@ -684,6 +684,25 @@ export function useAcceptFundedCancellation() {
   });
 }
 
+export function useSubmitCancellationInformation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ cancellationId, note }: { cancellationId: string; note: string }) =>
+      fetchJSON<{ cancellationId: string; status: string; reviewMessageId: number }>(
+        `/api/dashboard/cancellations/${cancellationId}/information`,
+        {
+          method: "POST",
+          headers: idempotencyHeaders({ "Content-Type": "application/json" }),
+          body: JSON.stringify({ note }),
+        },
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "escrows"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "notifications"] });
+    },
+  });
+}
+
 export function useRequestMilestoneChanges() {
   const queryClient = useQueryClient();
   return useMutation({

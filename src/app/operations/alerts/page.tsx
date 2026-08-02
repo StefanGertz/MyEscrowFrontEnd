@@ -264,7 +264,7 @@ export default function OperationsAlertsPage() {
         ) : null}
 
         {health && (health.counts.cancellationReviews ?? 0) > 0 ? (
-          <AlertGroup title="Cancellation review">
+          <AlertGroup title="Administrative cancellation review">
             {(health.details.cancellationReviews ?? []).map((record) => (
               <Link
                 key={record.reference}

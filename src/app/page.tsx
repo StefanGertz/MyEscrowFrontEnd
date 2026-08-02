@@ -26,6 +26,7 @@ import {
   useResolveDispute,
   useRequestFundedCancellation,
   useAcceptFundedCancellation,
+  useSubmitCancellationInformation,
   useResendInvitation,
   useRequestAgreementChanges,
   useSubmitMilestone,
@@ -79,6 +80,7 @@ import { LiveDashboard } from "@/components/LiveDashboard";
 import { NotificationTimestamp } from "@/components/NotificationTimestamp";
 import { ChangePasswordModal } from "@/components/ChangePasswordModal";
 import { EscrowChat } from "@/components/EscrowChat";
+import { CustomerPortalBoundary } from "@/components/CustomerPortalBoundary";
 import type { EscrowRecord } from "@/lib/mockDashboard";
 
 type ScreenId =
@@ -1046,6 +1048,7 @@ function MockExperienceHome({ searchParams }: HomeProps) {
     mode: "mutual" | "unilateral";
     reason: string;
   }>>({});
+  const [cancellationInformationDrafts, setCancellationInformationDrafts] = useState<Record<string, string>>({});
   const [profileDraft, setProfileDraft] = useState<ProfileDraft>({
     userId: "demo-scott",
     name: defaultUser.name,
@@ -1109,6 +1112,7 @@ function MockExperienceHome({ searchParams }: HomeProps) {
   const resolveDisputeMutation = useResolveDispute();
   const requestFundedCancellationMutation = useRequestFundedCancellation();
   const acceptFundedCancellationMutation = useAcceptFundedCancellation();
+  const submitCancellationInformationMutation = useSubmitCancellationInformation();
   const cancelEscrowMutation = useCancelEscrow();
   const fundEscrowMutation = useFundEscrow();
   const fundMilestoneMutation = useFundMilestone();
@@ -2255,7 +2259,7 @@ const findTransactionById = (id: number) => {
       });
       setMessage(result.status === "pending"
         ? "Mutual cancellation requested. No refund occurs until the other party accepts."
-        : "Unilateral cancellation escalated for governed review. Funds remain held.");
+        : "Unilateral cancellation entered administrative review. Funds remain held; operations will not decide contested contractual merits.");
     } catch (error) {
       setInlineMessage(
         `cancellation:${tx.id}`,
@@ -2272,6 +2276,27 @@ const findTransactionById = (id: number) => {
       setInlineMessage(
         `cancellation-action:${cancellationId}`,
         error instanceof Error ? error.message : "Unable to accept cancellation.",
+      );
+    }
+  };
+
+  const handleSubmitCancellationInformation = async (cancellationId: string) => {
+    const note = cancellationInformationDrafts[cancellationId]?.trim() ?? "";
+    if (note.length < 10) {
+      setInlineMessage(
+        `cancellation-information:${cancellationId}`,
+        "Provide the requested administrative information in at least 10 characters.",
+      );
+      return;
+    }
+    try {
+      await submitCancellationInformationMutation.mutateAsync({ cancellationId, note });
+      setCancellationInformationDrafts((current) => ({ ...current, [cancellationId]: "" }));
+      setMessage("Information submitted. Funds remain held while the administrator reviews the response.");
+    } catch (error) {
+      setInlineMessage(
+        `cancellation-information:${cancellationId}`,
+        error instanceof Error ? error.message : "Unable to submit cancellation information.",
       );
     }
   };
@@ -5291,14 +5316,73 @@ const handleWalletWithdraw = async () => {
                 {renderInlineMessage(`cancellation-action:${tx.cancellation.id}`)}
                 {tx.cancellation.mode === "unilateral" ? (
                   <p className="muted" style={{ marginBottom: 0 }}>
-                    Unilateral requests require governed review. All remaining funds stay held meanwhile.
+                    {["escalated", "information_requested", "information_received"].includes(tx.cancellation.status)
+                      ? "Administrative review checks process and documented authority. Contested entitlement must move to the formal dispute workflow; operations does not decide the merits."
+                      : tx.cancellation.status === "referred_to_dispute"
+                        ? `This request was referred to formal dispute ${tx.cancellation.referredDisputeReference ?? ""}.`
+                        : "The administrative cancellation review is closed."}
                   </p>
+                ) : null}
+                {tx.cancellation.reviewMessages.length ? (
+                  <div className="milestone-warning" style={{ marginTop: 10 }}>
+                    <strong>Review messages</strong>
+                    {tx.cancellation.reviewMessages.map((reviewMessage) => (
+                      <div key={reviewMessage.id} className="tx-item" style={{ marginTop: 8 }}>
+                        <strong>{reviewMessage.author.name}</strong>
+                        <p style={{ margin: "4px 0 0" }}>{reviewMessage.body}</p>
+                        <div className="muted" style={{ marginTop: 4 }}>
+                          {reviewMessage.kind.replaceAll("_", " ")} · {formatDateTime(reviewMessage.createdAt)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                {tx.cancellation.mode === "unilateral"
+                  && ["information_requested", "information_received"].includes(tx.cancellation.status) ? (
+                    <div className="cancellation-form" style={{ marginTop: 10 }}>
+                      <label className="field cancellation-form__field">
+                        <span>Respond with administrative information</span>
+                        <textarea
+                          rows={3}
+                          value={cancellationInformationDrafts[tx.cancellation.id] ?? ""}
+                          onChange={(event) => setCancellationInformationDrafts((current) => ({
+                            ...current,
+                            [tx.cancellation!.id]: event.target.value,
+                          }))}
+                          placeholder="Answer the request with objective facts and references. Formal dispute evidence is submitted in the dispute workspace."
+                        />
+                      </label>
+                      <button
+                        className="ghost cancellation-form__action"
+                        onClick={() => handleSubmitCancellationInformation(tx.cancellation!.id)}
+                        disabled={submitCancellationInformationMutation.isPending}
+                      >
+                        {submitCancellationInformationMutation.isPending ? "Submitting..." : "Submit information"}
+                      </button>
+                      {renderInlineMessage(`cancellation-information:${tx.cancellation.id}`)}
+                    </div>
+                  ) : null}
+                {tx.cancellation.reviewNote ? (
+                  <div className="milestone-warning" style={{ marginTop: 10 }}>
+                    <strong>Administrative record</strong>
+                    <p style={{ margin: "6px 0 0" }}>{tx.cancellation.reviewNote}</p>
+                    {tx.cancellation.authorityReference ? (
+                      <div className="muted" style={{ marginTop: 4 }}>
+                        Authority: {tx.cancellation.authorityType?.replaceAll("_", " ")} · {tx.cancellation.authorityReference}
+                      </div>
+                    ) : null}
+                    {tx.cancellation.proceduralReasonCode ? (
+                      <div className="muted" style={{ marginTop: 4 }}>
+                        Procedural basis: {tx.cancellation.proceduralReasonCode.replaceAll("_", " ")} · {tx.cancellation.policyReference}
+                      </div>
+                    ) : null}
+                  </div>
                 ) : null}
               </div>
             ) : (
               <div className="cancellation-form">
                 <p className="muted cancellation-form__intro">
-                  A mutual cancellation refunds only unreleased, undisputed funds after the other party accepts. A unilateral request freezes new releases and enters governed review.
+                  A mutual cancellation refunds only unreleased, undisputed funds after the other party accepts. A unilateral request freezes new releases and enters administrative review; contested merits are referred to the formal dispute process.
                 </p>
                 <label className="field cancellation-form__field">
                   <span>Cancellation path</span>
@@ -5313,7 +5397,7 @@ const handleWalletWithdraw = async () => {
                     }))}
                   >
                     <option value="mutual">Mutual cancellation</option>
-                    <option value="unilateral">Unilateral governed review</option>
+                    <option value="unilateral">Unilateral administrative review</option>
                   </select>
                 </label>
                 <label className="field cancellation-form__field">
@@ -6128,8 +6212,11 @@ function SplashScreen() {
 }
 
 export default function Home(props: HomeProps) {
-  if (liveDashboardEnabled) {
-    return <LiveDashboard />;
-  }
-  return <MockExperienceHome searchParams={props.searchParams} />;
+  return (
+    <CustomerPortalBoundary fallback={<SplashScreen />}>
+      {liveDashboardEnabled
+        ? <LiveDashboard />
+        : <MockExperienceHome searchParams={props.searchParams} />}
+    </CustomerPortalBoundary>
+  );
 }

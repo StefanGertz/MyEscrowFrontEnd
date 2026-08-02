@@ -117,7 +117,7 @@ const metricLabels: Record<MetricKey, string> = {
   agedEscrows: "Aged active escrows",
   disputesApproaching: "Disputes near deadline",
   arbitrationRequested: "Arbitration",
-  cancellationReviews: "Cancellation review",
+  cancellationReviews: "Administrative cancellation review",
   duplicateCommands: "Safe command replays",
 };
 
