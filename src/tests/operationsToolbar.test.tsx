@@ -36,7 +36,7 @@ describe("operations toolbar", () => {
     expect(push).toHaveBeenCalledWith("/operations/alerts");
 
     fireEvent.click(within(toolbar).getByRole("button", { name: "Settings" }));
-    expect(push).toHaveBeenCalledWith("/?screen=settings");
+    expect(push).toHaveBeenCalledWith("/operations/settings");
 
     fireEvent.click(within(toolbar).getByRole("button", { name: "Log out" }));
     expect(logout).toHaveBeenCalledOnce();
@@ -49,7 +49,7 @@ describe("operations toolbar", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open operations menu" }));
     const menu = screen.getByRole("menu");
     fireEvent.click(within(menu).getByRole("menuitem", { name: "Settings" }));
-    expect(push).toHaveBeenCalledWith("/?screen=settings");
+    expect(push).toHaveBeenCalledWith("/operations/settings");
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
 
     pathname = "/operations/login";

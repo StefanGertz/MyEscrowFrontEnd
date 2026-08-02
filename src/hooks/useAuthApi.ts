@@ -7,6 +7,7 @@ export type AuthUser = {
   id: string;
   name: string;
   email: string;
+  role: "customer" | "support" | "admin";
 };
 
 export type AuthResponse = {
@@ -113,6 +114,13 @@ const postJson = async <TPayload, TResult>(path: string, payload: TPayload): Pro
 export function useLoginMutation() {
   return useMutation({
     mutationFn: (payload: LoginPayload) => postJson<LoginPayload, AuthResponse>("/api/auth/login", payload),
+  });
+}
+
+export function useOperationsLoginMutation() {
+  return useMutation({
+    mutationFn: (payload: LoginPayload) =>
+      postJson<LoginPayload, AuthResponse>("/api/auth/operations-login", payload),
   });
 }
 

@@ -37,6 +37,7 @@ export async function POST(request: Request) {
       id: randomId(),
       name: name.trim(),
       email: email.trim().toLowerCase(),
+      role: "customer",
     },
   });
 }

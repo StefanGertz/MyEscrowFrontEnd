@@ -9,17 +9,17 @@ import { useToast } from "@/components/ToastProvider";
 
 export default function OperationsLoginPage() {
   const router = useRouter();
-  const { login, isAuthenticated, isHydrating } = useAuth();
+  const { operationsLogin, isAuthenticated, isHydrating, user } = useAuth();
   const { pushToast } = useToast();
   const [form, setForm] = useState({ email: "", password: "" });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isHydrating && isAuthenticated) {
+    if (!isHydrating && isAuthenticated && user?.role !== "customer") {
       router.replace("/operations");
     }
-  }, [isAuthenticated, isHydrating, router]);
+  }, [isAuthenticated, isHydrating, router, user?.role]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -32,7 +32,7 @@ export default function OperationsLoginPage() {
 
     setSubmitting(true);
     try {
-      await login({ email: form.email, password: form.password });
+      await operationsLogin({ email: form.email, password: form.password });
       pushToast({
         variant: "success",
         title: "Welcome to MyEscrow Operations.",
@@ -47,7 +47,7 @@ export default function OperationsLoginPage() {
     }
   };
 
-  if (isHydrating || isAuthenticated) {
+  if (isHydrating || (isAuthenticated && user?.role !== "customer")) {
     return (
       <main className="auth-page auth-page--login">
         <div className="auth-card">

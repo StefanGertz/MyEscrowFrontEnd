@@ -7,6 +7,7 @@ const defaultUser = {
   id: "user-001",
   name: "Scott",
   email: "scott@example.com",
+  role: "customer" as const,
 };
 
 const MOCK_PASSWORD = "Escrow123!";

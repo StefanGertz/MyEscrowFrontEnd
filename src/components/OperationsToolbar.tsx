@@ -26,6 +26,7 @@ export function OperationsToolbar() {
   };
 
   const alertsActive = pathname.startsWith("/operations/alerts");
+  const settingsActive = pathname.startsWith("/operations/settings");
 
   return (
     <header className="app-header operations-toolbar">
@@ -54,7 +55,12 @@ export function OperationsToolbar() {
           <BellIcon />
           Alerts
         </button>
-        <button className="icon-btn" type="button" onClick={() => navigate("/?screen=settings")}>
+        <button
+          className="icon-btn"
+          type="button"
+          aria-current={settingsActive ? "page" : undefined}
+          onClick={() => navigate("/operations/settings")}
+        >
           <SettingsIcon />
           Settings
         </button>
@@ -88,7 +94,7 @@ export function OperationsToolbar() {
           </button>
           {menuOpen ? (
             <div id="operations-account-menu" className="header-menu-popover" role="menu">
-              <button className="header-menu-primary" type="button" role="menuitem" onClick={() => navigate("/?screen=settings")}>
+              <button className="header-menu-primary" type="button" role="menuitem" onClick={() => navigate("/operations/settings")}>
                 <SettingsIcon />
                 Settings
               </button>

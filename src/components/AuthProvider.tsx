@@ -15,6 +15,7 @@ import {
   type AuthResponse,
   type AuthUser,
   useLoginMutation,
+  useOperationsLoginMutation,
   useSignupMutation,
 } from "@/hooks/useAuthApi";
 import { setClientAuthToken } from "@/lib/apiClient";
@@ -26,6 +27,7 @@ type AuthContextValue = {
   isHydrating: boolean;
   isAuthenticated: boolean;
   login: (payload: { email: string; password: string }) => Promise<void>;
+  operationsLogin: (payload: { email: string; password: string }) => Promise<void>;
   signup: (
     payload: {
       name: string;
@@ -63,7 +65,7 @@ const readStorage = (): AuthState => {
       return emptyAuthState();
     }
     const parsed = JSON.parse(raw) as { user?: AuthUser; token?: string; expiresAt?: string };
-    if (!parsed.user || !parsed.token) {
+    if (!parsed.user || !parsed.token || !["customer", "support", "admin"].includes(parsed.user.role)) {
       window.sessionStorage.removeItem(STORAGE_KEY);
       return emptyAuthState();
     }
@@ -108,6 +110,7 @@ type SignupResult =
 export function AuthProvider({ children }: AuthProviderProps) {
   const queryClient = useQueryClient();
   const loginMutation = useLoginMutation();
+  const operationsLoginMutation = useOperationsLoginMutation();
   const signupMutation = useSignupMutation();
   const [state, setState] = useState<AuthState>(emptyAuthState);
   const [isHydrating, setIsHydrating] = useState(true);
@@ -157,6 +160,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
     [loginMutation, adoptSession],
   );
 
+  const operationsLogin = useCallback(
+    async (payload: { email: string; password: string }) => {
+      const response = await operationsLoginMutation.mutateAsync(payload);
+      adoptSession(response);
+    },
+    [operationsLoginMutation, adoptSession],
+  );
+
   const signup = useCallback(
     async (payload: {
       name: string;
@@ -189,11 +200,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
       isHydrating,
       isAuthenticated: Boolean(state.user && state.token),
       login,
+      operationsLogin,
       signup,
       logout,
       completeAuth: adoptSession,
     };
-  }, [state, isHydrating, login, signup, logout, adoptSession]);
+  }, [state, isHydrating, login, operationsLogin, signup, logout, adoptSession]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

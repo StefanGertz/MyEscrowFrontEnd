@@ -42,7 +42,7 @@ describe("session expiry", () => {
       JSON.stringify({
         token: "test-token",
         expiresAt: new Date(Date.now() + 250).toISOString(),
-        user: { id: "user-1", name: "Stefan Gertz", email: "stefan@example.com" },
+        user: { id: "user-1", name: "Stefan Gertz", email: "stefan@example.com", role: "customer" },
       }),
     );
 
@@ -59,7 +59,7 @@ describe("session expiry", () => {
       JSON.stringify({
         token: "legacy-token",
         expiresAt: new Date(Date.now() + 60_000).toISOString(),
-        user: { id: "user-1", name: "Stefan Gertz", email: "stefan@example.com" },
+        user: { id: "user-1", name: "Stefan Gertz", email: "stefan@example.com", role: "customer" },
       }),
     );
 
