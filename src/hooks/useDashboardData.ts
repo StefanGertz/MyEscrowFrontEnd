@@ -455,7 +455,7 @@ type AgreementChangeRequestPayload = {
 
 type AgreementChangeReviewPayload = {
   escrowId: string;
-  decision: "accept" | "reject";
+  decision: "accept" | "counter" | "reject";
   milestones?: AgreementMilestoneChangePayload[];
 };
 

@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, act, waitFor } from "@testing-library/react";
+import { http, HttpResponse } from "msw";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import {
   useCreateEscrow,
@@ -13,6 +14,7 @@ import {
   useSendEscrowMessage,
   useDismissNotification,
   useRequestMilestoneChanges,
+  useApplyAgreementChanges,
   useApplyMilestoneChanges,
   useWalletTopup,
   useWalletTransactions,
@@ -246,6 +248,72 @@ describe("pre-approval milestone changes", () => {
       });
       expect(response.milestoneId).toBe(13);
     });
+  });
+});
+
+describe("agreement change review", () => {
+  it("accepts the submitted proposal unchanged and sends edited terms only for a counterproposal", async () => {
+    const receivedPayloads: unknown[] = [];
+    server.use(
+      http.post(
+        "https://staging-api.myescrow.example/v1/api/dashboard/escrows/:id/apply-changes",
+        async ({ params, request }) => {
+          receivedPayloads.push(await request.json());
+          return HttpResponse.json({ success: true, escrowId: params.id });
+        },
+      ),
+    );
+    const wrapper = createWrapper();
+    const applyHook = renderHook(() => useApplyAgreementChanges(), { wrapper });
+
+    await act(async () => {
+      await applyHook.result.current.mutateAsync({
+        escrowId: "PO-1001",
+        decision: "accept",
+      });
+    });
+
+    await act(async () => {
+      await applyHook.result.current.mutateAsync({
+        escrowId: "PO-1001",
+        decision: "counter",
+        milestones: [
+          {
+            milestoneId: "12",
+            title: "Creator counterproposal",
+            description: "Revised scope",
+            amount: 725,
+            deadline: "2026-08-22T00:00:00.000Z",
+          },
+          {
+            title: "Creator-added support",
+            description: "New counterproposal milestone",
+            amount: 275,
+          },
+        ],
+      });
+    });
+
+    expect(receivedPayloads).toEqual([
+      { decision: "accept" },
+      {
+        decision: "counter",
+        milestones: [
+          {
+            milestoneId: 12,
+            title: "Creator counterproposal",
+            description: "Revised scope",
+            amount: 725,
+            deadline: "2026-08-22T00:00:00.000Z",
+          },
+          {
+            title: "Creator-added support",
+            description: "New counterproposal milestone",
+            amount: 275,
+          },
+        ],
+      },
+    ]);
   });
 });
 

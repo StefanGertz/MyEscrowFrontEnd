@@ -1127,10 +1127,10 @@ function MockExperienceHome({ searchParams }: HomeProps) {
   const draftHydrationBaselineRef = useRef<string | null>(null);
   const draftReconciledServerTokenRef = useRef<{ userId: string; token: string } | null>(null);
   const draftSubmissionInProgressRef = useRef(false);
-  const [milestoneReviewDrafts, setMilestoneReviewDrafts] = useState<Record<string, MilestoneReviewDraft>>({});
   const [agreementChangeDraft, setAgreementChangeDraft] = useState<AgreementChangeDraft | null>(null);
   const [draftEscrowEdit, setDraftEscrowEdit] = useState<DraftEscrowEditDraft | null>(null);
   const [agreementReviewMode, setAgreementReviewMode] = useState<"original" | "proposed">("proposed");
+  const [agreementCounterEscrowId, setAgreementCounterEscrowId] = useState<string | null>(null);
   const [agreementAccepted, setAgreementAccepted] = useState(false);
   const [signatureCaptured, setSignatureCaptured] = useState(false);
   const [signatureVersion, setSignatureVersion] = useState(0);
@@ -3115,6 +3115,19 @@ const findTransactionById = (id: number) => {
     );
   };
 
+  const removeCreatorAgreementChangeMilestone = (draftId: string) => {
+    setAgreementChangeDraft((current) =>
+      current
+        ? {
+            ...current,
+            milestones: current.milestones.filter(
+              (milestone) => milestone.id !== draftId || Boolean(milestone.milestoneId),
+            ),
+          }
+        : current,
+    );
+  };
+
   const handleRequestAgreementChanges = async (tx: Transaction) => {
     if (!agreementChangeDraft) return;
     const invalidMilestone = agreementChangeDraft.milestones.find(
@@ -3160,40 +3173,52 @@ const findTransactionById = (id: number) => {
     }
   };
 
-  const updateMilestoneReviewDraft = (
-    milestone: TxMilestone,
-    updates: Partial<MilestoneReviewDraft>,
-  ) => {
-    setMilestoneReviewDrafts((current) => ({
-      ...current,
-      [milestone.id]: {
-        ...(current[milestone.id] ?? buildMilestoneReviewDraft(milestone)),
-        ...updates,
-      },
-    }));
+  const beginAgreementCounter = (tx: Transaction) => {
+    const requestedMilestones = tx.milestones.filter((milestone) => milestone.changeRequestedAt);
+    const requestedMilestoneIds = new Set(requestedMilestones.map((milestone) => milestone.id));
+    const counterDraft = buildAgreementChangeDraft(tx);
+    setMessage(null);
+    setAgreementChangeDraft({
+      ...counterDraft,
+      milestones: counterDraft.milestones
+        .filter((milestone) => requestedMilestoneIds.has(milestone.id))
+        .map((milestone) => ({ ...milestone, milestoneId: milestone.id })),
+    });
+    setAgreementReviewMode("proposed");
+    setAgreementCounterEscrowId(String(tx.reference ?? tx.id));
   };
 
-  const handleApplyAgreementChanges = async (tx: Transaction, decision: "accept" | "reject") => {
+  const cancelAgreementCounter = () => {
+    setMessage(null);
+    setAgreementChangeDraft(null);
+    setAgreementCounterEscrowId(null);
+  };
+
+  const handleApplyAgreementChanges = async (
+    tx: Transaction,
+    decision: "accept" | "counter" | "reject",
+  ) => {
     const escrowId = tx.reference ?? `PO-${tx.id}`;
     const requestedMilestones = tx.milestones.filter((milestone) => milestone.changeRequestedAt);
-    const reviewMilestones = requestedMilestones.map((milestone) => {
-      const reviewDraft = milestoneReviewDrafts[milestone.id] ?? buildMilestoneReviewDraft(milestone);
-      return {
-        milestoneId: milestone.id,
-        title: reviewDraft.title.trim(),
-        description: reviewDraft.description.trim() || undefined,
-        amount: Number(reviewDraft.amount),
-        deadline: reviewDraft.deadline
-          ? new Date(`${reviewDraft.deadline}T00:00:00.000Z`).toISOString()
-          : undefined,
-      };
-    });
-    if (decision === "accept") {
+    const reviewMilestones = (agreementChangeDraft?.milestones ?? []).map((milestone) => ({
+      ...(milestone.milestoneId ? { milestoneId: milestone.milestoneId } : {}),
+      title: milestone.title.trim(),
+      description: milestone.description.trim() || undefined,
+      amount: Number(milestone.amount),
+      deadline: milestone.deadline
+        ? new Date(`${milestone.deadline}T00:00:00.000Z`).toISOString()
+        : undefined,
+    }));
+    if (decision === "counter") {
+      if (!agreementChangeDraft) {
+        setInlineMessage(`agreement-review:${tx.id}`, "Start a counterproposal before saving changes.");
+        return;
+      }
       const invalidMilestone = reviewMilestones.find(
         (milestone) => !milestone.title || !Number.isFinite(milestone.amount) || milestone.amount <= 0,
       );
       if (invalidMilestone) {
-        setInlineMessage(`agreement-review:${tx.id}`, "Every proposed milestone needs a title and valid amount.");
+        setInlineMessage(`agreement-review:${tx.id}`, "Every counterproposal milestone needs a title and valid amount.");
         return;
       }
       const total = reviewMilestones.reduce((sum, milestone) => sum + milestone.amount, 0);
@@ -3204,18 +3229,40 @@ const findTransactionById = (id: number) => {
         );
         return;
       }
+      const hasChangedMilestone = agreementChangeDraft.milestones.some((milestone) => {
+        if (!milestone.milestoneId) return true;
+        const requestedMilestone = requestedMilestones.find(
+          (requested) => requested.id === milestone.milestoneId,
+        );
+        if (!requestedMilestone) return true;
+        const requestedDraft = buildMilestoneReviewDraft(requestedMilestone);
+        return milestone.title.trim() !== requestedDraft.title.trim()
+          || milestone.description.trim() !== requestedDraft.description.trim()
+          || Math.round(Number(milestone.amount) * 100) !== Math.round(Number(requestedDraft.amount) * 100)
+          || milestone.deadline !== requestedDraft.deadline;
+      });
+      if (!hasChangedMilestone) {
+        setInlineMessage(
+          `agreement-review:${tx.id}`,
+          "Change at least one proposed milestone term before sending a counterproposal.",
+        );
+        return;
+      }
     }
     try {
       await applyAgreementChangesMutation.mutateAsync({
         escrowId,
         decision,
-        ...(decision === "accept" ? { milestones: reviewMilestones } : {}),
+        ...(decision === "counter" ? { milestones: reviewMilestones } : {}),
       });
-      setMilestoneReviewDrafts({});
+      setAgreementChangeDraft(null);
+      setAgreementCounterEscrowId(null);
       setMessage(
         decision === "accept"
-          ? "The reviewed agreement changes were accepted and saved."
-          : "The requested agreement changes were declined and the original agreement was kept.",
+          ? "The proposed agreement changes were accepted. Sign the updated agreement before the counterparty can approve it."
+          : decision === "counter"
+            ? "Your counterproposal was saved. Sign the updated agreement before the counterparty can respond."
+            : "The proposed changes were declined and the original agreement was kept.",
       );
     } catch (error) {
       setInlineMessage(
@@ -5043,6 +5090,7 @@ const handleWalletWithdraw = async () => {
       );
     const requestedAgreementMilestones = tx.milestones.filter((milestone) => milestone.changeRequestedAt);
     const hasAgreementChangeRequest = requestedAgreementMilestones.length > 0;
+    const isCounteringAgreement = agreementCounterEscrowId === String(tx.reference ?? tx.id);
     const proposedAgreementTotal = requestedAgreementMilestones.reduce(
       (sum, milestone) => sum + (milestone.requestedAmount ?? milestone.amount),
       0,
@@ -5893,7 +5941,7 @@ const handleWalletWithdraw = async () => {
               <div>
                 <strong>Review requested agreement changes</strong>
                 <p className="muted" style={{ margin: "4px 0 0" }}>
-                  Compare the original agreement to the proposed agreement before accepting or keeping the original.
+                  Compare both versions, accept the proposed terms as submitted, counter with your own changes, or keep the original agreement.
                 </p>
               </div>
               <div className="role-toggle agreement-toggle">
@@ -5912,7 +5960,11 @@ const handleWalletWithdraw = async () => {
               </div>
               <div className="milestone-target__totals">
                 <div className="milestone-target__value">{formatCurrency(tx.amount)}</div>
-                <div className="muted">Proposed total: {formatCurrency(proposedAgreementTotal)}</div>
+                <div className="muted">
+                  {isCounteringAgreement
+                    ? `Counterproposal total: ${formatCurrency(draftAgreementTotal)}`
+                    : `Proposed total: ${formatCurrency(proposedAgreementTotal)}`}
+                </div>
               </div>
             </div>
             {agreementReviewMode === "original" ? (
@@ -5927,68 +5979,196 @@ const handleWalletWithdraw = async () => {
                 ))}
               </div>
             ) : (
-              <div className="agreement-change-list">
-                {requestedAgreementMilestones.map((milestone) => {
-                  const reviewDraft = milestoneReviewDrafts[milestone.id] ?? buildMilestoneReviewDraft(milestone);
-                  return (
-                    <div key={milestone.id} className="agreement-change-row">
-                      <div className="agreement-change-row__title">
-                        <strong>{milestone.amount === 0 ? "New milestone" : milestone.title}</strong>
-                      </div>
-                      <div className="form-grid">
-                        <div className="form-field">
-                          <label className="muted" htmlFor={`review-title-${milestone.id}`}>Title</label>
-                          <input
-                            id={`review-title-${milestone.id}`}
-                            value={reviewDraft.title}
-                            onChange={(event) => updateMilestoneReviewDraft(milestone, { title: event.target.value })}
-                          />
-                        </div>
-                        <div className="form-field">
-                          <label className="muted" htmlFor={`review-amount-${milestone.id}`}>Amount</label>
-                          <input
-                            id={`review-amount-${milestone.id}`}
-                            type="text"
-                            inputMode="decimal"
-                            value={formatCurrencyInput(reviewDraft.amount)}
-                            placeholder="$0.00"
-                            onChange={(event) => updateMilestoneReviewDraft(milestone, { amount: normalizeCurrencyInput(event.target.value) })}
-                          />
-                        </div>
-                        <div className="form-field">
-                          <label className="muted" htmlFor={`review-deadline-${milestone.id}`}>Deadline</label>
-                          <input
-                            id={`review-deadline-${milestone.id}`}
-                            type="date"
-                            value={reviewDraft.deadline}
-                            onChange={(event) => updateMilestoneReviewDraft(milestone, { deadline: event.target.value })}
-                          />
-                        </div>
-                      </div>
-                      <div className="form-field" style={{ marginTop: 8 }}>
-                        <label className="muted" htmlFor={`review-description-${milestone.id}`}>Description</label>
-                        <textarea
-                          id={`review-description-${milestone.id}`}
-                          rows={3}
-                          value={reviewDraft.description}
-                          onChange={(event) => updateMilestoneReviewDraft(milestone, { description: event.target.value })}
-                        />
-                      </div>
-                      {milestone.changeRequestNote ? (
-                        <div className="milestone-review__note"><strong>Counterparty note:</strong> {milestone.changeRequestNote}</div>
-                      ) : null}
+              <>
+                {isCounteringAgreement ? (
+                  <div className="milestone-warning" style={{ marginTop: 12 }}>
+                    Edit the proposed milestone terms below. After saving, you will sign the counterproposal before your counterparty can respond.
+                  </div>
+                ) : (
+                  <p className="muted" style={{ margin: "12px 0 0" }}>
+                    These proposed terms are read-only. Choose <strong>Counter with changes</strong> to suggest different milestone terms.
+                  </p>
+                )}
+                {isCounteringAgreement && agreementChangeDraft ? (
+                  <>
+                    <div className="agreement-change-list">
+                      {agreementChangeDraft.milestones.map((milestone, index) => {
+                        const requestedMilestone = milestone.milestoneId
+                          ? requestedAgreementMilestones.find((requested) => requested.id === milestone.milestoneId)
+                          : undefined;
+                        return (
+                          <div key={milestone.id} className="agreement-change-row">
+                            <div className="agreement-change-row__title">
+                              <strong>
+                                {!milestone.milestoneId
+                                  ? "New milestone"
+                                  : milestone.isNew
+                                    ? "Proposed new milestone"
+                                    : `Milestone ${index + 1}`}
+                              </strong>
+                              {!milestone.milestoneId ? (
+                                <button
+                                  type="button"
+                                  className="ghost"
+                                  onClick={() => removeCreatorAgreementChangeMilestone(milestone.id)}
+                                >
+                                  Remove
+                                </button>
+                              ) : null}
+                            </div>
+                            <div className="form-grid">
+                              <div className="form-field">
+                                <label className="muted" htmlFor={`counter-title-${milestone.id}`}>Title</label>
+                                <input
+                                  id={`counter-title-${milestone.id}`}
+                                  value={milestone.title}
+                                  onChange={(event) => updateAgreementChangeMilestone(milestone.id, { title: event.target.value })}
+                                />
+                              </div>
+                              <div className="form-field">
+                                <label className="muted" htmlFor={`counter-amount-${milestone.id}`}>Amount</label>
+                                <input
+                                  id={`counter-amount-${milestone.id}`}
+                                  type="text"
+                                  inputMode="decimal"
+                                  value={formatCurrencyInput(milestone.amount)}
+                                  placeholder="$0.00"
+                                  onChange={(event) => updateAgreementChangeMilestone(milestone.id, { amount: normalizeCurrencyInput(event.target.value) })}
+                                />
+                                {!milestone.milestoneId ? (
+                                  <div
+                                    className="agreement-change-row__remaining"
+                                    data-overdrawn={draftAgreementRemaining < 0}
+                                    data-complete={Math.round(draftAgreementRemaining * 100) === 0}
+                                  >
+                                    Remaining amount: {formatCurrency(draftAgreementRemaining)}
+                                    {draftAgreementRemaining < 0 ? (
+                                      <span className="agreement-change-row__remaining-help">
+                                        Modify other milestone amounts to free up funds for this one.
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                ) : null}
+                              </div>
+                              <div className="form-field">
+                                <label className="muted" htmlFor={`counter-deadline-${milestone.id}`}>Deadline</label>
+                                <input
+                                  id={`counter-deadline-${milestone.id}`}
+                                  type="date"
+                                  value={milestone.deadline}
+                                  onChange={(event) => updateAgreementChangeMilestone(milestone.id, { deadline: event.target.value })}
+                                />
+                              </div>
+                            </div>
+                            <div className="form-field" style={{ marginTop: 8 }}>
+                              <label className="muted" htmlFor={`counter-description-${milestone.id}`}>Description</label>
+                              <textarea
+                                id={`counter-description-${milestone.id}`}
+                                rows={3}
+                                value={milestone.description}
+                                onChange={(event) => updateAgreementChangeMilestone(milestone.id, { description: event.target.value })}
+                              />
+                            </div>
+                            {requestedMilestone?.changeRequestNote ? (
+                              <div className="milestone-review__note"><strong>Counterparty note:</strong> {requestedMilestone.changeRequestNote}</div>
+                            ) : null}
+                          </div>
+                        );
+                      })}
                     </div>
-                  );
-                })}
-              </div>
+                    <button
+                      type="button"
+                      className="ghost"
+                      style={{ marginTop: 10 }}
+                      onClick={addAgreementChangeMilestone}
+                    >
+                      Add milestone
+                    </button>
+                  </>
+                ) : (
+                  <div className="agreement-change-list">
+                    {requestedAgreementMilestones.map((milestone) => {
+                      const reviewDraft = buildMilestoneReviewDraft(milestone);
+                      return (
+                        <div key={milestone.id} className="agreement-change-row">
+                          <div className="agreement-change-row__title">
+                            <strong>{milestone.amount === 0 ? "New milestone" : milestone.title}</strong>
+                          </div>
+                          <div className="form-grid">
+                            <div className="form-field">
+                              <label className="muted" htmlFor={`review-title-${milestone.id}`}>Title</label>
+                              <input
+                                id={`review-title-${milestone.id}`}
+                                className="agreement-review-input"
+                                value={reviewDraft.title}
+                                readOnly
+                              />
+                            </div>
+                            <div className="form-field">
+                              <label className="muted" htmlFor={`review-amount-${milestone.id}`}>Amount</label>
+                              <input
+                                id={`review-amount-${milestone.id}`}
+                                className="agreement-review-input"
+                                type="text"
+                                inputMode="decimal"
+                                value={formatCurrencyInput(reviewDraft.amount)}
+                                readOnly
+                              />
+                            </div>
+                            <div className="form-field">
+                              <label className="muted" htmlFor={`review-deadline-${milestone.id}`}>Deadline</label>
+                              <input
+                                id={`review-deadline-${milestone.id}`}
+                                className="agreement-review-input"
+                                type="date"
+                                value={reviewDraft.deadline}
+                                readOnly
+                              />
+                            </div>
+                          </div>
+                          <div className="form-field" style={{ marginTop: 8 }}>
+                            <label className="muted" htmlFor={`review-description-${milestone.id}`}>Description</label>
+                            <textarea
+                              id={`review-description-${milestone.id}`}
+                              className="agreement-review-input"
+                              rows={3}
+                              value={reviewDraft.description}
+                              readOnly
+                            />
+                          </div>
+                          {milestone.changeRequestNote ? (
+                            <div className="milestone-review__note"><strong>Counterparty note:</strong> {milestone.changeRequestNote}</div>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
             )}
             <div className="milestone-review__actions">
-              <button className="btn" onClick={() => handleApplyAgreementChanges(tx, "accept")} disabled={applyAgreementChangesMutation.isPending}>
-                {applyAgreementChangesMutation.isPending ? "Saving..." : "Accept agreement changes"}
-              </button>
-              <button className="ghost" onClick={() => handleApplyAgreementChanges(tx, "reject")} disabled={applyAgreementChangesMutation.isPending}>
-                Keep original agreement
-              </button>
+              {isCounteringAgreement ? (
+                <>
+                  <button className="btn" onClick={() => handleApplyAgreementChanges(tx, "counter")} disabled={applyAgreementChangesMutation.isPending}>
+                    {applyAgreementChangesMutation.isPending ? "Saving..." : "Save counterproposal"}
+                  </button>
+                  <button className="ghost" onClick={cancelAgreementCounter} disabled={applyAgreementChangesMutation.isPending}>
+                    Cancel counter
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button className="btn" onClick={() => handleApplyAgreementChanges(tx, "accept")} disabled={applyAgreementChangesMutation.isPending}>
+                    {applyAgreementChangesMutation.isPending ? "Saving..." : "Accept proposed changes"}
+                  </button>
+                  <button className="ghost" onClick={() => beginAgreementCounter(tx)} disabled={applyAgreementChangesMutation.isPending}>
+                    Counter with changes
+                  </button>
+                  <button className="ghost" onClick={() => handleApplyAgreementChanges(tx, "reject")} disabled={applyAgreementChangesMutation.isPending}>
+                    Keep original agreement
+                  </button>
+                </>
+              )}
             </div>
             {renderInlineMessage(`agreement-review:${tx.id}`)}
           </div>
@@ -6161,7 +6341,7 @@ const handleWalletWithdraw = async () => {
                     ? "Milestone decisions unlock after the agreement is signed and the escrow is funded."
                     : isChangesRequested
                       ? tx.isOwner
-                        ? "Review the whole requested agreement. You can compare the original to the proposed agreement before accepting it."
+                        ? "Review the requested agreement, then accept it as proposed, counter with different terms, or keep the original."
                         : "Your requested agreement changes are awaiting the creator's review."
                     : isAwaitingFunding
                       ? "Milestone decisions unlock after the agreement is signed and the escrow is funded."

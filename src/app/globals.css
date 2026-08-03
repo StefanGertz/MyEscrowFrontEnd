@@ -1537,6 +1537,14 @@ body {
   margin: 0;
 }
 
+.agreement-review-input:read-only {
+  border-color: rgba(82, 105, 120, 0.14);
+  background: #f4f7f8;
+  color: #405261;
+  box-shadow: none;
+  cursor: default;
+}
+
 @media (max-width: 680px) {
   .milestone-review__comparison,
   .milestone-review__fields {
