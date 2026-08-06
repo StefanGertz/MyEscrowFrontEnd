@@ -6183,15 +6183,20 @@ const handleWalletWithdraw = async () => {
           >
             <summary className="transaction-disclosure__summary">
               <span>Cancellation and refunds</span>
-              <small>{tx.cancellation ? tx.cancellation.status : "View options"}</small>
+              <small>{tx.cancellation ? tx.cancellation.status.replaceAll("_", " ") : "View options"}</small>
             </summary>
             <div className="transaction-section-disclosure__body">
             {tx.cancellation ? (
-              <div>
-                <div className="milestone-warning">
-                  <strong style={{ textTransform: "capitalize" }}>{tx.cancellation.mode} cancellation — {tx.cancellation.status}</strong>
-                  <p style={{ margin: "6px 0 0" }}>{tx.cancellation.reason}</p>
-                  <div className="muted" style={{ marginTop: 4 }}>
+              <div className="cancellation-review">
+                <div className="cancellation-review__overview">
+                  <div className="cancellation-review__heading">
+                    <strong>{tx.cancellation.mode} cancellation</strong>
+                    <span className="cancellation-review__status">
+                      {tx.cancellation.status.replaceAll("_", " ")}
+                    </span>
+                  </div>
+                  <p className="cancellation-review__reason">{tx.cancellation.reason}</p>
+                  <div className="muted cancellation-review__meta">
                     Requested {formatDateTime(tx.cancellation.requestedAt)}. Funds do not move until the authorized path completes.
                   </div>
                 </div>
@@ -6209,7 +6214,7 @@ const handleWalletWithdraw = async () => {
                 ) : null}
                 {renderInlineMessage(`cancellation-action:${tx.cancellation.id}`)}
                 {tx.cancellation.mode === "unilateral" ? (
-                  <p className="muted" style={{ marginBottom: 0 }}>
+                  <p className="muted cancellation-review__guidance">
                     {["escalated", "information_requested", "information_received"].includes(tx.cancellation.status)
                       ? "Administrative review checks process and documented authority. Contested entitlement must move to the formal dispute workflow; operations does not decide the merits."
                       : tx.cancellation.status === "referred_to_dispute"
@@ -6218,22 +6223,28 @@ const handleWalletWithdraw = async () => {
                   </p>
                 ) : null}
                 {tx.cancellation.reviewMessages.length ? (
-                  <div className="milestone-warning" style={{ marginTop: 10 }}>
-                    <strong>Review messages</strong>
-                    {tx.cancellation.reviewMessages.map((reviewMessage) => (
-                      <div key={reviewMessage.id} className="tx-item" style={{ marginTop: 8 }}>
-                        <strong>{reviewMessage.author.name}</strong>
-                        <p style={{ margin: "4px 0 0" }}>{reviewMessage.body}</p>
-                        <div className="muted" style={{ marginTop: 4 }}>
-                          {reviewMessage.kind.replaceAll("_", " ")} · {formatDateTime(reviewMessage.createdAt)}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                  <section className="cancellation-review__messages" aria-labelledby={`review-messages-${tx.cancellation.id}`}>
+                    <h3 id={`review-messages-${tx.cancellation.id}`}>Review messages</h3>
+                    <ol className="cancellation-review__message-list">
+                      {tx.cancellation.reviewMessages.map((reviewMessage) => (
+                        <li key={reviewMessage.id} className="cancellation-review-message">
+                          <div className="cancellation-review-message__header">
+                            <strong>{reviewMessage.author.name}</strong>
+                            <span className="muted cancellation-review-message__meta">
+                              <span>{reviewMessage.kind.replaceAll("_", " ")}</span>
+                              <span aria-hidden="true">·</span>
+                              <time dateTime={reviewMessage.createdAt}>{formatDateTime(reviewMessage.createdAt)}</time>
+                            </span>
+                          </div>
+                          <p>{reviewMessage.body}</p>
+                        </li>
+                      ))}
+                    </ol>
+                  </section>
                 ) : null}
                 {tx.cancellation.mode === "unilateral"
                   && ["information_requested", "information_received"].includes(tx.cancellation.status) ? (
-                    <div className="cancellation-form" style={{ marginTop: 10 }}>
+                    <div className="cancellation-form cancellation-review__response">
                       <label className="field cancellation-form__field">
                         <span>Respond with administrative information</span>
                         <textarea
