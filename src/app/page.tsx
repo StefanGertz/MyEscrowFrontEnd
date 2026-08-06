@@ -100,19 +100,15 @@ import {
   type EscrowCreationDraftData,
   type StoredEscrowCreationDraft,
 } from "@/lib/escrowCreationDraft";
+import {
+  customerRouteHref,
+  isCustomerScreenId,
+  parseCustomerRoute,
+  resolveCustomerRoute,
+  type CustomerScreenId,
+} from "@/lib/customerRouting";
 
-type ScreenId =
-  | "welcome"
-  | "dashboard"
-  | "create"
-  | "milestones"
-  | "agreement"
-  | "wallet"
-  | "transactions"
-  | "history"
-  | "escrows"
-  | "settings"
-  | "transaction";
+type ScreenId = CustomerScreenId;
 
 type ProcessStep = {
   title: string;
@@ -440,20 +436,6 @@ function EscrowWizardHeader({
 const liveDashboardEnabled = (process.env.NEXT_PUBLIC_LIVE_DASHBOARD ?? "false") === "true";
 const liveDataEnabled = (process.env.NEXT_PUBLIC_USE_MOCKS ?? "true") === "false";
 
-const screenIds: ScreenId[] = [
-  "welcome",
-  "dashboard",
-  "create",
-  "milestones",
-  "agreement",
-  "wallet",
-  "transactions",
-  "history",
-  "escrows",
-  "settings",
-  "transaction",
-];
-
 type CreationScreen = "create" | "milestones" | "agreement";
 
 const isCreationScreen = (screen: ScreenId): screen is CreationScreen =>
@@ -464,9 +446,6 @@ const creationDraftFingerprint = (draft: EscrowCreationDraftData) =>
 
 const pickQueryValue = (value: string | string[] | undefined) =>
   Array.isArray(value) ? value[0] : value;
-
-const isScreenId = (value: string | undefined): value is ScreenId =>
-  value ? screenIds.includes(value as ScreenId) : false;
 
 const defaultUser = {
   name: "Scott",
@@ -1068,9 +1047,10 @@ const mapEscrowsToTransactions = (
 function MockExperienceHome({ searchParams }: HomeProps) {
   const resolvedSearchParams = use(searchParams);
   const initialScreenQuery = pickQueryValue(resolvedSearchParams?.screen);
-  const initialScreen = isScreenId(initialScreenQuery) ? initialScreenQuery : "welcome";
   const initialTxQuery = pickQueryValue(resolvedSearchParams?.tx);
-  const initialTxToken = initialTxQuery ?? undefined;
+  const initialRoute = resolveCustomerRoute(initialScreenQuery, initialTxQuery);
+  const initialScreen = initialRoute.screen;
+  const initialTxToken = initialRoute.transactionToken;
   const router = useRouter();
   const { user, isAuthenticated, isHydrating, logout } = useAuth();
   const [splashVisible, setSplashVisible] = useState(true);
@@ -1446,6 +1426,25 @@ useEffect(() => {
 }, []);
 
 useEffect(() => {
+  // Browser history is authoritative after a hard refresh. Reading it here
+  // also covers hosts that omit the query from the page's initial props.
+  const restoredRoute = parseCustomerRoute(window.location.search);
+  setActiveScreen(restoredRoute.screen);
+  if (isCreationScreen(restoredRoute.screen)) {
+    setLastCreationScreen(restoredRoute.screen);
+  }
+  if (restoredRoute.screen === "transaction" && restoredRoute.transactionToken) {
+    setSelectedTransactionToken(restoredRoute.transactionToken);
+    setSelectedTransaction(
+      findTransactionByToken(visibleTransactionsRef.current, restoredRoute.transactionToken),
+    );
+  } else {
+    setSelectedTransactionToken(null);
+    setSelectedTransaction(null);
+  }
+}, []);
+
+useEffect(() => {
   if (notificationsQuery.isError) {
     pushToast({
       variant: "error",
@@ -1574,9 +1573,8 @@ const navActiveId = useMemo<ScreenId>(() => {
       setSelectedTransactionToken(null);
     }
     if (pushHistory) {
-      const nextUrl = screen === "welcome" ? "/" : `/?screen=${screen}`;
-    window.history.pushState({ screen }, "", nextUrl);
-  }
+      window.history.pushState({ screen }, "", customerRouteHref(screen));
+    }
 };
 
 const viewTransaction = (tx: Transaction) => {
@@ -1584,7 +1582,11 @@ const viewTransaction = (tx: Transaction) => {
   setSelectedTransactionToken(tx.reference ?? tx.id);
   setMessage(null);
   const txToken = tx.reference ?? String(tx.id);
-  window.history.pushState({ screen: "transaction", txId: txToken }, "", `/?screen=transaction&tx=${encodeURIComponent(txToken)}`);
+  window.history.pushState(
+    { screen: "transaction", txId: txToken },
+    "",
+    customerRouteHref("transaction", txToken),
+  );
   setActiveScreen("transaction");
 };
 
@@ -2125,12 +2127,12 @@ useEffect(() => {
 
 useEffect(() => {
   const handlePopState = (event: PopStateEvent) => {
-    const params = new URLSearchParams(window.location.search);
-    const fallbackScreen = (params.get("screen") as ScreenId) || "welcome";
-    const fallbackTx = params.get("tx");
-    const state = (event.state || {}) as { screen?: ScreenId; txId?: string | number };
-    const screenFromState = state.screen || fallbackScreen;
-    const txFromState = state.txId ?? fallbackTx ?? undefined;
+    const routeFromUrl = parseCustomerRoute(window.location.search);
+    const state = (event.state || {}) as { screen?: string; txId?: string | number };
+    const screenFromState = isCustomerScreenId(state.screen)
+      ? state.screen
+      : routeFromUrl.screen;
+    const txFromState = state.txId ?? routeFromUrl.transactionToken;
     setProfileFormDraft({
       userId: profileIdentity.id,
       name: savedProfile.name,
