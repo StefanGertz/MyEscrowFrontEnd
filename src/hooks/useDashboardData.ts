@@ -817,13 +817,17 @@ export function useAcceptFundedCancellation() {
 export function useSubmitCancellationInformation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ cancellationId, note }: { cancellationId: string; note: string }) =>
+    mutationFn: ({ cancellationId, requestMessageId, note }: {
+      cancellationId: string;
+      requestMessageId: number;
+      note: string;
+    }) =>
       fetchJSON<{ cancellationId: string; status: string; reviewMessageId: number }>(
         `/api/dashboard/cancellations/${cancellationId}/information`,
         {
           method: "POST",
           headers: idempotencyHeaders({ "Content-Type": "application/json" }),
-          body: JSON.stringify({ note }),
+          body: JSON.stringify({ requestMessageId, note }),
         },
       ),
     onSuccess: () => {

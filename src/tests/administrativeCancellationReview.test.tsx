@@ -103,6 +103,9 @@ describe("administrative cancellation review", () => {
     fireEvent.change(await screen.findByLabelText("Administrative rationale or information request"), {
       target: { value: "Provide the objective notice date and delivery record." },
     });
+    fireEvent.change(screen.getByLabelText("Request information from"), {
+      target: { value: "seller" },
+    });
     const requestButton = screen.getByRole("button", { name: "Request information" });
     expect(requestButton).toBeEnabled();
     fireEvent.click(requestButton);
@@ -113,9 +116,10 @@ describe("administrative cancellation review", () => {
       expect(JSON.parse(String(postCall?.[1]?.body))).toEqual({
         action: "request_information",
         rationale: "Provide the objective notice date and delivery record.",
+        recipient: "seller",
       });
     });
-    expect(await screen.findByText("Information requested. The funds remain held and both parties were notified.")).toBeInTheDocument();
+    expect(await screen.findByText("Information requested from the seller. The funds remain held.")).toBeInTheDocument();
   });
 
   it("requires final-authority details and submits the exact full refund", async () => {

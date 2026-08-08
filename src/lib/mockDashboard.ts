@@ -73,6 +73,9 @@ export type EscrowRecord = {
       kind: string;
       body: string;
       authorRole: string;
+      requestRecipient?: "buyer" | "seller" | "both";
+      respondingParty?: "buyer" | "seller";
+      inResponseToMessageId?: number;
       createdAt: string;
       author: { id: string; name: string; email: string };
     }>;

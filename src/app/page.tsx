@@ -107,6 +107,11 @@ import {
   resolveCustomerRoute,
   type CustomerScreenId,
 } from "@/lib/customerRouting";
+import {
+  informationRequestParties,
+  informationRequestResponses,
+  pendingInformationRequests,
+} from "@/lib/cancellationReview";
 
 type ScreenId = CustomerScreenId;
 
@@ -2939,22 +2944,26 @@ const findTransactionById = (id: number) => {
     }
   };
 
-  const handleSubmitCancellationInformation = async (cancellationId: string) => {
-    const note = cancellationInformationDrafts[cancellationId]?.trim() ?? "";
+  const handleSubmitCancellationInformation = async (
+    cancellationId: string,
+    requestMessageId: number,
+  ) => {
+    const draftKey = `${cancellationId}:${requestMessageId}`;
+    const note = cancellationInformationDrafts[draftKey]?.trim() ?? "";
     if (note.length < 10) {
       setInlineMessage(
-        `cancellation-information:${cancellationId}`,
+        `cancellation-information:${draftKey}`,
         "Provide the requested administrative information in at least 10 characters.",
       );
       return;
     }
     try {
-      await submitCancellationInformationMutation.mutateAsync({ cancellationId, note });
-      setCancellationInformationDrafts((current) => ({ ...current, [cancellationId]: "" }));
+      await submitCancellationInformationMutation.mutateAsync({ cancellationId, requestMessageId, note });
+      setCancellationInformationDrafts((current) => ({ ...current, [draftKey]: "" }));
       setMessage("Information submitted. Funds remain held while the administrator reviews the response.");
     } catch (error) {
       setInlineMessage(
-        `cancellation-information:${cancellationId}`,
+        `cancellation-information:${draftKey}`,
         error instanceof Error ? error.message : "Unable to submit cancellation information.",
       );
     }
@@ -5028,6 +5037,13 @@ const handleWalletWithdraw = async () => {
       (dispute) => dispute.escrowId === (tx.reference ?? `PO-${tx.id}`),
     );
     const currentUserId = user?.id ?? profileIdentity.id;
+    const currentPartyRole: "buyer" | "seller" = tx.userRole
+      ?? (isCurrentUserBuyer ? "buyer" : "seller");
+    const cancellationReviewMessages = tx.cancellation?.reviewMessages ?? [];
+    const pendingCancellationInformationRequests = pendingInformationRequests(
+      cancellationReviewMessages,
+      currentPartyRole,
+    );
     const canApproveEscrow = !tx.isOwner && isAwaitingApproval;
     const canRequestMilestoneChanges = !tx.isOwner && (isAwaitingApproval || isChangesRequested);
     const canFundEscrow = isCurrentUserBuyer && isAwaitingFunding;
@@ -6226,45 +6242,83 @@ const handleWalletWithdraw = async () => {
                   <section className="cancellation-review__messages" aria-labelledby={`review-messages-${tx.cancellation.id}`}>
                     <h3 id={`review-messages-${tx.cancellation.id}`}>Review messages</h3>
                     <ol className="cancellation-review__message-list">
-                      {tx.cancellation.reviewMessages.map((reviewMessage) => (
-                        <li key={reviewMessage.id} className="cancellation-review-message">
-                          <div className="cancellation-review-message__header">
-                            <strong>{reviewMessage.author.name}</strong>
-                            <span className="muted cancellation-review-message__meta">
-                              <span>{reviewMessage.kind.replaceAll("_", " ")}</span>
-                              <span aria-hidden="true">·</span>
-                              <time dateTime={reviewMessage.createdAt}>{formatDateTime(reviewMessage.createdAt)}</time>
-                            </span>
-                          </div>
-                          <p>{reviewMessage.body}</p>
-                        </li>
-                      ))}
+                      {tx.cancellation.reviewMessages.map((reviewMessage) => {
+                        const responses = reviewMessage.kind === "request_information"
+                          ? informationRequestResponses(cancellationReviewMessages, reviewMessage.id)
+                          : [];
+                        const expectedParties = informationRequestParties(reviewMessage);
+                        const messageKind = reviewMessage.kind === "request_information"
+                          ? `request to ${reviewMessage.requestRecipient === "both" || !reviewMessage.requestRecipient
+                              ? "buyer and seller"
+                              : reviewMessage.requestRecipient}`
+                          : reviewMessage.respondingParty
+                            ? `${reviewMessage.respondingParty} response`
+                            : reviewMessage.kind.replaceAll("_", " ");
+                        return (
+                          <li key={reviewMessage.id} className="cancellation-review-message">
+                            <div className="cancellation-review-message__header">
+                              <strong>{reviewMessage.author.name}</strong>
+                              <span className="muted cancellation-review-message__meta">
+                                <span>{messageKind}</span>
+                                <span aria-hidden="true">·</span>
+                                <time dateTime={reviewMessage.createdAt}>{formatDateTime(reviewMessage.createdAt)}</time>
+                              </span>
+                            </div>
+                            <p>{reviewMessage.body}</p>
+                            {reviewMessage.kind === "request_information" ? (
+                              <div className="cancellation-review-message__response-status">
+                                {expectedParties.map((party) => {
+                                  const responded = responses.some((response) => response.respondingParty === party);
+                                  return (
+                                    <span key={party} data-responded={responded}>
+                                      <span className="cancellation-review-message__status-dot" aria-hidden="true" />
+                                      <span className="capitalize">{party}</span>: {responded ? "responded" : "awaiting response"}
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            ) : null}
+                          </li>
+                        );
+                      })}
                     </ol>
                   </section>
                 ) : null}
                 {tx.cancellation.mode === "unilateral"
-                  && ["information_requested", "information_received"].includes(tx.cancellation.status) ? (
-                    <div className="cancellation-form cancellation-review__response">
-                      <label className="field cancellation-form__field">
-                        <span>Respond with administrative information</span>
-                        <textarea
-                          rows={3}
-                          value={cancellationInformationDrafts[tx.cancellation.id] ?? ""}
-                          onChange={(event) => setCancellationInformationDrafts((current) => ({
-                            ...current,
-                            [tx.cancellation!.id]: event.target.value,
-                          }))}
-                          placeholder="Answer the request with objective facts and references. Formal dispute evidence is submitted in the dispute workspace."
-                        />
-                      </label>
-                      <button
-                        className="ghost cancellation-form__action"
-                        onClick={() => handleSubmitCancellationInformation(tx.cancellation!.id)}
-                        disabled={submitCancellationInformationMutation.isPending}
-                      >
-                        {submitCancellationInformationMutation.isPending ? "Submitting..." : "Submit information"}
-                      </button>
-                      {renderInlineMessage(`cancellation-information:${tx.cancellation.id}`)}
+                  && ["information_requested", "information_received"].includes(tx.cancellation.status)
+                  && pendingCancellationInformationRequests.length ? (
+                    <div className="cancellation-review__response-list">
+                      {pendingCancellationInformationRequests.map((informationRequest) => {
+                        const draftKey = `${tx.cancellation!.id}:${informationRequest.id}`;
+                        return (
+                          <div key={informationRequest.id} className="cancellation-form cancellation-review__response">
+                            <div className="cancellation-review__response-prompt">
+                              <strong>Information requested from you</strong>
+                              <p>{informationRequest.body}</p>
+                            </div>
+                            <label className="field cancellation-form__field">
+                              <span>Your response</span>
+                              <textarea
+                                rows={3}
+                                value={cancellationInformationDrafts[draftKey] ?? ""}
+                                onChange={(event) => setCancellationInformationDrafts((current) => ({
+                                  ...current,
+                                  [draftKey]: event.target.value,
+                                }))}
+                                placeholder="Answer with objective facts and references. Formal dispute evidence is submitted in the dispute workspace."
+                              />
+                            </label>
+                            <button
+                              className="ghost cancellation-form__action"
+                              onClick={() => handleSubmitCancellationInformation(tx.cancellation!.id, informationRequest.id)}
+                              disabled={submitCancellationInformationMutation.isPending}
+                            >
+                              {submitCancellationInformationMutation.isPending ? "Submitting..." : "Submit response"}
+                            </button>
+                            {renderInlineMessage(`cancellation-information:${draftKey}`)}
+                          </div>
+                        );
+                      })}
                     </div>
                   ) : null}
                 {tx.cancellation.reviewNote ? (

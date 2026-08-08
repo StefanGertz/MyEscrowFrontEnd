@@ -7,6 +7,10 @@ import { useAuth } from "@/components/AuthProvider";
 import { useConfirmDialog } from "@/components/ConfirmDialogProvider";
 import { apiFetch } from "@/lib/apiClient";
 import type { EscrowRecord } from "@/lib/mockDashboard";
+import {
+  informationRequestParties,
+  informationRequestResponses,
+} from "@/lib/cancellationReview";
 
 const label = (value?: string) => value ? value.replaceAll("_", " ") : "Not recorded";
 const date = (value?: string) => value ? new Date(value).toLocaleString() : "Not recorded";
@@ -22,6 +26,7 @@ type AdministrativeAction =
   | "execute_documented_full_refund";
 
 type AuthorityType = "arbitration_award" | "court_order";
+type InformationRecipient = "buyer" | "seller" | "both";
 type ProceduralReasonCode =
   | "duplicate_request"
   | "request_withdrawn"
@@ -37,6 +42,7 @@ export default function OperationsEscrowPage() {
   const [escrow, setEscrow] = useState<EscrowRecord | null>(null);
   const [currentRole, setCurrentRole] = useState<"support" | "admin" | null>(null);
   const [rationale, setRationale] = useState("");
+  const [informationRecipient, setInformationRecipient] = useState<InformationRecipient>("both");
   const [selectedMilestoneId, setSelectedMilestoneId] = useState("");
   const [proceduralReasonCode, setProceduralReasonCode] = useState<ProceduralReasonCode>("duplicate_request");
   const [policyReference, setPolicyReference] = useState("");
@@ -94,6 +100,7 @@ export default function OperationsEscrowPage() {
       const payload = {
         action,
         rationale: rationale.trim(),
+        ...(action === "request_information" ? { recipient: informationRecipient } : {}),
         ...(action === "reject_ineligible"
           ? {
               reasonCode: proceduralReasonCode,
@@ -141,7 +148,7 @@ export default function OperationsEscrowPage() {
       setAuthorityDocumentSha256("");
       setAuthorityVerified(false);
       setNotice(action === "request_information"
-        ? "Information requested. The funds remain held and both parties were notified."
+        ? `Information requested from ${informationRecipient === "both" ? "both parties" : `the ${informationRecipient}`}. The funds remain held.`
         : action === "reject_ineligible"
           ? "Request closed as procedurally ineligible. No money moved."
           : action === "refer_to_dispute"
@@ -161,7 +168,7 @@ export default function OperationsEscrowPage() {
     const copy = action === "request_information"
       ? {
           title: "Request administrative information?",
-          body: "No money will move. The cancellation hold remains in place and both parties will receive the request.",
+          body: `No money will move. The cancellation hold remains in place and ${informationRecipient === "both" ? "both parties will receive" : `the ${informationRecipient} will receive`} the request.`,
           label: "Request information",
         }
       : action === "reject_ineligible"
@@ -289,6 +296,21 @@ export default function OperationsEscrowPage() {
                         />
                       </label>
                       <p className="mt-1 text-xs text-slate-500">Required, minimum 10 characters. Every action is retained with the cancellation record and audit trail.</p>
+
+                      <label className="mt-4 block max-w-md">
+                        <span className="text-sm font-bold text-slate-900">Request information from</span>
+                        <select
+                          aria-label="Request information from"
+                          className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2"
+                          value={informationRecipient}
+                          onChange={(event) => setInformationRecipient(event.target.value as InformationRecipient)}
+                        >
+                          <option value="both">Both buyer and seller</option>
+                          <option value="buyer">Buyer only</option>
+                          <option value="seller">Seller only</option>
+                        </select>
+                        <span className="mt-1 block text-xs text-slate-500">Each selected party’s response is tracked separately.</span>
+                      </label>
 
                       <div className="mt-5 grid gap-4 md:grid-cols-2">
                         <div className="rounded-xl border border-slate-200 p-4">
@@ -458,15 +480,38 @@ export default function OperationsEscrowPage() {
                   <div className="mt-5 rounded-xl border border-slate-200 bg-white/70 p-4">
                     <p className="text-sm font-bold text-slate-900">Administrative review history</p>
                     <div className="mt-3 space-y-3">
-                      {escrow.cancellation.reviewMessages.map((message) => (
-                        <div key={message.id} className="rounded-lg border border-slate-200 bg-white p-3">
-                          <div className="flex flex-wrap justify-between gap-2 text-xs text-slate-500">
-                            <span className="font-bold capitalize">{message.author.name} · {label(message.kind)}</span>
-                            <span>{date(message.createdAt)}</span>
+                      {escrow.cancellation.reviewMessages.map((message) => {
+                        const responses = message.kind === "request_information"
+                          ? informationRequestResponses(escrow.cancellation!.reviewMessages, message.id)
+                          : [];
+                        const expectedParties = informationRequestParties(message);
+                        return (
+                          <div key={message.id} className="rounded-lg border border-slate-200 bg-white p-3">
+                            <div className="flex flex-wrap justify-between gap-2 text-xs text-slate-500">
+                              <span className="font-bold capitalize">{message.author.name} · {label(message.kind)}</span>
+                              <span>{date(message.createdAt)}</span>
+                            </div>
+                            {message.kind === "request_information" ? (
+                              <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                                {expectedParties.map((party) => {
+                                  const responded = responses.some((response) => response.respondingParty === party);
+                                  return (
+                                    <span
+                                      key={party}
+                                      className={`rounded-full px-2 py-1 font-bold capitalize ${responded ? "bg-teal-100 text-teal-800" : "bg-amber-100 text-amber-900"}`}
+                                    >
+                                      {party}: {responded ? "responded" : "awaiting response"}
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            ) : message.respondingParty ? (
+                              <p className="mt-1 text-xs font-bold capitalize text-teal-700">{message.respondingParty} response</p>
+                            ) : null}
+                            <p className="mt-2 text-sm text-slate-800">{message.body}</p>
                           </div>
-                          <p className="mt-2 text-sm text-slate-800">{message.body}</p>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 ) : null}
